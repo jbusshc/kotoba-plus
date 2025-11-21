@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>MainWindow</class>
+ <widget class="QMainWindow" name="MainWindow">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>800</width>
+    <height>600</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>App Diccionario</string>
+  </property>
+  <widget class="QWidget" name="centralwidget">
+   <layout class="QVBoxLayout" name="verticalLayoutMain">
+
+    <!-- TOP TAB BAR -->
+    <item>
+     <layout class="QHBoxLayout" name="tabBarLayout">
+      <item>
+       <widget class="QToolButton" name="toolBtnDiccionario">
+        <property name="text">
+         <string>Diccionario</string>
+        </property>
+        <property name="checkable">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QToolButton" name="toolBtnSRS">
+        <property name="text">
+         <string>SRS</string>
+        </property>
+        <property name="checkable">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </item>
+
+    <!-- STACKED WIDGET -->
+    <item>
+     <widget class="QStackedWidget" name="stackedWidget">
+      <property name="currentIndex">
+       <number>0</number>
+      </property>
+
+      <!-- PAGE: DICTIONARY -->
+      <widget class="QWidget" name="pageDictionary">
+       <layout class="QVBoxLayout" name="layoutDictionary">
+        <item>
+         <widget class="QLineEdit" name="lineEditSearch">
+          <property name="placeholderText">
+           <string>Buscar...</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QListView" name="searchResultList"/>
+        </item>
+       </layout>
+      </widget>
+
+      <!-- PAGE: DETAILS -->
+      <widget class="QWidget" name="pageDetails">
+       <layout class="QVBoxLayout" name="layoutDetails">
+        <item>
+         <widget class="QToolButton" name="btnBack">
+          <property name="text">
+           <string>←</string>
+          </property>
+          <property name="autoRaise">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QTextEdit" name="detailTextEdit"/>
+        </item>
+       </layout>
+      </widget>
+
+      <!-- PAGE: SRS -->
+      <widget class="QWidget" name="pageSRS">
+       <layout class="QVBoxLayout" name="layoutSRS">
+        <item>
+         <widget class="QLabel" name="labelSRS">
+          <property name="text">
+           <string>Contenido SRS</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+
+     </widget>
+    </item>
+
+   </layout>
+  </widget>
+
+  <widget class="QMenuBar" name="menubar">
+   <property name="geometry">
+    <rect>
+     <x>0</x>
+     <y>0</y>
+     <width>800</width>
+     <height>25</height>
+    </rect>
+   </property>
+  </widget>
+
+  <widget class="QStatusBar" name="statusbar"/>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
