@@ -11,7 +11,12 @@ HEADERS += \
     mainwindow.h \
     ../libtango/include/libtango.h \
     searchresultdelegate.h \
+<<<<<<< HEAD
     searchresultmodel.h
+=======
+    listitemdelegate.h \
+
+>>>>>>> aac5ed7 (add: listitemdelegate)
 
 INCLUDEPATH += ../libtango/include
 

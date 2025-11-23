@@ -17,6 +17,16 @@ MainWindow::MainWindow(QWidget *parent)
     searchResultModel = new QStandardItemModel(this);
     ui->searchResultList->setModel(searchResultModel);
 
+    // Ajusta el tamaño de los items
+    ui->searchResultList->setUniformItemSizes(true);
+    ui->searchResultList->setResizeMode(QListView::Adjust); // ajusta al tamaño del view
+    ui->searchResultList->setWordWrap(true);                // si el texto es largo, hace wrap
+    ui->searchResultList->setTextElideMode(Qt::ElideNone);  // no corta el texto con "..."
+    ui->searchResultList->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+
+    ui->searchResultList->setItemDelegate(new ListItemDelegate(this));
+
+
     db = tango_db_open("./debug/tango.db");
     if (!db) {
         QStandardItem* item = new QStandardItem("No se pudo abrir la base de datos");
@@ -86,9 +96,22 @@ void MainWindow::handleResult(const TangoSearchResult* result) {
         QStandardItem* item = new QStandardItem(text);
         item->setData(ent_seq, Qt::UserRole);
         item->setEditable(false);
+
+        // =============================
+        //  PASO 3: Ajustar alto del item
+        // =============================
+        QFontMetrics fm(ui->searchResultList->font());
+        int lines = text.count('\n') + 1;
+        int height = fm.lineSpacing() * lines + 12; // padding extra
+
+        // Establece el tamaño del ítem para que ocupe TODO el ancho (luego Qt ajusta)
+        item->setSizeHint(QSize(ui->searchResultList->viewport()->width(), height));
+        // =============================
+
         searchResultModel->appendRow(item);
     }, Qt::QueuedConnection);
 }
+
 
 void MainWindow::onSearchResultClicked(const QModelIndex &index) {
     if (!index.isValid()) return;

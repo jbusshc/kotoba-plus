@@ -6,6 +6,7 @@
 #include <QModelIndex>
 #include <QTimer>
 #include "libtango.h"  // Aquí están entry y TangoSearchResult
+#include "listitemdelegate.h"
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
