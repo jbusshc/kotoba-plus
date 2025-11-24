@@ -15,9 +15,16 @@
 extern "C" {
 #endif
 
+
 typedef struct TangoDB TangoDB;
 typedef struct srs_stats srs_stats;
 
+#ifndef __cplusplus
+    #include <stdint.h>
+    #ifndef uint64_t
+        #define uint64_t unsigned long long int
+    #endif
+#endif
 
 LIBTANGO TangoDB* tango_db_open(const char* db_path);
 LIBTANGO void tango_db_close(TangoDB* db);
@@ -100,6 +107,7 @@ typedef struct
     char gloss[MAX_ARR_LEN][MAX_STR_LEN];   // Glosses (translations) for the sense
     int gloss_count;                        // Count of glosses
     example examples[MAX_ARR_LEN];          // Examples for the sense
+    int examples_count;                     // Count of examples
 } sense;
 
 // <!ELEMENT entry (ent_seq, k_ele*, r_ele*, sense+)>

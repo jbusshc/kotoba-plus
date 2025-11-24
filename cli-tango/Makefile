@@ -4,7 +4,7 @@ BIN = bin/
 MAIN = main.c
 
 INCLUDE = -Iinclude/ -I../libtango/include 
-LIBS = -L../libtango/build/lib/ -ltango -lcjson
+LIBS = -L../libtango/build/lib/ -ltango -lcjson -lsqlite3
 
 CC = gcc
 CFLAGS = -Wall -Wextra -O2 -std=c99 $(INCLUDE)
@@ -19,5 +19,11 @@ $(BIN)$(APP_NAME): $(SRC)$(MAIN)
 clean:
 	rm -rf $(BIN)
 
-run: $(BIN)$(APP_NAME)
-	@./$(BIN)$(APP_NAME)
+run: 
+	cd $(BIN) && ./cli-tango
+
+build-lib: 
+	cd ../libtango/build && cmake .. && ninja
+
+build-db:
+	cd ../xml-parser && make && make run

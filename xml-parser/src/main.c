@@ -16,7 +16,7 @@ int routes_count = sizeof(routes) / sizeof(routes[0]);
 
 #define MAX_STR_LEN 128
 #define MAX_ARR_LEN 16
-#define BUFFER_SIZE 1024 * 4
+#define BUFFER_SIZE 1024 * 16
 
 // <!ELEMENT k_ele (keb, ke_inf*, ke_pri*)>
 typedef struct
@@ -77,6 +77,7 @@ typedef struct
     char gloss[MAX_ARR_LEN][MAX_STR_LEN];   // Glosses (translations) for the sense
     int gloss_count;                        // Count of glosses
     example examples[MAX_ARR_LEN];          // Examples for the sense
+    int examples_count;                     // Count of examples
 } sense;
 
 // <!ELEMENT entry (ent_seq, k_ele*, r_ele*, sense+)>
@@ -344,31 +345,31 @@ void create_entry_json(const entry* e, char* buffer) {
                 has_previous_field = 1;
             }
 
-            // example (solo primer ejemplo, según original)
-            if (e->senses[i].examples[0].ex_srce[0] != '\0' || e->senses[i].examples[0].ex_text[0] != '\0' || e->senses[i].examples[0].ex_sent_count > 0) {
+            for (int j = 0; j < e->senses[i].examples_count; j++) {
+                // example
                 if (has_previous_field) strcat(buffer, ", ");
                 strcat(buffer, "\"example\": {");
                 int has_prev_example = 0;
-                if (e->senses[i].examples[0].ex_srce[0] != '\0') {
+                if (strlen(e->senses[i].examples[j].ex_srce) > 0) {
                     strcat(buffer, "\"ex_srce\": \"");
-                    strcat(buffer, e->senses[i].examples[0].ex_srce);
+                    strcat(buffer, e->senses[i].examples[j].ex_srce);
                     strcat(buffer, "\"");
                     has_prev_example = 1;
                 }
-                if (e->senses[i].examples[0].ex_text[0] != '\0') {
+                if (strlen(e->senses[i].examples[j].ex_text) > 0) {
                     if (has_prev_example) strcat(buffer, ", ");
                     strcat(buffer, "\"ex_text\": \"");
-                    strcat(buffer, e->senses[i].examples[0].ex_text);
+                    strcat(buffer, e->senses[i].examples[j].ex_text);
                     strcat(buffer, "\"");
                     has_prev_example = 1;
                 }
-                if (e->senses[i].examples[0].ex_sent_count > 0) {
+                if (e->senses[i].examples[j].ex_sent_count > 0) {
                     if (has_prev_example) strcat(buffer, ", ");
                     strcat(buffer, "\"ex_sent\": [");
-                    for (int j = 0; j < e->senses[i].examples[0].ex_sent_count; j++) {
-                        if (j > 0) strcat(buffer, ",");
+                    for (int k = 0; k < e->senses[i].examples[j].ex_sent_count; k++) {
+                        if (k > 0) strcat(buffer, ",");
                         strcat(buffer, "\"");
-                        strcat(buffer, e->senses[i].examples[0].ex_sent[j]);
+                        strcat(buffer, e->senses[i].examples[j].ex_sent[k]);
                         strcat(buffer, "\"");
                     }
                     strcat(buffer, "]");
@@ -451,6 +452,8 @@ int main() {
     sqlite3* db = open_db("tango.db");
     if (!db) exit(1); // abortar si falla
     sqlite3_exec(db, "BEGIN TRANSACTION;", NULL, NULL, NULL);
+    sqlite3_exec(db, "DELETE FROM entries;", NULL, NULL, NULL);
+    sqlite3_exec(db, "DELETE FROM entry_search;", NULL, NULL, NULL);
     for (xmlNodePtr cur_node = root->children; cur_node; cur_node = cur_node->next)
     {
         if (cur_node->type == XML_ELEMENT_NODE)
@@ -594,21 +597,22 @@ int main() {
                                                     xmlChar *e_content = xmlNodeGetContent(e_child);
                                                     if (xmlStrcmp(e_child->name, (const xmlChar *)"ex_srce") == 0)
                                                     {
-                                                        strncpy(e.senses[e.senses_count].examples[0].ex_srce, (const char *)e_content, MAX_STR_LEN);
+                                                        strncpy(e.senses[e.senses_count].examples[e.senses[e.senses_count].examples_count].ex_srce, (const char *)e_content, MAX_STR_LEN);
                                                     }
                                                     else if (xmlStrcmp(e_child->name, (const xmlChar *)"ex_text") == 0)
                                                     {
-                                                        strncpy(e.senses[e.senses_count].examples[0].ex_text, (const char *)e_content, MAX_STR_LEN);
+                                                        strncpy(e.senses[e.senses_count].examples[e.senses[e.senses_count].examples_count].ex_text, (const char *)e_content, MAX_STR_LEN);
                                                     }
                                                     else if (xmlStrcmp(e_child->name, (const xmlChar *)"ex_sent") == 0)
                                                     {
-                                                        if (e.senses[e.senses_count].examples[0].ex_sent_count < MAX_ARR_LEN)
+                                                        if (e.senses[e.senses_count].examples[e.senses[e.senses_count].examples_count].ex_sent_count < MAX_ARR_LEN)
                                                         {
-                                                            strncpy(e.senses[e.senses_count].examples[0].ex_sent[e.senses[e.senses_count].examples[0].ex_sent_count++], (const char *)e_content, MAX_STR_LEN);
+                                                            strncpy(e.senses[e.senses_count].examples[e.senses[e.senses_count].examples_count].ex_sent[e.senses[e.senses_count].examples[e.senses[e.senses_count].examples_count].ex_sent_count++], (const char *)e_content, MAX_STR_LEN);
                                                         }
                                                     }
                                                 }
                                             }
+                                            e.senses[e.senses_count].examples_count++;
                                         }
                                     }
                                 }

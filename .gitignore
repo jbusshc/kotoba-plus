@@ -1,3 +1,9 @@
 *.exe
 *.db
 *.xml
+*.o
+xml-parser\build
+*-shm
+*-wal
+*.sqbpro
+bak/

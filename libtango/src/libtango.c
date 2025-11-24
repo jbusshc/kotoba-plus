@@ -174,22 +174,23 @@ void parse_entry_json(const char* json, entry* e) {
             if (example && cJSON_IsObject(example)) {
                 cJSON* ex_srce = cJSON_GetObjectItem(example, "ex_srce");
                 if (ex_srce && cJSON_IsString(ex_srce)) {
-                    strncpy(e->senses[i].examples[0].ex_srce, ex_srce->valuestring, sizeof(e->senses[i].examples[0].ex_srce)-1);
+                    strncpy(e->senses[i].examples[e->senses[i].examples_count].ex_srce, ex_srce->valuestring, sizeof(e->senses[i].examples[0].ex_srce)-1);
                 }
                 cJSON* ex_text = cJSON_GetObjectItem(example, "ex_text");
                 if (ex_text && cJSON_IsString(ex_text)) {
-                    strncpy(e->senses[i].examples[0].ex_text, ex_text->valuestring, sizeof(e->senses[i].examples[0].ex_text)-1);
+                    strncpy(e->senses[i].examples[e->senses[i].examples_count].ex_text, ex_text->valuestring, sizeof(e->senses[i].examples[0].ex_text)-1);
                 }
                 cJSON* ex_sent = cJSON_GetObjectItem(example, "ex_sent");
                 if (ex_sent && cJSON_IsArray(ex_sent)) {
-                    e->senses[i].examples[0].ex_sent_count = cJSON_GetArraySize(ex_sent);
-                    for (int j = 0; j < e->senses[i].examples[0].ex_sent_count; j++) {
+                    e->senses[i].examples[e->senses[i].examples_count].ex_sent_count = cJSON_GetArraySize(ex_sent);
+                    for (int j = 0; j < e->senses[i].examples[e->senses[i].examples_count].ex_sent_count; j++) {
                         cJSON* s = cJSON_GetArrayItem(ex_sent, j);
                         if (s && cJSON_IsString(s)) {
-                            strncpy(e->senses[i].examples[0].ex_sent[j], s->valuestring, sizeof(e->senses[i].examples[0].ex_sent[j])-1);
+                            strncpy(e->senses[i].examples[e->senses[i].examples_count].ex_sent[j], s->valuestring, sizeof(e->senses[i].examples[0].ex_sent[j])-1);
                         }
                     }
                 }
+                e->senses[i].examples_count++;
             }
         }
     }
@@ -291,6 +292,7 @@ void tango_db_id_search(TangoDB* db, int id, entry* e, TangoEntryCallback callba
         e->ent_seq = sqlite3_column_int(stmt, 0);
         e->priority = sqlite3_column_int(stmt, 1);
         const char* entry_json = (const char*)sqlite3_column_text(stmt, 2);
+
         if (entry_json) {
             parse_entry_json(entry_json, e );
         }
