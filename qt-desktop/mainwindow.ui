@@ -15,8 +15,6 @@
   </property>
   <widget class="QWidget" name="centralwidget">
    <layout class="QVBoxLayout" name="verticalLayoutMain">
-
-    <!-- TOP TAB BAR -->
     <item>
      <layout class="QHBoxLayout" name="tabBarLayout">
       <item>
@@ -41,15 +39,11 @@
       </item>
      </layout>
     </item>
-
-    <!-- STACKED WIDGET -->
     <item>
      <widget class="QStackedWidget" name="stackedWidget">
       <property name="currentIndex">
-       <number>0</number>
+       <number>1</number>
       </property>
-
-      <!-- PAGE: DICTIONARY -->
       <widget class="QWidget" name="pageDictionary">
        <layout class="QVBoxLayout" name="layoutDictionary">
         <item>
@@ -64,8 +58,6 @@
         </item>
        </layout>
       </widget>
-
-      <!-- PAGE: DETAILS -->
       <widget class="QWidget" name="pageDetails">
        <layout class="QVBoxLayout" name="layoutDetails">
         <item>
@@ -83,8 +75,6 @@
         </item>
        </layout>
       </widget>
-
-      <!-- PAGE: SRS -->
       <widget class="QWidget" name="pageSRS">
        <layout class="QVBoxLayout" name="layoutSRS">
         <item>
@@ -96,13 +86,10 @@
         </item>
        </layout>
       </widget>
-
      </widget>
     </item>
-
    </layout>
   </widget>
-
   <widget class="QMenuBar" name="menubar">
    <property name="geometry">
     <rect>
@@ -113,7 +100,6 @@
     </rect>
    </property>
   </widget>
-
   <widget class="QStatusBar" name="statusbar"/>
  </widget>
  <resources/>

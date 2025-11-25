@@ -33,6 +33,7 @@ MainWindow::MainWindow(QWidget *parent)
         searchResultModel->appendRow(item);
         return;
     }
+    tango_db_warmup(db);
 
     currentEntry = new entry;
 

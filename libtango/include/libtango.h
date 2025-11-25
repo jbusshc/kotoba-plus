@@ -28,6 +28,7 @@ typedef struct srs_stats srs_stats;
 
 LIBTANGO TangoDB* tango_db_open(const char* db_path);
 LIBTANGO void tango_db_close(TangoDB* db);
+LIBTANGO void tango_db_warmup(TangoDB* db);
 
 
 typedef struct {

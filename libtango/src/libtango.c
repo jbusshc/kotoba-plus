@@ -57,6 +57,25 @@ void tango_db_close(TangoDB* db) {
     }
 }
 
+void tango_db_warmup(TangoDB* db) {
+    const char* sql = 
+        "SELECT entry_id FROM entry_search "
+        "WHERE entry_search MATCH 'a*' LIMIT 1;";
+
+    sqlite3_stmt* stmt = NULL;
+
+    if (sqlite3_prepare_v2(db->db, sql, -1, &stmt, NULL) != SQLITE_OK) {
+        fprintf(stderr, "Warmup prepare failed: %s\n", sqlite3_errmsg(db->db));
+        return;
+    }
+
+    // Ejecutar aunque no devuelva resultados
+    sqlite3_step(stmt);
+
+    sqlite3_finalize(stmt);
+}
+
+
 void parse_entry_json(const char* json, entry* e) {
     cJSON* root = cJSON_Parse(json);
     if (!root) return;
