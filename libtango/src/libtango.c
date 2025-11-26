@@ -23,6 +23,7 @@ typedef struct TangoDB {
 
 } TangoDB;
 
+#define SEP '\x1F'  // Separador ASCII Unit Separator para campos combinados
 
 TangoDB* tango_db_open(const char* db_path) {
     TangoDB* db = (TangoDB*)malloc(sizeof(TangoDB));
@@ -229,9 +230,7 @@ CREATE TABLE entries (
 CREATE VIRTUAL TABLE entry_search USING fts5(
     entry_id UNINDEXED,
     priority UNINDEXED,  -- usada solo para ordenamiento en consultas
-    kanji,
-    reading,
-    gloss,
+    content,
     tokenize = "unicode61"
 );
 
@@ -247,12 +246,11 @@ CREATE TABLE IF NOT EXISTS srs_reviews (
 );
 
 */
-
 void tango_db_text_search(TangoDB* db, const char* termino, TangoSearchResultCallback callback, void* userdata) {
     const char* sql =
-        "SELECT entry_id, priority, kanji, reading, gloss "
+        "SELECT entry_id, priority, content "
         "FROM entry_search "
-        "WHERE entry_search MATCH ? OR entry_search MATCH ? OR entry_search MATCH ? "
+        "WHERE content MATCH ? OR content MATCH ? OR content MATCH ? "
         "ORDER BY priority ASC LIMIT 20;";
 
     sqlite3_stmt* stmt;
@@ -281,13 +279,41 @@ void tango_db_text_search(TangoDB* db, const char* termino, TangoSearchResultCal
         TangoSearchResult result = {0};
         result.ent_seq = sqlite3_column_int(stmt, 0);
         result.priority = sqlite3_column_int(stmt, 1);
-        result.kanjis = (const char*)sqlite3_column_text(stmt, 2);
-        result.readings = (const char*)sqlite3_column_text(stmt, 3);
-        result.glosses = (const char*)sqlite3_column_text(stmt, 4);
+
+        const unsigned char* content = sqlite3_column_text(stmt, 2);
+        if (!content) continue;
+
+        const char sep = '\x1F';
+
+        char buffer[2048];
+        snprintf(buffer, sizeof(buffer), "%s", content);
+
+        char* k = buffer;
+        char* r = strchr(k, sep);
+        char* g = NULL;
+
+        if (r) {
+            *r++ = '\0';
+            g = strchr(r, sep);
+            if (g) {
+                *g++ = '\0';
+            }
+        }
+
+        // ✔ Garantizar strings vacíos, no NULL
+        if (!k) k = "";
+        if (!r) r = "";
+        if (!g) g = "";
+
+        result.kanjis   = k;
+        result.readings = r;
+        result.glosses  = g;
+
         if (callback) {
             callback(&result, userdata);
         }
     }
+
     sqlite3_finalize(stmt);
 }
 

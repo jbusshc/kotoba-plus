@@ -8,3 +8,6 @@ xml-parser\build
 *.sqbpro
 bak/
 *.autosave
+*.log
+*.tmp
+*.db

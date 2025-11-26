@@ -21,7 +21,7 @@ $(BIN): $(OBJS)
 .PHONY: all clean run
 
 run:
-	cd $(BIN_DIR) && ./gotango-parser && mv tango.db ../cli-tango/bin/tango.db
+	cd $(BIN_DIR) && ./gotango-parser && mv tango.db ../../cli-tango/bin/tango.db && mv tango.db ../../qt-desktop/build/Desktop_Qt_6_9_1_MinGW_64_bit-Debug/tango.db
 
 all: $(BIN)
 

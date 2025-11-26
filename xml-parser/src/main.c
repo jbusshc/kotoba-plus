@@ -648,20 +648,36 @@ int main() {
                 }
                 sqlite3_finalize(stmt);
                 // Insert into FTS table
-                const char* fts_sql = "INSERT INTO entry_search (entry_id, priority, kanji, reading, gloss) VALUES (?, ?, ?, ?, ?);";
+                const char* fts_sql =
+                    "INSERT INTO entry_search (entry_id, priority, content) VALUES (?, ?, ?);";
+
                 if (sqlite3_prepare_v2(db, fts_sql, -1, &stmt, NULL) != SQLITE_OK) {
                     fprintf(stderr, "Error al preparar la consulta FTS: %s\n", sqlite3_errmsg(db));
                     continue;
                 }
+
+                // Asegurar que NO sean NULL (si vienen en NULL del parseo de JMDict)
+                const char* k = (kanjis_plain[0] != '\0') ? kanjis_plain : "";
+                const char* r = (readings_plain[0] != '\0') ? readings_plain : "";
+                const char* g = (gloss_plain[0] != '\0') ? gloss_plain : "";
+
+
+                // Construcción del campo content
+                char content[BUFFER_SIZE * 3] = {0};
+                snprintf(content, sizeof(content), "%s\x1F%s\x1F%s", k, r, g);
+
                 sqlite3_bind_int(stmt, 1, ent_seq);
                 sqlite3_bind_int(stmt, 2, priority);
-                sqlite3_bind_text(stmt, 3, kanjis_plain, -1, SQLITE_STATIC);
-                sqlite3_bind_text(stmt, 4, readings_plain, -1, SQLITE_STATIC);
-                sqlite3_bind_text(stmt, 5, gloss_plain, -1, SQLITE_STATIC);
+
+                // SQLITE_TRANSIENT → SQLite hace copia interna del buffer
+                sqlite3_bind_text(stmt, 3, content, -1, SQLITE_TRANSIENT);
+
                 if (sqlite3_step(stmt) != SQLITE_DONE) {
                     fprintf(stderr, "Error al insertar en la tabla FTS: %s\n", sqlite3_errmsg(db));
                 }
+
                 sqlite3_finalize(stmt);
+
                 // Reset entry for next iteration
                 e = (entry){0}; // Reset entry structure
             }

@@ -9,9 +9,7 @@ CREATE TABLE entries (
 CREATE VIRTUAL TABLE entry_search USING fts5(
     entry_id UNINDEXED,
     priority UNINDEXED,  -- usada solo para ordenamiento en consultas
-    kanji,
-    reading,
-    gloss,
+    content,
     tokenize = "unicode61"
 );
 
