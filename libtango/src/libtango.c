@@ -79,143 +79,204 @@ void tango_db_warmup(TangoDB* db) {
 
 void parse_entry_json(const char* json, entry* e) {
     cJSON* root = cJSON_Parse(json);
-    if (!root) return;
+    if (!root) {
+        printf("Failed to parse JSON: %s\n", json);
+        return;
+    }
 
+    printf("Parsing entry JSON: %s\n", json);
+    // ================================
     // k_ele
+    // ================================
     cJSON* k_ele = cJSON_GetObjectItem(root, "k_ele");
     if (k_ele && cJSON_IsArray(k_ele)) {
         e->k_elements_count = cJSON_GetArraySize(k_ele);
+
         for (int i = 0; i < e->k_elements_count; i++) {
-            cJSON* kobj = cJSON_GetArrayItem(k_ele, i);
-            cJSON* keb = cJSON_GetObjectItem(kobj, "keb");
+            cJSON* obj = cJSON_GetArrayItem(k_ele, i);
+            if (!obj) continue;
+
+            // keb
+            cJSON* keb = cJSON_GetObjectItem(obj, "keb");
             if (keb && cJSON_IsString(keb)) {
-                strncpy(e->k_elements[i].keb, keb->valuestring, sizeof(e->k_elements[i].keb)-1);
+                strncpy(e->k_elements[i].keb, keb->valuestring, sizeof(e->k_elements[i].keb) - 1);
             }
-            cJSON* ke_inf = cJSON_GetObjectItem(kobj, "ke_inf");
+
+            // ke_inf
+            cJSON* ke_inf = cJSON_GetObjectItem(obj, "ke_inf");
             if (ke_inf && cJSON_IsArray(ke_inf)) {
                 e->k_elements[i].ke_inf_count = cJSON_GetArraySize(ke_inf);
                 for (int j = 0; j < e->k_elements[i].ke_inf_count; j++) {
-                    cJSON* inf = cJSON_GetArrayItem(ke_inf, j);
-                    if (inf && cJSON_IsString(inf)) {
-                        strncpy(e->k_elements[i].ke_inf[j], inf->valuestring, sizeof(e->k_elements[i].ke_inf[j])-1);
+                    cJSON* s = cJSON_GetArrayItem(ke_inf, j);
+                    if (s && cJSON_IsString(s)) {
+                        strncpy(e->k_elements[i].ke_inf[j], s->valuestring, sizeof(e->k_elements[i].ke_inf[j]) - 1);
                     }
                 }
             }
-            cJSON* ke_pri = cJSON_GetObjectItem(kobj, "ke_pri");
+
+            // ke_pri
+            cJSON* ke_pri = cJSON_GetObjectItem(obj, "ke_pri");
             if (ke_pri && cJSON_IsArray(ke_pri)) {
                 e->k_elements[i].ke_pri_count = cJSON_GetArraySize(ke_pri);
                 for (int j = 0; j < e->k_elements[i].ke_pri_count; j++) {
-                    cJSON* pri = cJSON_GetArrayItem(ke_pri, j);
-                    if (pri && cJSON_IsString(pri)) {
-                        strncpy(e->k_elements[i].ke_pri[j], pri->valuestring, sizeof(e->k_elements[i].ke_pri[j])-1);
+                    cJSON* s = cJSON_GetArrayItem(ke_pri, j);
+                    if (s && cJSON_IsString(s)) {
+                        strncpy(e->k_elements[i].ke_pri[j], s->valuestring, sizeof(e->k_elements[i].ke_pri[j]) - 1);
                     }
                 }
             }
         }
     }
 
+    // ================================
     // r_ele
+    // ================================
     cJSON* r_ele = cJSON_GetObjectItem(root, "r_ele");
     if (r_ele && cJSON_IsArray(r_ele)) {
         e->r_elements_count = cJSON_GetArraySize(r_ele);
+
         for (int i = 0; i < e->r_elements_count; i++) {
-            cJSON* robj = cJSON_GetArrayItem(r_ele, i);
-            cJSON* reb = cJSON_GetObjectItem(robj, "reb");
+            cJSON* obj = cJSON_GetArrayItem(r_ele, i);
+            if (!obj) continue;
+
+            // reb
+            cJSON* reb = cJSON_GetObjectItem(obj, "reb");
             if (reb && cJSON_IsString(reb)) {
-                strncpy(e->r_elements[i].reb, reb->valuestring, sizeof(e->r_elements[i].reb)-1);
+                strncpy(e->r_elements[i].reb, reb->valuestring, sizeof(e->r_elements[i].reb) - 1);
             }
-            cJSON* re_inf = cJSON_GetObjectItem(robj, "re_inf");
-            if (re_inf && cJSON_IsArray(re_inf)) {
-                e->r_elements[i].re_inf_count = cJSON_GetArraySize(re_inf);
-                for (int j = 0; j < e->r_elements[i].re_inf_count; j++) {
-                    cJSON* inf = cJSON_GetArrayItem(re_inf, j);
-                    if (inf && cJSON_IsString(inf)) {
-                        strncpy(e->r_elements[i].re_inf[j], inf->valuestring, sizeof(e->r_elements[i].re_inf[j])-1);
+
+            // re_nokanji
+            cJSON* re_nokanji = cJSON_GetObjectItem(obj, "re_nokanji");
+            if (re_nokanji && cJSON_IsString(re_nokanji)) {
+                strncpy(e->r_elements[i].re_nokanji, re_nokanji->valuestring, sizeof(e->r_elements[i].re_nokanji) - 1);
+            }
+
+            // re_restr
+            cJSON* re_restr = cJSON_GetObjectItem(obj, "re_restr");
+            if (re_restr && cJSON_IsArray(re_restr)) {
+                e->r_elements[i].re_restr_count = cJSON_GetArraySize(re_restr);
+                for (int j = 0; j < e->r_elements[i].re_restr_count; j++) {
+                    cJSON* s = cJSON_GetArrayItem(re_restr, j);
+                    if (s && cJSON_IsString(s)) {
+                        strncpy(e->r_elements[i].re_restr[j], s->valuestring, sizeof(e->r_elements[i].re_restr[j]) - 1);
                     }
                 }
             }
-            cJSON* re_pri = cJSON_GetObjectItem(robj, "re_pri");
+
+            // re_inf
+            cJSON* re_inf = cJSON_GetObjectItem(obj, "re_inf");
+            if (re_inf && cJSON_IsArray(re_inf)) {
+                e->r_elements[i].re_inf_count = cJSON_GetArraySize(re_inf);
+                for (int j = 0; j < e->r_elements[i].re_inf_count; j++) {
+                    cJSON* s = cJSON_GetArrayItem(re_inf, j);
+                    if (s && cJSON_IsString(s)) {
+                        strncpy(e->r_elements[i].re_inf[j], s->valuestring, sizeof(e->r_elements[i].re_inf[j]) - 1);
+                    }
+                }
+            }
+
+            // re_pri
+            cJSON* re_pri = cJSON_GetObjectItem(obj, "re_pri");
             if (re_pri && cJSON_IsArray(re_pri)) {
                 e->r_elements[i].re_pri_count = cJSON_GetArraySize(re_pri);
                 for (int j = 0; j < e->r_elements[i].re_pri_count; j++) {
-                    cJSON* pri = cJSON_GetArrayItem(re_pri, j);
-                    if (pri && cJSON_IsString(pri)) {
-                        strncpy(e->r_elements[i].re_pri[j], pri->valuestring, sizeof(e->r_elements[i].re_pri[j])-1);
+                    cJSON* s = cJSON_GetArrayItem(re_pri, j);
+                    if (s && cJSON_IsString(s)) {
+                        strncpy(e->r_elements[i].re_pri[j], s->valuestring, sizeof(e->r_elements[i].re_pri[j]) - 1);
                     }
                 }
             }
         }
     }
 
+    // ================================
     // sense
+    // ================================
     cJSON* sense = cJSON_GetObjectItem(root, "sense");
     if (sense && cJSON_IsArray(sense)) {
-        printf("Found sense array with %d elements\n", cJSON_GetArraySize(sense));
         e->senses_count = cJSON_GetArraySize(sense);
-        printf("Processing %d senses\n", e->senses_count);
+
         for (int i = 0; i < e->senses_count; i++) {
             cJSON* sobj = cJSON_GetArrayItem(sense, i);
+            if (!sobj) continue;
 
             // pos
             cJSON* pos = cJSON_GetObjectItem(sobj, "pos");
             if (pos && cJSON_IsArray(pos)) {
                 e->senses[i].pos_count = cJSON_GetArraySize(pos);
                 for (int j = 0; j < e->senses[i].pos_count; j++) {
-                    cJSON* p = cJSON_GetArrayItem(pos, j);
-                    if (p && cJSON_IsString(p)) {
-                        strncpy(e->senses[i].pos[j], p->valuestring, sizeof(e->senses[i].pos[j])-1);
+                    cJSON* s = cJSON_GetArrayItem(pos, j);
+                    if (s && cJSON_IsString(s)) {
+                        strncpy(e->senses[i].pos[j], s->valuestring, sizeof(e->senses[i].pos[j]) - 1);
                     }
                 }
             }
-            // misc
-            cJSON* misc = cJSON_GetObjectItem(sobj, "misc");
-            if (misc && cJSON_IsArray(misc)) {
-                e->senses[i].misc_count = cJSON_GetArraySize(misc);
-                for (int j = 0; j < e->senses[i].misc_count; j++) {
-                    cJSON* m = cJSON_GetArrayItem(misc, j);
-                    if (m && cJSON_IsString(m)) {
-                        strncpy(e->senses[i].misc[j], m->valuestring, sizeof(e->senses[i].misc[j])-1);
-                    }
-                }
-            }
+
             // gloss
             cJSON* gloss = cJSON_GetObjectItem(sobj, "gloss");
             if (gloss && cJSON_IsArray(gloss)) {
                 e->senses[i].gloss_count = cJSON_GetArraySize(gloss);
                 for (int j = 0; j < e->senses[i].gloss_count; j++) {
-                    cJSON* g = cJSON_GetArrayItem(gloss, j);
-                    if (g && cJSON_IsString(g)) {
-                        strncpy(e->senses[i].gloss[j], g->valuestring, sizeof(e->senses[i].gloss[j])-1);
+                    cJSON* s = cJSON_GetArrayItem(gloss, j);
+                    if (s && cJSON_IsString(s)) {
+                        strncpy(e->senses[i].gloss[j], s->valuestring, sizeof(e->senses[i].gloss[j]) - 1);
                     }
                 }
             }
-            // example
+
+            // ======================
+            // example (ARREGLO)
+            // ======================
             cJSON* example = cJSON_GetObjectItem(sobj, "example");
-            if (example && cJSON_IsObject(example)) {
-                cJSON* ex_srce = cJSON_GetObjectItem(example, "ex_srce");
-                if (ex_srce && cJSON_IsString(ex_srce)) {
-                    strncpy(e->senses[i].examples[e->senses[i].examples_count].ex_srce, ex_srce->valuestring, sizeof(e->senses[i].examples[0].ex_srce)-1);
-                }
-                cJSON* ex_text = cJSON_GetObjectItem(example, "ex_text");
-                if (ex_text && cJSON_IsString(ex_text)) {
-                    strncpy(e->senses[i].examples[e->senses[i].examples_count].ex_text, ex_text->valuestring, sizeof(e->senses[i].examples[0].ex_text)-1);
-                }
-                cJSON* ex_sent = cJSON_GetObjectItem(example, "ex_sent");
-                if (ex_sent && cJSON_IsArray(ex_sent)) {
-                    e->senses[i].examples[e->senses[i].examples_count].ex_sent_count = cJSON_GetArraySize(ex_sent);
-                    for (int j = 0; j < e->senses[i].examples[e->senses[i].examples_count].ex_sent_count; j++) {
-                        cJSON* s = cJSON_GetArrayItem(ex_sent, j);
-                        if (s && cJSON_IsString(s)) {
-                            strncpy(e->senses[i].examples[e->senses[i].examples_count].ex_sent[j], s->valuestring, sizeof(e->senses[i].examples[0].ex_sent[j])-1);
+            if (example && cJSON_IsArray(example)) {
+
+                e->senses[i].examples_count = cJSON_GetArraySize(example);
+
+                for (int ex = 0; ex < e->senses[i].examples_count; ex++) {
+
+                    cJSON* exobj = cJSON_GetArrayItem(example, ex);
+                    if (!exobj) continue;
+
+                    // ex_srce
+                    cJSON* ex_srce = cJSON_GetObjectItem(exobj, "ex_srce");
+                    if (ex_srce && cJSON_IsString(ex_srce)) {
+                        strncpy(e->senses[i].examples[ex].ex_srce,
+                                ex_srce->valuestring,
+                                sizeof(e->senses[i].examples[ex].ex_srce) - 1);
+                    }
+
+                    // ex_text
+                    cJSON* ex_text = cJSON_GetObjectItem(exobj, "ex_text");
+                    if (ex_text && cJSON_IsString(ex_text)) {
+                        strncpy(e->senses[i].examples[ex].ex_text,
+                                ex_text->valuestring,
+                                sizeof(e->senses[i].examples[ex].ex_text) - 1);
+                    }
+
+                    // ex_sent (array)
+                    cJSON* ex_sent = cJSON_GetObjectItem(exobj, "ex_sent");
+                    if (ex_sent && cJSON_IsArray(ex_sent)) {
+
+                        e->senses[i].examples[ex].ex_sent_count =
+                            cJSON_GetArraySize(ex_sent);
+
+                        for (int k = 0; k < e->senses[i].examples[ex].ex_sent_count; k++) {
+                            cJSON* s = cJSON_GetArrayItem(ex_sent, k);
+                            if (s && cJSON_IsString(s)) {
+                                strncpy(e->senses[i].examples[ex].ex_sent[k],
+                                        s->valuestring,
+                                        sizeof(e->senses[i].examples[ex].ex_sent[k]) - 1);
+                            }
                         }
                     }
                 }
-                e->senses[i].examples_count++;
             }
         }
     }
+
     cJSON_Delete(root);
 }
+
 
 /* 
 DB Schema
@@ -338,8 +399,11 @@ void tango_db_id_search(TangoDB* db, int id, entry* e, TangoEntryCallback callba
         e->priority = sqlite3_column_int(stmt, 1);
         const char* entry_json = (const char*)sqlite3_column_text(stmt, 2);
 
+        printf("Parsing entry JSON for id %d\n", id);
         if (entry_json) {
             parse_entry_json(entry_json, e );
+        } else {
+            printf("No entry JSON found for id %d\n", id);
         }
         if (callback) {
             callback(e, userdata);

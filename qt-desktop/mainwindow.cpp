@@ -26,7 +26,6 @@ MainWindow::MainWindow(QWidget *parent)
 
     ui->searchResultList->setItemDelegate(new ListItemDelegate(this));
 
-
     db = tango_db_open("./debug/tango.db");
     if (!db) {
         QStandardItem* item = new QStandardItem("No se pudo abrir la base de datos");
@@ -69,6 +68,10 @@ MainWindow::MainWindow(QWidget *parent)
     });
 
     ui->stackedWidget->setCurrentIndex(0);
+    ui->toolBtnDiccionario->setCheckable(true);
+    ui->toolBtnDiccionario->setChecked(true);
+    ui->toolBtnSRS->setCheckable(true);
+
 }
 
 MainWindow::~MainWindow() {
@@ -114,23 +117,85 @@ void MainWindow::handleResult(const TangoSearchResult* result) {
 }
 
 
+void imprimir_entry(const entry* e, void* userdata) {
+    if (!e) return;
+
+    printf("🆔 Entrada %d\n", e->ent_seq);
+    printf("   Prioridad: %d\n", e->priority);
+
+    // Kanji elements
+    printf("   Kanji(s): ");
+    if (e->k_elements_count == 0) {
+        printf("(sin kanji)\n");
+    } else {
+        for (int i = 0; i < e->k_elements_count; i++) {
+            printf("%s", e->k_elements[i].keb);
+            if (i < e->k_elements_count - 1) printf(", ");
+        }
+        printf("\n");
+    }
+
+    // Reading elements
+    printf("   Lectura(s): ");
+    if (e->r_elements_count == 0) {
+        printf("(sin lectura)\n");
+    } else {
+        for (int i = 0; i < e->r_elements_count; i++) {
+            printf("%s", e->r_elements[i].reb);
+            if (i < e->r_elements_count - 1) printf(", ");
+        }
+        printf("\n");
+    }
+
+    // Senses
+    for (int i = 0; i < e->senses_count; i++) {
+        printf("   Sentido %d:\n", i + 1);
+        printf("      Glosas: ");
+        for (int j = 0; j < e->senses[i].gloss_count; j++) {
+            printf("%s", e->senses[i].gloss[j]);
+            if (j < e->senses[i].gloss_count - 1) printf("; ");
+        }
+        printf("\n");
+        if (e->senses[i].pos_count > 0) {
+            printf("      POS: ");
+            for (int j = 0; j < e->senses[i].pos_count; j++) {
+                printf("%s", e->senses[i].pos[j]);
+                if (j < e->senses[i].pos_count - 1) printf(", ");
+            }
+            printf("\n");
+        }
+        if (e->senses[i].misc_count > 0) {
+            printf("      Misc: ");
+            for (int j = 0; j < e->senses[i].misc_count; j++) {
+                printf("%s", e->senses[i].misc[j]);
+                if (j < e->senses[i].misc_count - 1) printf(", ");
+            }
+            printf("\n");
+        }
+    }
+    printf("\n");
+}
+
 void MainWindow::onSearchResultClicked(const QModelIndex &index) {
     if (!index.isValid()) return;
 
     int ent_seq = index.data(Qt::UserRole).toInt();
     qDebug() << "Clicked ent_seq:" << ent_seq;
-
-    // Removed memset as tango_db_id_search likely initializes currentEntry
+    memset(currentEntry, 0, sizeof(entry));
     tango_db_id_search(db, ent_seq, currentEntry, [](const entry* /*e*/, void* userdata) {
         MainWindow* self = static_cast<MainWindow*>(userdata);
+
+        // Esto ocurre en el siguiente ciclo de eventos
         QMetaObject::invokeMethod(self, [self]() {
             self->showEntryDetails(self->currentEntry);
+
+            // Mover de página aquí, no antes
+            self->ui->stackedWidget->setCurrentIndex(1);
+            self->ui->searchResultList->clearSelection();
         }, Qt::QueuedConnection);
     }, this);
-
-    ui->stackedWidget->setCurrentIndex(1);
-    ui->searchResultList->clearSelection();
 }
+
 
 void MainWindow::showEntryDetails(const entry* e) {
     qDebug() << "Mostrando detalles para entry:" << e->ent_seq;

@@ -103,7 +103,18 @@ sqlite3* open_db(const char* filename) {
     return db;
 }
 
+static void escape_json_string(const char* src, char* dest) {
+    while (*src) {
+        if (*src == '"' || *src == '\\') {
+            *dest++ = '\\';
+        }
+        *dest++ = *src++;
+    }
+    *dest = '\0';
+}
+
 void create_entry_json(const entry* e, char* buffer) {
+    char tmp[2048]; // buffer temporal grande para strings escapadas
     buffer[0] = '\0';
     strcat(buffer, "{");
 
@@ -116,24 +127,30 @@ void create_entry_json(const entry* e, char* buffer) {
         for (int i = 0; i < e->k_elements_count; i++) {
             if (i > 0) strcat(buffer, ",");
             strcat(buffer, "{\"keb\": \"");
-            strcat(buffer, e->k_elements[i].keb);
+
+            escape_json_string(e->k_elements[i].keb, tmp);
+            strcat(buffer, tmp);
             strcat(buffer, "\"");
+
             if (e->k_elements[i].ke_inf_count > 0) {
                 strcat(buffer, ", \"ke_inf\": [");
                 for (int j = 0; j < e->k_elements[i].ke_inf_count; j++) {
                     if (j > 0) strcat(buffer, ",");
                     strcat(buffer, "\"");
-                    strcat(buffer, e->k_elements[i].ke_inf[j]);
+                    escape_json_string(e->k_elements[i].ke_inf[j], tmp);
+                    strcat(buffer, tmp);
                     strcat(buffer, "\"");
                 }
                 strcat(buffer, "]");
             }
+
             if (e->k_elements[i].ke_pri_count > 0) {
                 strcat(buffer, ", \"ke_pri\": [");
                 for (int j = 0; j < e->k_elements[i].ke_pri_count; j++) {
                     if (j > 0) strcat(buffer, ",");
                     strcat(buffer, "\"");
-                    strcat(buffer, e->k_elements[i].ke_pri[j]);
+                    escape_json_string(e->k_elements[i].ke_pri[j], tmp);
+                    strcat(buffer, tmp);
                     strcat(buffer, "\"");
                 }
                 strcat(buffer, "]");
@@ -143,8 +160,8 @@ void create_entry_json(const entry* e, char* buffer) {
         strcat(buffer, "]");
     }
 
-    strcat(buffer, ", \"r_ele\": ");
     // r_ele
+    strcat(buffer, ", \"r_ele\": ");
     if (e->r_elements_count == 0) {
         strcat(buffer, "[]");
     } else {
@@ -152,229 +169,125 @@ void create_entry_json(const entry* e, char* buffer) {
         for (int i = 0; i < e->r_elements_count; i++) {
             if (i > 0) strcat(buffer, ",");
             strcat(buffer, "{\"reb\": \"");
-            strcat(buffer, e->r_elements[i].reb);
+
+            escape_json_string(e->r_elements[i].reb, tmp);
+            strcat(buffer, tmp);
             strcat(buffer, "\"");
+
             if (e->r_elements[i].re_inf_count > 0) {
                 strcat(buffer, ", \"re_inf\": [");
                 for (int j = 0; j < e->r_elements[i].re_inf_count; j++) {
                     if (j > 0) strcat(buffer, ",");
                     strcat(buffer, "\"");
-                    strcat(buffer, e->r_elements[i].re_inf[j]);
+                    escape_json_string(e->r_elements[i].re_inf[j], tmp);
+                    strcat(buffer, tmp);
                     strcat(buffer, "\"");
                 }
                 strcat(buffer, "]");
             }
+
             if (e->r_elements[i].re_pri_count > 0) {
                 strcat(buffer, ", \"re_pri\": [");
                 for (int j = 0; j < e->r_elements[i].re_pri_count; j++) {
                     if (j > 0) strcat(buffer, ",");
                     strcat(buffer, "\"");
-                    strcat(buffer, e->r_elements[i].re_pri[j]);
+                    escape_json_string(e->r_elements[i].re_pri[j], tmp);
+                    strcat(buffer, tmp);
                     strcat(buffer, "\"");
                 }
                 strcat(buffer, "]");
             }
+
             strcat(buffer, "}");
         }
         strcat(buffer, "]");
     }
 
-    strcat(buffer, ", \"sense\": ");
     // sense
+    strcat(buffer, ", \"sense\": ");
     if (e->senses_count == 0) {
         strcat(buffer, "[]");
     } else {
         strcat(buffer, "[");
         for (int i = 0; i < e->senses_count; i++) {
             if (i > 0) strcat(buffer, ",");
-
-            int has_previous_field = 0; // control para comas internas
-
             strcat(buffer, "{");
-
-            // stagk
-            if (e->senses[i].stagk_count > 0) {
-                strcat(buffer, "\"stagk\": [");
-                for (int j = 0; j < e->senses[i].stagk_count; j++) {
-                    if (j > 0) strcat(buffer, ",");
-                    strcat(buffer, "\"");
-                    strcat(buffer, e->senses[i].stagk[j]);
-                    strcat(buffer, "\"");
-                }
-                strcat(buffer, "]");
-                has_previous_field = 1;
-            }
-
-            // stagr
-            if (e->senses[i].stagr_count > 0) {
-                if (has_previous_field) strcat(buffer, ", ");
-                strcat(buffer, "\"stagr\": [");
-                for (int j = 0; j < e->senses[i].stagr_count; j++) {
-                    if (j > 0) strcat(buffer, ",");
-                    strcat(buffer, "\"");
-                    strcat(buffer, e->senses[i].stagr[j]);
-                    strcat(buffer, "\"");
-                }
-                strcat(buffer, "]");
-                has_previous_field = 1;
-            }
+            int has_prev = 0;
 
             // pos
             if (e->senses[i].pos_count > 0) {
-                if (has_previous_field) strcat(buffer, ", ");
                 strcat(buffer, "\"pos\": [");
                 for (int j = 0; j < e->senses[i].pos_count; j++) {
                     if (j > 0) strcat(buffer, ",");
                     strcat(buffer, "\"");
-                    strcat(buffer, e->senses[i].pos[j]);
+                    escape_json_string(e->senses[i].pos[j], tmp);
+                    strcat(buffer, tmp);
                     strcat(buffer, "\"");
                 }
                 strcat(buffer, "]");
-                has_previous_field = 1;
-            }
-
-            // xref
-            if (e->senses[i].xref_count > 0) {
-                if (has_previous_field) strcat(buffer, ", ");
-                strcat(buffer, "\"xref\": [");
-                for (int j = 0; j < e->senses[i].xref_count; j++) {
-                    if (j > 0) strcat(buffer, ",");
-                    strcat(buffer, "\"");
-                    strcat(buffer, e->senses[i].xref[j]);
-                    strcat(buffer, "\"");
-                }
-                strcat(buffer, "]");
-                has_previous_field = 1;
-            }
-
-            // ant
-            if (e->senses[i].ant_count > 0) {
-                if (has_previous_field) strcat(buffer, ", ");
-                strcat(buffer, "\"ant\": [");
-                for (int j = 0; j < e->senses[i].ant_count; j++) {
-                    if (j > 0) strcat(buffer, ",");
-                    strcat(buffer, "\"");
-                    strcat(buffer, e->senses[i].ant[j]);
-                    strcat(buffer, "\"");
-                }
-                strcat(buffer, "]");
-                has_previous_field = 1;
-            }
-
-            // field
-            if (e->senses[i].field_count > 0) {
-                if (has_previous_field) strcat(buffer, ", ");
-                strcat(buffer, "\"field\": [");
-                for (int j = 0; j < e->senses[i].field_count; j++) {
-                    if (j > 0) strcat(buffer, ",");
-                    strcat(buffer, "\"");
-                    strcat(buffer, e->senses[i].field[j]);
-                    strcat(buffer, "\"");
-                }
-                strcat(buffer, "]");
-                has_previous_field = 1;
-            }
-
-            // misc
-            if (e->senses[i].misc_count > 0) {
-                if (has_previous_field) strcat(buffer, ", ");
-                strcat(buffer, "\"misc\": [");
-                for (int j = 0; j < e->senses[i].misc_count; j++) {
-                    if (j > 0) strcat(buffer, ",");
-                    strcat(buffer, "\"");
-                    strcat(buffer, e->senses[i].misc[j]);
-                    strcat(buffer, "\"");
-                }
-                strcat(buffer, "]");
-                has_previous_field = 1;
-            }
-
-            // s_inf
-            if (e->senses[i].s_inf_count > 0) {
-                if (has_previous_field) strcat(buffer, ", ");
-                strcat(buffer, "\"s_inf\": [");
-                for (int j = 0; j < e->senses[i].s_inf_count; j++) {
-                    if (j > 0) strcat(buffer, ",");
-                    strcat(buffer, "\"");
-                    strcat(buffer, e->senses[i].s_inf[j]);
-                    strcat(buffer, "\"");
-                }
-                strcat(buffer, "]");
-                has_previous_field = 1;
-            }
-
-            // lsource
-            if (e->senses[i].lsource_count > 0) {
-                if (has_previous_field) strcat(buffer, ", ");
-                strcat(buffer, "\"lsource\": [");
-                for (int j = 0; j < e->senses[i].lsource_count; j++) {
-                    if (j > 0) strcat(buffer, ",");
-                    strcat(buffer, "\"");
-                    strcat(buffer, e->senses[i].lsource[j]);
-                    strcat(buffer, "\"");
-                }
-                strcat(buffer, "]");
-                has_previous_field = 1;
-            }
-
-            // dial
-            if (e->senses[i].dial_count > 0) {
-                if (has_previous_field) strcat(buffer, ", ");
-                strcat(buffer, "\"dial\": [");
-                for (int j = 0; j < e->senses[i].dial_count; j++) {
-                    if (j > 0) strcat(buffer, ",");
-                    strcat(buffer, "\"");
-                    strcat(buffer, e->senses[i].dial[j]);
-                    strcat(buffer, "\"");
-                }
-                strcat(buffer, "]");
-                has_previous_field = 1;
+                has_prev = 1;
             }
 
             // gloss
             if (e->senses[i].gloss_count > 0) {
-                if (has_previous_field) strcat(buffer, ", ");
+                if (has_prev) strcat(buffer, ", ");
                 strcat(buffer, "\"gloss\": [");
                 for (int j = 0; j < e->senses[i].gloss_count; j++) {
                     if (j > 0) strcat(buffer, ",");
                     strcat(buffer, "\"");
-                    strcat(buffer, e->senses[i].gloss[j]);
+                    escape_json_string(e->senses[i].gloss[j], tmp);
+                    strcat(buffer, tmp);
                     strcat(buffer, "\"");
                 }
                 strcat(buffer, "]");
-                has_previous_field = 1;
+                has_prev = 1;
             }
 
-            for (int j = 0; j < e->senses[i].examples_count; j++) {
-                // example
-                if (has_previous_field) strcat(buffer, ", ");
-                strcat(buffer, "\"example\": {");
-                int has_prev_example = 0;
-                if (strlen(e->senses[i].examples[j].ex_srce) > 0) {
-                    strcat(buffer, "\"ex_srce\": \"");
-                    strcat(buffer, e->senses[i].examples[j].ex_srce);
-                    strcat(buffer, "\"");
-                    has_prev_example = 1;
-                }
-                if (strlen(e->senses[i].examples[j].ex_text) > 0) {
-                    if (has_prev_example) strcat(buffer, ", ");
-                    strcat(buffer, "\"ex_text\": \"");
-                    strcat(buffer, e->senses[i].examples[j].ex_text);
-                    strcat(buffer, "\"");
-                    has_prev_example = 1;
-                }
-                if (e->senses[i].examples[j].ex_sent_count > 0) {
-                    if (has_prev_example) strcat(buffer, ", ");
-                    strcat(buffer, "\"ex_sent\": [");
-                    for (int k = 0; k < e->senses[i].examples[j].ex_sent_count; k++) {
-                        if (k > 0) strcat(buffer, ",");
+            // example
+            if (e->senses[i].examples_count > 0) {
+                if (has_prev) strcat(buffer, ", ");
+                strcat(buffer, "\"example\": [");
+
+                for (int j = 0; j < e->senses[i].examples_count; j++) {
+                    if (j > 0) strcat(buffer, ",");
+
+                    strcat(buffer, "{");
+                    int ep = 0;
+
+                    if (strlen(e->senses[i].examples[j].ex_srce) > 0) {
+                        escape_json_string(e->senses[i].examples[j].ex_srce, tmp);
+                        strcat(buffer, "\"ex_srce\": \"");
+                        strcat(buffer, tmp);
                         strcat(buffer, "\"");
-                        strcat(buffer, e->senses[i].examples[j].ex_sent[k]);
-                        strcat(buffer, "\"");
+                        ep = 1;
                     }
-                    strcat(buffer, "]");
+
+                    if (strlen(e->senses[i].examples[j].ex_text) > 0) {
+                        escape_json_string(e->senses[i].examples[j].ex_text, tmp);
+                        if (ep) strcat(buffer, ", ");
+                        strcat(buffer, "\"ex_text\": \"");
+                        strcat(buffer, tmp);
+                        strcat(buffer, "\"");
+                        ep = 1;
+                    }
+
+                    if (e->senses[i].examples[j].ex_sent_count > 0) {
+                        if (ep) strcat(buffer, ", ");
+                        strcat(buffer, "\"ex_sent\": [");
+                        for (int k = 0; k < e->senses[i].examples[j].ex_sent_count; k++) {
+                            if (k > 0) strcat(buffer, ",");
+                            strcat(buffer, "\"");
+                            escape_json_string(e->senses[i].examples[j].ex_sent[k], tmp);
+                            strcat(buffer, tmp);
+                            strcat(buffer, "\"");
+                        }
+                        strcat(buffer, "]");
+                    }
+
+                    strcat(buffer, "}");
                 }
-                strcat(buffer, "}");
+
+                strcat(buffer, "]");
             }
 
             strcat(buffer, "}");
@@ -384,6 +297,9 @@ void create_entry_json(const entry* e, char* buffer) {
 
     strcat(buffer, "}");
 }
+
+
+
 
 void create_kanjis_plain_text(const entry* e, char* buffer) {
     if (e->k_elements_count == 0) {
@@ -449,6 +365,7 @@ int main() {
         return 1;
     }
 
+    
     sqlite3* db = open_db("tango.db");
     if (!db) exit(1); // abortar si falla
     sqlite3_exec(db, "BEGIN TRANSACTION;", NULL, NULL, NULL);

@@ -144,24 +144,21 @@ int main(int argc, char* argv[]) {
         return EXIT_FAILURE;
     }
 
-    // 1) Listar tablas
-    run_query(db2, "SELECT name FROM sqlite_master WHERE type='table';");
+    // Consulta todos los IDs de la tabla entries y muestra cada entrada
+    const char *sql = "SELECT id FROM entries";
+    sqlite3_stmt *stmt;
 
-    // 2) Ver si existe la tabla entries
-    run_query(db2, "SELECT name FROM sqlite_master WHERE type='table' AND name='entries';");
-
-    // 3) Ver el schema de la tabla entries
-    run_query(db2, "SELECT sql FROM sqlite_master WHERE name='entries';");
-
-    // 4) Contar filas de entries
-    run_query(db2, "SELECT COUNT(*) FROM entries;");
-    
-    // Ejemplo de búsqueda de texto
-    int ent_seq = 1326980;
-    entry e;
-    tango_db_id_search(db, ent_seq, &e, imprimir_entry, NULL);
+    if (sqlite3_prepare_v2(db2, sql, -1, &stmt, NULL) != SQLITE_OK) {
+        fprintf(stderr, "Error preparando statement: %s\n", sqlite3_errmsg(db2));
+    } else {
+        while (sqlite3_step(stmt) == SQLITE_ROW) {
+            int ent_seq = sqlite3_column_int(stmt, 0);
+            entry e;
+            tango_db_id_search(db, ent_seq, &e, imprimir_entry, NULL);
+        }
+        sqlite3_finalize(stmt);
+    }
     tango_db_close(db);
-
 
 
     return EXIT_SUCCESS;
