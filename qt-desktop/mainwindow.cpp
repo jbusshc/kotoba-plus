@@ -196,36 +196,104 @@ void MainWindow::onSearchResultClicked(const QModelIndex &index) {
     }, this);
 }
 
-
 void MainWindow::showEntryDetails(const entry* e) {
-    qDebug() << "Mostrando detalles para entry:" << e->ent_seq;
     if (!e) return;
 
-    QString detailText;
-    detailText += QString("Entry ID: %1\n\n").arg(e->ent_seq);
+    QVBoxLayout* layout = qobject_cast<QVBoxLayout*>(ui->detailsLayout);
 
-    detailText += "Kanjis:\n";
-    for (int i = 0; i < e->k_elements_count; i++) {
-        detailText += QString(" - %1\n").arg(QString::fromUtf8(e->k_elements[i].keb));
+    // limpiar (sin borrar el último stretch que puedes tener)
+    QLayoutItem* child;
+    while ((child = layout->takeAt(0))) {
+        if (child->widget()) child->widget()->deleteLater();
+        delete child;
     }
 
-    detailText += "\nReadings:\n";
-    for (int i = 0; i < e->r_elements_count; i++) {
-        detailText += QString(" - %1\n").arg(QString::fromUtf8(e->r_elements[i].reb));
-    }
+    // ============================
+    // HEADER — kanji o lectura principal
+    // ============================
+    QString bigText;
 
-    detailText += "\nSenses:\n";
-    for (int i = 0; i < e->senses_count; i++) {
-        const sense &s = e->senses[i];
-        for (int j = 0; j < s.gloss_count; j++) {
-            detailText += QString(" - %1\n").arg(QString::fromUtf8(s.gloss[j]));
+    if (e->k_elements_count > 0) {
+        // Hay kanji: mostrar todos los kanjis como título grande y lecturas como subtítulo
+        QString allKanjis;
+        for (int i = 0; i < e->k_elements_count; i++)
+            allKanjis += QString::fromUtf8(e->k_elements[i].keb) + ", ";
+        allKanjis.chop(2);
+
+        bigText += QString("<div style='font-size:42px; font-weight:bold;'>%1</div>")
+                    .arg(allKanjis);
+
+        if (e->r_elements_count > 0) {
+            QString allReadings;
+            for (int i = 0; i < e->r_elements_count; i++)
+                allReadings += QString::fromUtf8(e->r_elements[i].reb) + ", ";
+            allReadings.chop(2);
+
+            bigText += QString("<div style='font-size:20px; color:#888;'>%1</div>")
+                        .arg(allReadings);
         }
-        detailText += "\n";
+    } else if (e->r_elements_count > 0) {
+        // No hay kanji: mostrar lecturas como título grande, sin subtítulo
+        QString allReadings;
+        for (int i = 0; i < e->r_elements_count; i++)
+            allReadings += QString::fromUtf8(e->r_elements[i].reb) + ", ";
+        allReadings.chop(2);
+
+        bigText += QString("<div style='font-size:42px; font-weight:bold;'>%1</div>")
+                    .arg(allReadings);
     }
 
-    ui->detailTextEdit->setText(detailText);
+    QLabel* header = new QLabel(bigText);
+    header->setTextFormat(Qt::RichText);
+    header->setAlignment(Qt::AlignLeft);
+    header->setWordWrap(true);
+    layout->addWidget(header);
+
+    // ============================
+    // SENSES — sin cajas, solo separadores
+    // ============================
+    for (int i = 0; i < e->senses_count; i++) {
+        const sense& s = e->senses[i];
+
+        // Glosas
+        if (s.gloss_count > 0) {
+            QString glossHTML;
+            for (int g = 0; g < s.gloss_count; g++) {
+            glossHTML += QString("• %1").arg(QString::fromUtf8(s.gloss[g]));
+            if (g < s.gloss_count - 1)
+                glossHTML += "<br>";
+            }
+
+            QLabel* glossLabel = new QLabel(glossHTML);
+            glossLabel->setWordWrap(true);
+            glossLabel->setStyleSheet("font-size:16px;");
+            layout->addWidget(glossLabel);
+        }
+
+        // POS
+        if (s.pos_count > 0) {
+            QString posText;
+            for (int p = 0; p < s.pos_count; p++)
+                posText += QString("[%1] ").arg(QString::fromUtf8(s.pos[p]));
+
+            QLabel* posLabel = new QLabel(posText.trimmed());
+            posLabel->setStyleSheet("color:#999; font-size:13px;");
+            layout->addWidget(posLabel);
+        }
+
+        // Separador entre senses (pero no después del último)
+        if (i < e->senses_count - 1) {
+            QFrame* line = new QFrame();
+            line->setFrameShape(QFrame::HLine);
+            line->setFrameShadow(QFrame::Sunken);
+            layout->addWidget(line);
+        }
+    }
+
+    layout->addStretch();
     ui->stackedWidget->setCurrentIndex(1);
 }
+
 
 void MainWindow::onBackButtonClicked() {
     ui->stackedWidget->setCurrentIndex(0);

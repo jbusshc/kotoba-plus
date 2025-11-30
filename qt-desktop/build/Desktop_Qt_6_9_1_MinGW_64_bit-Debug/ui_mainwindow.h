@@ -11,15 +11,18 @@
 
 #include <QtCore/QVariant>
 #include <QtWidgets/QApplication>
+#include <QtWidgets/QFrame>
 #include <QtWidgets/QHBoxLayout>
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QLineEdit>
 #include <QtWidgets/QListView>
+#include <QtWidgets/QListWidget>
 #include <QtWidgets/QMainWindow>
 #include <QtWidgets/QMenuBar>
+#include <QtWidgets/QScrollArea>
+#include <QtWidgets/QSpacerItem>
 #include <QtWidgets/QStackedWidget>
 #include <QtWidgets/QStatusBar>
-#include <QtWidgets/QTextEdit>
 #include <QtWidgets/QToolButton>
 #include <QtWidgets/QVBoxLayout>
 #include <QtWidgets/QWidget>
@@ -42,7 +45,15 @@ public:
     QWidget *pageDetails;
     QVBoxLayout *layoutDetails;
     QToolButton *btnBack;
-    QTextEdit *detailTextEdit;
+    QScrollArea *detailsScroll;
+    QWidget *detailsContainer;
+    QVBoxLayout *detailsLayout;
+    QLabel *labelMainWord;
+    QLabel *labelReadings;
+    QFrame *lineSeparator1;
+    QLabel *labelSensesTitle;
+    QListWidget *listSenses;
+    QSpacerItem *spacerBottom;
     QWidget *pageSRS;
     QVBoxLayout *layoutSRS;
     QLabel *labelSRS;
@@ -102,10 +113,49 @@ public:
 
         layoutDetails->addWidget(btnBack);
 
-        detailTextEdit = new QTextEdit(pageDetails);
-        detailTextEdit->setObjectName("detailTextEdit");
+        detailsScroll = new QScrollArea(pageDetails);
+        detailsScroll->setObjectName("detailsScroll");
+        detailsScroll->setWidgetResizable(true);
+        detailsContainer = new QWidget();
+        detailsContainer->setObjectName("detailsContainer");
+        detailsContainer->setGeometry(QRect(0, 0, 754, 434));
+        detailsLayout = new QVBoxLayout(detailsContainer);
+        detailsLayout->setObjectName("detailsLayout");
+        labelMainWord = new QLabel(detailsContainer);
+        labelMainWord->setObjectName("labelMainWord");
+        labelMainWord->setAlignment(Qt::AlignmentFlag::AlignLeading|Qt::AlignmentFlag::AlignLeft|Qt::AlignmentFlag::AlignTop);
 
-        layoutDetails->addWidget(detailTextEdit);
+        detailsLayout->addWidget(labelMainWord);
+
+        labelReadings = new QLabel(detailsContainer);
+        labelReadings->setObjectName("labelReadings");
+
+        detailsLayout->addWidget(labelReadings);
+
+        lineSeparator1 = new QFrame(detailsContainer);
+        lineSeparator1->setObjectName("lineSeparator1");
+        lineSeparator1->setFrameShape(QFrame::Shape::HLine);
+        lineSeparator1->setFrameShadow(QFrame::Shadow::Sunken);
+
+        detailsLayout->addWidget(lineSeparator1);
+
+        labelSensesTitle = new QLabel(detailsContainer);
+        labelSensesTitle->setObjectName("labelSensesTitle");
+
+        detailsLayout->addWidget(labelSensesTitle);
+
+        listSenses = new QListWidget(detailsContainer);
+        listSenses->setObjectName("listSenses");
+
+        detailsLayout->addWidget(listSenses);
+
+        spacerBottom = new QSpacerItem(20, 40, QSizePolicy::Policy::Minimum, QSizePolicy::Policy::Expanding);
+
+        detailsLayout->addItem(spacerBottom);
+
+        detailsScroll->setWidget(detailsContainer);
+
+        layoutDetails->addWidget(detailsScroll);
 
         stackedWidget->addWidget(pageDetails);
         pageSRS = new QWidget();
@@ -145,6 +195,28 @@ public:
         toolBtnSRS->setText(QCoreApplication::translate("MainWindow", "SRS", nullptr));
         lineEditSearch->setPlaceholderText(QCoreApplication::translate("MainWindow", "Buscar...", nullptr));
         btnBack->setText(QCoreApplication::translate("MainWindow", "\342\206\220", nullptr));
+        labelMainWord->setStyleSheet(QCoreApplication::translate("MainWindow", "\n"
+"font-size: 32px;\n"
+"font-weight: bold;\n"
+"padding: 6px;\n"
+"               ", nullptr));
+        labelMainWord->setText(QCoreApplication::translate("MainWindow", "\342\200\224", nullptr));
+        labelReadings->setStyleSheet(QCoreApplication::translate("MainWindow", "\n"
+"font-size: 20px;\n"
+"color: #444;\n"
+"padding-left: 6px;\n"
+"               ", nullptr));
+        labelReadings->setText(QCoreApplication::translate("MainWindow", "Lecturas aqu\303\255\342\200\246", nullptr));
+        labelSensesTitle->setStyleSheet(QCoreApplication::translate("MainWindow", "\n"
+"font-size: 18px;\n"
+"font-weight: 600;\n"
+"padding: 6px 0 0 6px;\n"
+"               ", nullptr));
+        labelSensesTitle->setText(QCoreApplication::translate("MainWindow", "Significados", nullptr));
+        listSenses->setStyleSheet(QCoreApplication::translate("MainWindow", "\n"
+"font-size: 16px;\n"
+"padding: 4px;\n"
+"               ", nullptr));
         labelSRS->setText(QCoreApplication::translate("MainWindow", "Contenido SRS", nullptr));
     } // retranslateUi
 
