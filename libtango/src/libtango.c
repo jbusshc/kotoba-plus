@@ -1,3 +1,4 @@
+// libtango.c
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -13,21 +14,38 @@ typedef struct srs_stats{
     int total_cards;
     int due_review_count;
     time_t last_update;
-
 } srs_stats;
 
-typedef struct TangoDB {
-    struct sqlite3 *db;
-    struct sqlite3_stmt *stmt;
-    srs_stats stats;
+typedef struct {
+    sqlite3_stmt* stmt_get_entry;
+    sqlite3_stmt* stmt_search;
 
+    // nuevos prepared statements
+    sqlite3_stmt* stmt_count_entries;
+    sqlite3_stmt* stmt_count_due;
+    sqlite3_stmt* stmt_srs_select; // SELECT last_review, interval, ease_factor, repetitions FROM srs_reviews WHERE entry_id = ?
+    sqlite3_stmt* stmt_srs_upsert; // INSERT ... ON CONFLICT ... DO UPDATE ...
+    sqlite3_stmt* stmt_srs_page;   // SELECT ... FROM srs_reviews ORDER BY due_date ASC LIMIT ? OFFSET ?
+} TangoStatements;
+
+typedef struct TangoDB {
+    sqlite3 *db;
+    TangoStatements stmts;
+    srs_stats stats;
 } TangoDB;
 
 #define SEP '\x1F'  // Separador ASCII Unit Separator para campos combinados
+#ifndef BUFFER_LIMIT
+#define BUFFER_LIMIT 256  // si no está definido en header, ajustar según tu header real
+#endif
+
+/* ---------- Helpers ---------- */
 
 TangoDB* tango_db_open(const char* db_path) {
     TangoDB* db = (TangoDB*)malloc(sizeof(TangoDB));
     if (!db) return NULL;
+
+    memset(db, 0, sizeof(TangoDB)); // inicializa todo a 0/NULL
 
     if (sqlite3_open(db_path, &db->db) != SQLITE_OK) {
         free(db);
@@ -44,38 +62,188 @@ TangoDB* tango_db_open(const char* db_path) {
         return NULL;
     }
 
-    db->stmt = NULL;
+    // Inicializar pointers de statements a NULL (ya lo hizo el memset, repetimos por claridad)
+    db->stmts.stmt_get_entry = NULL;
+    db->stmts.stmt_search = NULL;
+    db->stmts.stmt_count_entries = NULL;
+    db->stmts.stmt_count_due = NULL;
+    db->stmts.stmt_srs_select = NULL;
+    db->stmts.stmt_srs_upsert = NULL;
+    db->stmts.stmt_srs_page = NULL;
+
+    tango_db_warmup(db);
+
     return db;
 }
 
+void _finalize_if(sqlite3_stmt** p) {
+    if (p && *p) {
+        sqlite3_finalize(*p);
+        *p = NULL;
+    }
+}
+
 void tango_db_close(TangoDB* db) {
-    if (db) {
-        if (db->stmt) {
-            sqlite3_finalize(db->stmt);
-        }
+    if (!db) return;
+
+    // Finalizar prepared statements si existen
+    _finalize_if(&db->stmts.stmt_get_entry);
+    _finalize_if(&db->stmts.stmt_search);
+    _finalize_if(&db->stmts.stmt_count_entries);
+    _finalize_if(&db->stmts.stmt_count_due);
+    _finalize_if(&db->stmts.stmt_srs_select);
+    _finalize_if(&db->stmts.stmt_srs_upsert);
+    _finalize_if(&db->stmts.stmt_srs_page);
+
+    // Cerrar DB
+    if (db->db) {
         sqlite3_close(db->db);
-        free(db);
+        db->db = NULL;
+    }
+
+    free(db);
+}
+
+static void warmup_simple(sqlite3* db, const char* sql) {
+    sqlite3_stmt* stmt = NULL;
+    if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) == SQLITE_OK) {
+        sqlite3_step(stmt);  // no importa si no devuelve nada
+        sqlite3_finalize(stmt);
+    } else {
+        fprintf(stderr, "Warmup prepare failed for '%s': %s\n",
+            sql, sqlite3_errmsg(db));
+    }
+}
+
+// Opcional: preparar statements usados frecuentemente
+static void prepare_critical_statements(TangoDB* db) {
+    if (!db || !db->db) return;
+
+    int rc;
+
+    // cargar una entrada por ID
+    const char* sql_get_entry =
+        "SELECT id, priority, entry_json FROM entries WHERE id = ?;";
+    rc = sqlite3_prepare_v2(db->db, sql_get_entry, -1,
+                           &db->stmts.stmt_get_entry, NULL);
+    if (rc != SQLITE_OK) {
+        fprintf(stderr, "Failed to prepare stmt_get_entry: %s\n",
+                sqlite3_errmsg(db->db));
+        db->stmts.stmt_get_entry = NULL;
+    }
+
+    // búsqueda en FTS
+    const char* sql_search =
+        "SELECT entry_id, priority, content "
+        "FROM entry_search "
+        "WHERE content MATCH ? OR content MATCH ? OR content MATCH ? "
+        "ORDER BY priority ASC LIMIT 20;";
+    rc = sqlite3_prepare_v2(db->db, sql_search, -1,
+                           &db->stmts.stmt_search, NULL);
+    if (rc != SQLITE_OK) {
+        fprintf(stderr, "Failed to prepare stmt_search: %s\n",
+                sqlite3_errmsg(db->db));
+        db->stmts.stmt_search = NULL;
+    }
+
+    // COUNT(*) FROM entries
+    const char* sql_count_entries = "SELECT COUNT(*) FROM entries;";
+    rc = sqlite3_prepare_v2(db->db, sql_count_entries, -1,
+                           &db->stmts.stmt_count_entries, NULL);
+    if (rc != SQLITE_OK) {
+        fprintf(stderr, "Failed to prepare stmt_count_entries: %s\n",
+                sqlite3_errmsg(db->db));
+        db->stmts.stmt_count_entries = NULL;
+    }
+
+    // COUNT(*) FROM srs_reviews WHERE due_date <= ?
+    const char* sql_count_due = "SELECT COUNT(*) FROM srs_reviews WHERE due_date <= ?;";
+    rc = sqlite3_prepare_v2(db->db, sql_count_due, -1,
+                           &db->stmts.stmt_count_due, NULL);
+    if (rc != SQLITE_OK) {
+        fprintf(stderr, "Failed to prepare stmt_count_due: %s\n",
+                sqlite3_errmsg(db->db));
+        db->stmts.stmt_count_due = NULL;
+    }
+
+    // SELECT srs row by entry_id
+    const char* sql_srs_select = "SELECT last_review, interval, ease_factor, repetitions FROM srs_reviews WHERE entry_id = ?;";
+    rc = sqlite3_prepare_v2(db->db, sql_srs_select, -1,
+                           &db->stmts.stmt_srs_select, NULL);
+    if (rc != SQLITE_OK) {
+        fprintf(stderr, "Failed to prepare stmt_srs_select: %s\n",
+                sqlite3_errmsg(db->db));
+        db->stmts.stmt_srs_select = NULL;
+    }
+
+    // UPSERT for srs_reviews
+    const char* sql_srs_upsert =
+        "INSERT INTO srs_reviews (entry_id, last_review, interval, ease_factor, repetitions, due_date) "
+        "VALUES (?, ?, ?, ?, ?, ?) "
+        "ON CONFLICT(entry_id) DO UPDATE SET "
+        "last_review=excluded.last_review, interval=excluded.interval, ease_factor=excluded.ease_factor, repetitions=excluded.repetitions, due_date=excluded.due_date;";
+    rc = sqlite3_prepare_v2(db->db, sql_srs_upsert, -1,
+                           &db->stmts.stmt_srs_upsert, NULL);
+    if (rc != SQLITE_OK) {
+        fprintf(stderr, "Failed to prepare stmt_srs_upsert: %s\n",
+                sqlite3_errmsg(db->db));
+        db->stmts.stmt_srs_upsert = NULL;
+    }
+
+    // Page query for srs_reviews: LIMIT ? OFFSET ?
+    const char* sql_srs_page =
+        "SELECT entry_id, last_review, interval, ease_factor, repetitions, due_date "
+        "FROM srs_reviews "
+        "ORDER BY due_date ASC LIMIT ? OFFSET ?;";
+    rc = sqlite3_prepare_v2(db->db, sql_srs_page, -1,
+                           &db->stmts.stmt_srs_page, NULL);
+    if (rc != SQLITE_OK) {
+        fprintf(stderr, "Failed to prepare stmt_srs_page: %s\n",
+                sqlite3_errmsg(db->db));
+        db->stmts.stmt_srs_page = NULL;
     }
 }
 
 void tango_db_warmup(TangoDB* db) {
-    const char* sql = 
+    if (!db || !db->db) return;
+
+    // ========================================
+    // 1. PRAGMAs de performance (solo una vez)
+    // ========================================
+    sqlite3_exec(db->db, "PRAGMA journal_mode=WAL;", NULL, NULL, NULL);
+    sqlite3_exec(db->db, "PRAGMA synchronous=NORMAL;", NULL, NULL, NULL);
+    sqlite3_exec(db->db, "PRAGMA temp_store=MEMORY;", NULL, NULL, NULL);
+    sqlite3_exec(db->db, "PRAGMA foreign_keys=ON;", NULL, NULL, NULL);
+
+    // 256 MB de mmap si se puede
+    sqlite3_exec(db->db, "PRAGMA mmap_size=268435456;", NULL, NULL, NULL);
+
+    // ========================================
+    // 2. Warmup de metadatos del esquema
+    // ========================================
+    warmup_simple(db->db, "PRAGMA schema_version;");
+
+    // ========================================
+    // 3. Warmup de la tabla base
+    // ========================================
+    warmup_simple(db->db, "SELECT id FROM entries LIMIT 1;");
+
+    // ========================================
+    // 4. Warmup del índice FTS5
+    // (obliga a cargar la root page del índice FTS)
+    // ========================================
+    warmup_simple(db->db,
         "SELECT entry_id FROM entry_search "
-        "WHERE entry_search MATCH 'a*' LIMIT 1;";
+        "WHERE entry_search MATCH 'a*' LIMIT 1;"
+    );
 
-    sqlite3_stmt* stmt = NULL;
-
-    if (sqlite3_prepare_v2(db->db, sql, -1, &stmt, NULL) != SQLITE_OK) {
-        fprintf(stderr, "Warmup prepare failed: %s\n", sqlite3_errmsg(db->db));
-        return;
-    }
-
-    // Ejecutar aunque no devuelva resultados
-    sqlite3_step(stmt);
-
-    sqlite3_finalize(stmt);
+    // ========================================
+    // 5. Pre-preparar statements críticos
+    // ========================================
+    prepare_critical_statements(db);
 }
 
+/* ---------- JSON parsing (tu función parse_entry_json) ---------- */
 
 void parse_entry_json(const char* json, entry* e) {
     cJSON* root = cJSON_Parse(json);
@@ -84,7 +252,6 @@ void parse_entry_json(const char* json, entry* e) {
         return;
     }
 
-    printf("Parsing entry JSON: %s\n", json);
     // ================================
     // k_ele
     // ================================
@@ -277,44 +444,13 @@ void parse_entry_json(const char* json, entry* e) {
     cJSON_Delete(root);
 }
 
+/* ---------- Consultas y funciones públicas ---------- */
 
-/* 
-DB Schema
-
-CREATE TABLE entries (
-    id INTEGER PRIMARY KEY,
-    priority INTEGER DEFAULT 9999,
-    entry_json TEXT NOT NULL  -- JSON con { "k_ele": [...], "r_ele": [...], "sense": [...] }
-);
-
-
-CREATE VIRTUAL TABLE entry_search USING fts5(
-    entry_id UNINDEXED,
-    priority UNINDEXED,  -- usada solo para ordenamiento en consultas
-    content,
-    tokenize = "unicode61"
-);
-
-CREATE TABLE IF NOT EXISTS srs_reviews (
-    entry_id INTEGER NOT NULL,
-    last_review INTEGER NOT NULL,   -- Unix timestamp en segundos
-    interval INTEGER NOT NULL,      -- días para la próxima revisión
-    ease_factor REAL NOT NULL,      -- factor de facilidad, ejemplo 2.5 inicial
-    repetitions INTEGER NOT NULL,   -- cuántas veces se repasó
-    due_date INTEGER NOT NULL,      -- Unix timestamp para la siguiente revisión
-
-    PRIMARY KEY (entry_id)
-);
-
-*/
 void tango_db_text_search(TangoDB* db, const char* termino, TangoSearchResultCallback callback, void* userdata) {
-    const char* sql =
-        "SELECT entry_id, priority, content "
-        "FROM entry_search "
-        "WHERE content MATCH ? OR content MATCH ? OR content MATCH ? "
-        "ORDER BY priority ASC LIMIT 20;";
+    if (!db || !db->db || !termino) return;
 
-    sqlite3_stmt* stmt;
+    sqlite3_stmt* stmt = NULL;
+    int using_prepared = 0;
 
     char termino_wildcard[260];
     char hiragana_wildcard[260];
@@ -327,9 +463,23 @@ void tango_db_text_search(TangoDB* db, const char* termino, TangoSearchResultCal
     snprintf(hiragana_wildcard, sizeof(hiragana_wildcard), "%s*", hiragana_wildcard);
     snprintf(katakana_wildcard, sizeof(katakana_wildcard), "%s*", katakana_wildcard);
 
-    if (sqlite3_prepare_v2(db->db, sql, -1, &stmt, NULL) != SQLITE_OK) {
-        fprintf(stderr, "❌ Error en consulta: %s\n", sqlite3_errmsg(db->db));
-        return;
+    if (db->stmts.stmt_search) {
+        stmt = db->stmts.stmt_search;
+        sqlite3_reset(stmt);
+        sqlite3_clear_bindings(stmt);
+        using_prepared = 1;
+    }
+
+    if (!using_prepared) {
+        const char* sql =
+            "SELECT entry_id, priority, content "
+            "FROM entry_search "
+            "WHERE content MATCH ? OR content MATCH ? OR content MATCH ? "
+            "ORDER BY priority ASC LIMIT 20;";
+        if (sqlite3_prepare_v2(db->db, sql, -1, &stmt, NULL) != SQLITE_OK) {
+            fprintf(stderr, "❌ Error en consulta: %s\n", sqlite3_errmsg(db->db));
+            return;
+        }
     }
 
     sqlite3_bind_text(stmt, 1, termino_wildcard, -1, SQLITE_TRANSIENT);
@@ -344,7 +494,7 @@ void tango_db_text_search(TangoDB* db, const char* termino, TangoSearchResultCal
         const unsigned char* content = sqlite3_column_text(stmt, 2);
         if (!content) continue;
 
-        const char sep = '\x1F';
+        const char sep = SEP;
 
         char buffer[2048];
         snprintf(buffer, sizeof(buffer), "%s", content);
@@ -361,7 +511,6 @@ void tango_db_text_search(TangoDB* db, const char* termino, TangoSearchResultCal
             }
         }
 
-        // ✔ Garantizar strings vacíos, no NULL
         if (!k) k = "";
         if (!r) r = "";
         if (!g) g = "";
@@ -375,21 +524,36 @@ void tango_db_text_search(TangoDB* db, const char* termino, TangoSearchResultCal
         }
     }
 
-    sqlite3_finalize(stmt);
+    if (!using_prepared) sqlite3_finalize(stmt);
+    else {
+        // leave the prepared statement finalized at close time; reset is enough
+        sqlite3_reset(stmt);
+        sqlite3_clear_bindings(stmt);
+    }
 }
 
-
 void tango_db_id_search(TangoDB* db, int id, entry* e, TangoEntryCallback callback, void* userdata) {
-    const char* sql =
-        "SELECT id, priority, entry_json "
-        "FROM entries "
-        "WHERE id = ?;";
+    if (!db || !db->db || !e) return;
 
-    sqlite3_stmt* stmt;
+    sqlite3_stmt* stmt = NULL;
+    int using_prepared = 0;
 
-    if (sqlite3_prepare_v2(db->db, sql, -1, &stmt, NULL) != SQLITE_OK) {
-        fprintf(stderr, "❌ Error en consulta: %s\n", sqlite3_errmsg(db->db));
-        return;
+    if (db->stmts.stmt_get_entry) {
+        stmt = db->stmts.stmt_get_entry;
+        sqlite3_reset(stmt);
+        sqlite3_clear_bindings(stmt);
+        using_prepared = 1;
+    }
+
+    if (!using_prepared) {
+        const char* sql =
+            "SELECT id, priority, entry_json "
+            "FROM entries "
+            "WHERE id = ?;";
+        if (sqlite3_prepare_v2(db->db, sql, -1, &stmt, NULL) != SQLITE_OK) {
+            fprintf(stderr, "❌ Error en consulta: %s\n", sqlite3_errmsg(db->db));
+            return;
+        }
     }
 
     sqlite3_bind_int(stmt, 1, id);
@@ -399,48 +563,68 @@ void tango_db_id_search(TangoDB* db, int id, entry* e, TangoEntryCallback callba
         e->priority = sqlite3_column_int(stmt, 1);
         const char* entry_json = (const char*)sqlite3_column_text(stmt, 2);
 
-        printf("Parsing entry JSON for id %d\n", id);
         if (entry_json) {
             parse_entry_json(entry_json, e );
-        } else {
-            printf("No entry JSON found for id %d\n", id);
         }
         if (callback) {
             callback(e, userdata);
         }
     }
 
-    sqlite3_finalize(stmt);
+    if (!using_prepared) sqlite3_finalize(stmt);
+    else {
+        sqlite3_reset(stmt);
+        sqlite3_clear_bindings(stmt);
+    }
 }
 
 void tango_update_srs_review(TangoDB* Tdb, int entry_id, int quality) {
+    if (!Tdb || !Tdb->db) return;
     if (quality < 0) quality = 0;
     if (quality > 5) quality = 5;
 
     time_t now = time(NULL);
 
-    // Consulta estado actual
-    sqlite3_stmt* stmt;
-    int rc = sqlite3_prepare_v2(Tdb->db,
-        "SELECT last_review, interval, ease_factor, repetitions FROM srs_reviews WHERE entry_id = ?",
-        -1, &stmt, NULL);
-    if (rc != SQLITE_OK) return;
-
-    sqlite3_bind_int(stmt, 1, entry_id);
-
+    // Valores por defecto
     time_t last_review = 0;
     int interval = 0;
     double ease_factor = 2.5;
     int repetitions = 0;
 
-    if (sqlite3_step(stmt) == SQLITE_ROW) {
-        last_review = (time_t)sqlite3_column_int64(stmt, 0);
-        interval = sqlite3_column_int(stmt, 1);
-        ease_factor = sqlite3_column_double(stmt, 2);
-        repetitions = sqlite3_column_int(stmt, 3);
-    }
-    sqlite3_finalize(stmt);
+    // Intentar usar stmt_srs_select preparado
+    if (Tdb->stmts.stmt_srs_select) {
+        sqlite3_stmt* s = Tdb->stmts.stmt_srs_select;
+        sqlite3_reset(s);
+        sqlite3_clear_bindings(s);
+        sqlite3_bind_int(s, 1, entry_id);
 
+        if (sqlite3_step(s) == SQLITE_ROW) {
+            last_review = (time_t)sqlite3_column_int64(s, 0);
+            interval = sqlite3_column_int(s, 1);
+            ease_factor = sqlite3_column_double(s, 2);
+            repetitions = sqlite3_column_int(s, 3);
+        }
+        sqlite3_reset(s);
+        sqlite3_clear_bindings(s);
+    } else {
+        // Fallback: preparar localmente y ejecutar si no hay statement preparado
+        sqlite3_stmt* stmt = NULL;
+        int rc = sqlite3_prepare_v2(Tdb->db,
+            "SELECT last_review, interval, ease_factor, repetitions FROM srs_reviews WHERE entry_id = ?",
+            -1, &stmt, NULL);
+        if (rc == SQLITE_OK) {
+            sqlite3_bind_int(stmt, 1, entry_id);
+            if (sqlite3_step(stmt) == SQLITE_ROW) {
+                last_review = (time_t)sqlite3_column_int64(stmt, 0);
+                interval = sqlite3_column_int(stmt, 1);
+                ease_factor = sqlite3_column_double(stmt, 2);
+                repetitions = sqlite3_column_int(stmt, 3);
+            }
+            sqlite3_finalize(stmt);
+        }
+    }
+
+    // Reglas SM-2-ish
     if (quality < 3) {
         repetitions = 0;
         interval = 1;
@@ -459,24 +643,44 @@ void tango_update_srs_review(TangoDB* Tdb, int entry_id, int quality) {
 
     time_t due_date = now + interval * 86400;
 
-    // Insertar o actualizar
-    rc = sqlite3_prepare_v2(Tdb->db,
-        "INSERT INTO srs_reviews (entry_id, last_review, interval, ease_factor, repetitions, due_date) "
-        "VALUES (?, ?, ?, ?, ?, ?) "
-        "ON CONFLICT(entry_id) DO UPDATE SET "
-        "last_review=excluded.last_review, interval=excluded.interval, ease_factor=excluded.ease_factor, repetitions=excluded.repetitions, due_date=excluded.due_date;",
-        -1, &stmt, NULL);
-    if (rc != SQLITE_OK) return;
+    // Insertar o actualizar: usar stmt_srs_upsert si existe
+    if (Tdb->stmts.stmt_srs_upsert) {
+        sqlite3_stmt* s = Tdb->stmts.stmt_srs_upsert;
+        sqlite3_reset(s);
+        sqlite3_clear_bindings(s);
 
-    sqlite3_bind_int(stmt, 1, entry_id);
-    sqlite3_bind_int64(stmt, 2, now);
-    sqlite3_bind_int(stmt, 3, interval);
-    sqlite3_bind_double(stmt, 4, ease_factor);
-    sqlite3_bind_int(stmt, 5, repetitions);
-    sqlite3_bind_int64(stmt, 6, due_date);
+        sqlite3_bind_int(s, 1, entry_id);
+        sqlite3_bind_int64(s, 2, now);
+        sqlite3_bind_int(s, 3, interval);
+        sqlite3_bind_double(s, 4, ease_factor);
+        sqlite3_bind_int(s, 5, repetitions);
+        sqlite3_bind_int64(s, 6, due_date);
 
-    sqlite3_step(stmt);
-    sqlite3_finalize(stmt);
+        sqlite3_step(s);
+        sqlite3_reset(s);
+        sqlite3_clear_bindings(s);
+    } else {
+        // Fallback: preparar localmente
+        sqlite3_stmt* stmt = NULL;
+        int rc = sqlite3_prepare_v2(Tdb->db,
+            "INSERT INTO srs_reviews (entry_id, last_review, interval, ease_factor, repetitions, due_date) "
+            "VALUES (?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT(entry_id) DO UPDATE SET "
+            "last_review=excluded.last_review, interval=excluded.interval, ease_factor=excluded.ease_factor, repetitions=excluded.repetitions, due_date=excluded.due_date;",
+            -1, &stmt, NULL);
+        if (rc == SQLITE_OK) {
+            sqlite3_bind_int(stmt, 1, entry_id);
+            sqlite3_bind_int64(stmt, 2, now);
+            sqlite3_bind_int(stmt, 3, interval);
+            sqlite3_bind_double(stmt, 4, ease_factor);
+            sqlite3_bind_int(stmt, 5, repetitions);
+            sqlite3_bind_int64(stmt, 6, due_date);
+
+            sqlite3_step(stmt);
+            sqlite3_finalize(stmt);
+        }
+    }
+
     // Actualizar estadísticas
     tango_update_srs_stats(Tdb);
 }
@@ -484,18 +688,30 @@ void tango_update_srs_review(TangoDB* Tdb, int entry_id, int quality) {
 int tango_get_total_cards(TangoDB* db) {
     if (!db) return 0;
 
+    int total_cards = 0;
+
+    if (db->stmts.stmt_count_entries) {
+        sqlite3_stmt* s = db->stmts.stmt_count_entries;
+        sqlite3_reset(s);
+        sqlite3_clear_bindings(s);
+        if (sqlite3_step(s) == SQLITE_ROW) {
+            total_cards = sqlite3_column_int(s, 0);
+        }
+        sqlite3_reset(s);
+        sqlite3_clear_bindings(s);
+        return total_cards;
+    }
+
+    // fallback
     sqlite3_stmt* stmt;
     const char* sql = "SELECT COUNT(*) FROM entries;";
     if (sqlite3_prepare_v2(db->db, sql, -1, &stmt, NULL) != SQLITE_OK) {
         fprintf(stderr, "❌ Error en consulta: %s\n", sqlite3_errmsg(db->db));
         return 0;
     }
-
-    int total_cards = 0;
     if (sqlite3_step(stmt) == SQLITE_ROW) {
         total_cards = sqlite3_column_int(stmt, 0);
     }
-
     sqlite3_finalize(stmt);
     return total_cards;
 }
@@ -503,24 +719,35 @@ int tango_get_total_cards(TangoDB* db) {
 int tango_get_due_review_count(TangoDB* db) {
     if (!db) return 0;
 
+    int due_count = 0;
+
+    if (db->stmts.stmt_count_due) {
+        sqlite3_stmt* s = db->stmts.stmt_count_due;
+        sqlite3_reset(s);
+        sqlite3_clear_bindings(s);
+        sqlite3_bind_int64(s, 1, time(NULL));
+        if (sqlite3_step(s) == SQLITE_ROW) {
+            due_count = sqlite3_column_int(s, 0);
+        }
+        sqlite3_reset(s);
+        sqlite3_clear_bindings(s);
+        return due_count;
+    }
+
+    // fallback
     sqlite3_stmt* stmt;
     const char* sql = "SELECT COUNT(*) FROM srs_reviews WHERE due_date <= ?;";
     if (sqlite3_prepare_v2(db->db, sql, -1, &stmt, NULL) != SQLITE_OK) {
         fprintf(stderr, "❌ Error en consulta: %s\n", sqlite3_errmsg(db->db));
         return 0;
     }
-
     sqlite3_bind_int64(stmt, 1, time(NULL));
-
-    int due_count = 0;
     if (sqlite3_step(stmt) == SQLITE_ROW) {
         due_count = sqlite3_column_int(stmt, 0);
     }
-
     sqlite3_finalize(stmt);
     return due_count;
 }
-
 
 void tango_update_srs_stats(TangoDB* db) {
     if (!db) return;
@@ -548,26 +775,32 @@ void tango_review_card_buffer_init(TangoDB* db, review_card_buffer* buffer) {
 void tango_review_card_buffer_fill(TangoDB* db, review_card_buffer* buffer, int cards_to_add) {
     if (!db || !buffer || cards_to_add <= 0) return;
 
-    const char* sql =
-        "SELECT entry_id, last_review, interval, ease_factor, repetitions, due_date "
-        "FROM srs_reviews "
-        "ORDER BY due_date ASC LIMIT ? OFFSET ?;";
-
-    sqlite3_stmt* stmt;
+    sqlite3_stmt* stmt = NULL;
+    int using_prepared = 0;
 
     // Calculamos desde dónde empezar en la tabla, para evitar duplicar cartas ya en buffer
     int offset = buffer->start_index + buffer->count;
 
-    if (sqlite3_prepare_v2(db->db, sql, -1, &stmt, NULL) != SQLITE_OK) {
-        fprintf(stderr, "❌ Error en consulta SRS: %s\n", sqlite3_errmsg(db->db));
-        return;
+    if (db->stmts.stmt_srs_page) {
+        stmt = db->stmts.stmt_srs_page;
+        sqlite3_reset(stmt);
+        sqlite3_clear_bindings(stmt);
+        sqlite3_bind_int(stmt, 1, cards_to_add);
+        sqlite3_bind_int(stmt, 2, offset);
+        using_prepared = 1;
     }
 
-    if (sqlite3_bind_int(stmt, 1, cards_to_add) != SQLITE_OK ||
-        sqlite3_bind_int(stmt, 2, offset) != SQLITE_OK) {
-        fprintf(stderr, "❌ Error al vincular parámetros: %s\n", sqlite3_errmsg(db->db));
-        sqlite3_finalize(stmt);
-        return;
+    if (!using_prepared) {
+        const char* sql =
+            "SELECT entry_id, last_review, interval, ease_factor, repetitions, due_date "
+            "FROM srs_reviews "
+            "ORDER BY due_date ASC LIMIT ? OFFSET ?;";
+        if (sqlite3_prepare_v2(db->db, sql, -1, &stmt, NULL) != SQLITE_OK) {
+            fprintf(stderr, "❌ Error en consulta SRS: %s\n", sqlite3_errmsg(db->db));
+            return;
+        }
+        sqlite3_bind_int(stmt, 1, cards_to_add);
+        sqlite3_bind_int(stmt, 2, offset);
     }
 
     int added = 0;
@@ -590,19 +823,20 @@ void tango_review_card_buffer_fill(TangoDB* db, review_card_buffer* buffer, int 
 
             // Si current_index apunta al elemento sobrescrito, ajustarlo o marcar
             if (buffer->current_index == 0) {
-                // La carta actual fue sobrescrita, puedes decidir:
-                // - Mover current_index a 0 (la nueva carta más vieja)
-                // - O invalidar current_index (ej: -1)
                 buffer->current_index = 0;
             } else {
-                // Ajustar current_index para mantener coherencia
                 buffer->current_index--;
             }
         }
         added++;
     }
 
-    sqlite3_finalize(stmt);
+    if (!using_prepared) {
+        sqlite3_finalize(stmt);
+    } else {
+        sqlite3_reset(stmt);
+        sqlite3_clear_bindings(stmt);
+    }
 }
 
 review_card* tango_review_card_buffer_get_current(review_card_buffer* buffer) {
@@ -633,23 +867,8 @@ void tango_review_card_buffer_clear(review_card_buffer* buffer) {
 int tango_get_pending_review_cards(TangoDB* db) {
     if (!db) return 0;
 
-    const char* sql = "SELECT COUNT(*) FROM srs_reviews WHERE due_date <= ?;";
-    sqlite3_stmt* stmt;
-    int count = 0;
-
-    if (sqlite3_prepare_v2(db->db, sql, -1, &stmt, NULL) != SQLITE_OK) {
-        fprintf(stderr, "❌ Error en consulta: %s\n", sqlite3_errmsg(db->db));
-        return 0;
-    }
-
-    sqlite3_bind_int64(stmt, 1, time(NULL));
-
-    if (sqlite3_step(stmt) == SQLITE_ROW) {
-        count = sqlite3_column_int(stmt, 0);
-    }
-
-    sqlite3_finalize(stmt);
-    return count;
+    // Reuse tango_get_due_review_count (already uses prepared stmt if available)
+    return tango_get_due_review_count(db);
 }
 
 srs_stats* tango_get_srs_stats(TangoDB* db) {
@@ -657,7 +876,6 @@ srs_stats* tango_get_srs_stats(TangoDB* db) {
 
     // Actualizar estadísticas
     tango_update_srs_stats(db);
-    
 
     return &db->stats;
 }

@@ -12,8 +12,13 @@ MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent), ui(new Ui::MainWindow),
     db(nullptr), searchResultModel(nullptr), searchTimer(nullptr)
 {
+    db = tango_db_open("./debug/tango.db");
     ui->setupUi(this);
-
+    if (!db) {
+        QStandardItem* item = new QStandardItem("No se pudo abrir la base de datos");
+        searchResultModel->appendRow(item);
+        return;
+    }
     searchResultModel = new QStandardItemModel(this);
     ui->searchResultList->setModel(searchResultModel);
 
@@ -26,13 +31,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     ui->searchResultList->setItemDelegate(new ListItemDelegate(this));
 
-    db = tango_db_open("./debug/tango.db");
-    if (!db) {
-        QStandardItem* item = new QStandardItem("No se pudo abrir la base de datos");
-        searchResultModel->appendRow(item);
-        return;
-    }
-    tango_db_warmup(db);
+
 
     currentEntry = new entry;
 
