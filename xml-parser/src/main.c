@@ -19,9 +19,9 @@ int routes_count = sizeof(routes) / sizeof(routes[0]);
 #define BUFFER_SIZE 1024 * 16
 
 // Máximos por array de elementos
-#define MAX_K_ELEMENTS   24  // max_k_elements 16 + margen
-#define MAX_R_ELEMENTS   48  // max_r_elements 16 + margen
-#define MAX_SENSES       32  // max_senses 16 + margen
+#define MAX_K_ELEMENTS   24  // max_k_elements 17
+#define MAX_R_ELEMENTS   48  // max_r_elements 40
+#define MAX_SENSES       32  // max_senses 26
 
 #define MAX_KE_INF       4   // max_k_inf 2
 #define MAX_KE_PRI       8   // max_k_pri 4
@@ -223,11 +223,11 @@ void create_entry_json(const entry* e, char* buffer) {
             strcat(buffer, "\"");
 
             // re_nokanji
-            //if (e->r_elements[i].re_nokanji == true) {
-            //    strcat(buffer, ", \"re_nokanji\": true");
-            //} else {
-            //    strcat(buffer, ", \"re_nokanji\": false");
-            //}
+            if (e->r_elements[i].re_nokanji == true) {
+                strcat(buffer, ", \"re_nokanji\": true");
+            } else {
+                strcat(buffer, ", \"re_nokanji\": false");
+            }
             // re_restr
             if (e->r_elements[i].re_restr_count > 0) {
                 strcat(buffer, ", \"re_restr\": [");

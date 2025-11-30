@@ -312,12 +312,9 @@ void parse_entry_json(const char* json, entry* e) {
             }
 
             // re_nokanji
-            //cJSON* re_nokanji = cJSON_GetObjectItem(obj, "re_nokanji");
-            //if (re_nokanji && cJSON_IsBool(re_nokanji)) {
-            //    e->r_elements[i].re_nokanji = cJSON_IsTrue(re_nokanji) ? 1 : 0;
-            //} else {
-            //    e->r_elements[i].re_nokanji = 0;
-            //}
+            cJSON* re_nokanji = cJSON_GetObjectItem(obj, "re_nokanji");
+            e->r_elements[i].re_nokanji = (re_nokanji && cJSON_IsBool(re_nokanji)) ? cJSON_IsTrue(re_nokanji) : 0;
+
 
             // re_restr
             cJSON* re_restr = cJSON_GetObjectItem(obj, "re_restr");

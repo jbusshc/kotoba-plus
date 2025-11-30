@@ -86,157 +86,16 @@ void imprimir_entry(const entry* e, void* userdata) {
     }
     printf("\n");
 }
-typedef struct {
-    int max_k_elements;
-    int max_r_elements;
-    int max_senses; 
-    int max_k_inf;
-    int max_k_pri;
-    int max_r_restr;
-    int max_r_inf;
-    int max_r_pri;
-    int max_s_tagk;
-    int max_s_tagr;
-    int max_s_pos;
-    int max_s_xref;
-    int max_s_ant;
-    int max_s_field;
-    int max_s_misc;
-    int max_s_sinf;
-    int max_s_lsource;
-    int max_s_dial;
-    int max_s_gloss;
-    int max_s_examples;
-    int max_ex_sent;
-    int max_keb_len;
-    int max_ke_inf_len;
-    int max_ke_pri_len;
-    int max_reb_len;
-    int max_re_restr_len;
-    int max_re_inf_len;
-    int max_re_pri_len;
-    int max_ex_srce_len;
-    int max_ex_text_len;
-    int max_ex_sent_len;
-    int max_stagk_len;
-    int max_stagr_len;
-    int max_pos_len;
-    int max_xref_len;
-    int max_ant_len;
-    int max_field_len;
-    int max_misc_len;
-    int max_s_inf_len;
-    int max_lsource_len;
-    int max_dial_len;
-    int max_gloss_len;
-} MaxEntryStats;
 
-void compute_max(const entry* e, void* userdata) {
-    MaxEntryStats* stats = (MaxEntryStats*)userdata;
-    if (e->k_elements_count > stats->max_k_elements) stats->max_k_elements = e->k_elements_count;
-    if (e->r_elements_count > stats->max_r_elements) stats->max_r_elements = e->r_elements_count;
-    if (e->senses_count > stats->max_senses) stats->max_senses = e->senses_count;
-    for (int i = 0; i < e->k_elements_count; i++) {
-        if (e->k_elements[i].ke_inf_count > stats->max_k_inf) stats->max_k_inf = e->k_elements[i].ke_inf_count;
-        if (e->k_elements[i].ke_pri_count > stats->max_k_pri) stats->max_k_pri = e->k_elements[i].ke_pri_count;
-        int len_keb = strlen(e->k_elements[i].keb);
-        if (len_keb > stats->max_keb_len) stats->max_keb_len = len_keb;
-        for (int j = 0; j < e->k_elements[i].ke_inf_count; j++) {
-            int len_ke_inf = strlen(e->k_elements[i].ke_inf[j]);
-            if (len_ke_inf > stats->max_ke_inf_len) stats->max_ke_inf_len = len_ke_inf;
-        }
-        for (int j = 0; j < e->k_elements[i].ke_pri_count; j++) {
-            int len_ke_pri = strlen(e->k_elements[i].ke_pri[j]);
-            if (len_ke_pri > stats->max_ke_pri_len) stats->max_ke_pri_len = len_ke_pri;
-        } 
+void test (entry* e) {
+    if (!e)  {
+        printf("Entrada nula\n");
+        return;
     }
     for (int i = 0; i < e->r_elements_count; i++) {
-        if (e->r_elements[i].re_restr_count > stats->max_r_restr) stats->max_r_restr = e->r_elements[i].re_restr_count;
-        if (e->r_elements[i].re_inf_count > stats->max_r_inf) stats->max_r_inf = e->r_elements[i].re_inf_count;
-        if (e->r_elements[i].re_pri_count > stats->max_r_pri) stats->max_r_pri = e->r_elements[i].re_pri_count;
-        int len_reb = strlen(e->r_elements[i].reb);
-        if (len_reb > stats->max_reb_len) stats->max_reb_len = len_reb;
-        for (int j = 0; j < e->r_elements[i].re_restr_count; j++) {
-            int len_re_restr = strlen(e->r_elements[i].re_restr[j]);
-            if (len_re_restr > stats->max_re_restr_len) stats->max_re_restr_len = len_re_restr;
-        }
-        for (int j = 0; j < e->r_elements[i].re_inf_count; j++) {
-            int len_re_inf = strlen(e->r_elements[i].re_inf[j]);
-            if (len_re_inf > stats->max_re_inf_len) stats->max_re_inf_len = len_re_inf;
-        }
-        for (int j = 0; j < e->r_elements[i].re_pri_count; j++) {
-            int len_re_pri = strlen(e->r_elements[i].re_pri[j]);
-            if (len_re_pri > stats->max_re_pri_len) stats->max_re_pri_len = len_re_pri;
-        }
-    }
-    for (int i = 0; i < e->senses_count; i++) {
-        const sense* s = &e->senses[i];
-        if (s->stagk_count > stats->max_s_tagk) stats->max_s_tagk = s->stagk_count;
-        if (s->stagr_count > stats->max_s_tagr) stats->max_s_tagr = s->stagr_count;
-        if (s->pos_count > stats->max_s_pos) stats->max_s_pos = s->pos_count;
-        if (s->xref_count > stats->max_s_xref) stats->max_s_xref = s->xref_count;
-        if (s->ant_count > stats->max_s_ant) stats->max_s_ant = s->ant_count;
-        if (s->field_count > stats->max_s_field) stats->max_s_field = s->field_count;
-        if (s->misc_count > stats->max_s_misc) stats->max_s_misc = s->misc_count;
-        if (s->s_inf_count > stats->max_s_sinf) stats->max_s_sinf = s->s_inf_count;
-        if (s->lsource_count > stats->max_s_lsource) stats->max_s_lsource = s->lsource_count;
-        if (s->dial_count > stats->max_s_dial) stats->max_s_dial = s->dial_count;
-        if (s->gloss_count > stats->max_s_gloss) stats->max_s_gloss = s->gloss_count;
-        if (s->examples_count > stats->max_s_examples) stats->max_s_examples = s->examples_count;
-        for (int j = 0; j < s->stagk_count; j++) {
-            int len_stagk = strlen(s->stagk[j]);
-            if (len_stagk > stats->max_stagk_len) stats->max_stagk_len = len_stagk;
-        }
-        for (int j = 0; j < s->stagr_count; j++) {
-            int len_stagr = strlen(s->stagr[j]);
-            if (len_stagr > stats->max_stagr_len) stats->max_stagr_len = len_stagr;
-        }
-        for (int j = 0; j < s->pos_count; j++) {
-            int len_pos = strlen(s->pos[j]);
-            if (len_pos > stats->max_pos_len) stats->max_pos_len = len_pos;
-        }
-        for (int j = 0; j < s->xref_count; j++) {
-            int len_xref = strlen(s->xref[j]);
-            if (len_xref > stats->max_xref_len) stats->max_xref_len = len_xref;
-        }
-        for (int j = 0; j < s->ant_count; j++) {
-            int len_ant = strlen(s->ant[j]);
-            if (len_ant > stats->max_ant_len) stats->max_ant_len = len_ant;
-        }
-        for (int j = 0; j < s->field_count; j++) {
-            int len_field = strlen(s->field[j]);
-            if (len_field > stats->max_field_len) stats->max_field_len = len_field;
-        }
-        for (int j = 0; j < s->misc_count; j++) {
-            int len_misc = strlen(s->misc[j]);
-            if (len_misc > stats->max_misc_len) stats->max_misc_len = len_misc;
-        }
-        for (int j = 0; j < s->s_inf_count; j++) {
-            int len_s_inf = strlen(s->s_inf[j]);
-            if (len_s_inf > stats->max_s_inf_len) stats->max_s_inf_len = len_s_inf;
-        }
-        for (int j = 0; j < s->lsource_count; j++) {
-            int len_lsource = strlen(s->lsource[j]);
-            if (len_lsource > stats->max_lsource_len) stats->max_lsource_len = len_lsource;
-        }
-        for (int j = 0; j < s->dial_count; j++) {
-            int len_dial = strlen(s->dial[j]);
-            if (len_dial > stats->max_dial_len) stats->max_dial_len = len_dial;
-        }
-        for (int j = 0; j < s->gloss_count; j++) {
-            int len_gloss = strlen(s->gloss[j]);
-            if (len_gloss > stats->max_gloss_len) stats->max_gloss_len = len_gloss;
-        }
-        for (int j = 0; j < s->examples_count; j++) {
-            if (s->examples[j].ex_sent_count > stats->max_ex_sent) stats->max_ex_sent = s->examples[j].ex_sent_count;
-            int len_ex_srce = strlen(s->examples[j].ex_srce);
-            if (len_ex_srce > stats->max_ex_srce_len) stats->max_ex_srce_len = len_ex_srce;
-            int len_ex_text = strlen(s->examples[j].ex_text);
-            if (len_ex_text > stats->max_ex_text_len) stats->max_ex_text_len = len_ex_text;
-            for (int k = 0; k < s->examples[j].ex_sent_count; k++) {
-                int len_ex_sent = strlen(s->examples[j].ex_sent[k]);
-                if (len_ex_sent > stats->max_ex_sent_len) stats->max_ex_sent_len = len_ex_sent;
-            }
+        if (e->r_elements[i].re_nokanji) {
+            printf("Entrada %d tiene reb sin kanji:\n", e->ent_seq);
+            printf("Reb %d: %s, nokanji: %d\n", i, e->r_elements[i].reb, e->r_elements[i].re_nokanji);
         }
     }
 }
@@ -268,7 +127,6 @@ int main(int argc, char* argv[]) {
         return EXIT_FAILURE;
     }
     
-    MaxEntryStats stats = {0};
 
     printf("Analizando entradas para estadísticas máximas...\n");
     while (sqlite3_step(stmt) == SQLITE_ROW) {
@@ -277,64 +135,13 @@ int main(int argc, char* argv[]) {
         entry e;
         memset(&e, 0, sizeof(entry));
         
-        tango_db_id_search(db, entry_id, &e, compute_max, &stats);
+        tango_db_id_search(db, entry_id, &e, NULL, NULL);
+        test(&e);
     }
 
     sqlite3_finalize(stmt);
     tango_db_close(db);
 
-    printf("Máximos encontrados en la base de datos:\n");
-    printf("max_k_elements: %d\n", stats.max_k_elements);
-    printf("max_r_elements: %d\n", stats.max_r_elements);
-    printf("max_senses: %d\n", stats.max_senses);
-    printf("max_k_inf: %d\n", stats.max_k_inf);
-    printf("max_k_pri: %d\n", stats.max_k_pri);
-    printf("max_r_restr: %d\n", stats.max_r_restr);
-    printf("max_r_inf: %d\n", stats.max_r_inf);
-    printf("max_r_pri: %d\n", stats.max_r_pri);
-    printf("max_s_tagk: %d\n", stats.max_s_tagk);
-    printf("max_s_tagr: %d\n", stats.max_s_tagr);
-    printf("max_s_pos: %d\n", stats.max_s_pos);
-    printf("max_s_xref: %d\n", stats.max_s_xref);
-    printf("max_s_ant: %d\n", stats.max_s_ant);
-    printf("max_s_field: %d\n", stats.max_s_field);
-    printf("max_s_misc: %d\n", stats.max_s_misc);
-    printf("max_s_sinf: %d\n", stats.max_s_sinf);
-    printf("max_s_lsource: %d\n", stats.max_s_lsource);
-    printf("max_s_dial: %d\n", stats.max_s_dial);
-    printf("max_s_gloss: %d\n", stats.max_s_gloss);
-    printf("max_s_examples: %d\n", stats.max_s_examples);
-    printf("max_ex_sent: %d\n", stats.max_ex_sent);
-    printf("max_keb_len: %d\n", stats.max_keb_len);
-    printf("max_ke_inf_len: %d\n", stats.max_ke_inf_len);
-    printf("max_ke_pri_len: %d\n", stats.max_ke_pri_len);
-    printf("max_reb_len: %d\n", stats.max_reb_len);
-    printf("max_re_restr_len: %d\n", stats.max_re_restr_len);
-    printf("max_re_inf_len: %d\n", stats.max_re_inf_len);
-    printf("max_re_pri_len: %d\n", stats.max_re_pri_len);
-    printf("max_ex_srce_len: %d\n", stats.max_ex_srce_len);
-    printf("max_ex_text_len: %d\n", stats.max_ex_text_len);
-    printf("max_ex_sent_len: %d\n", stats.max_ex_sent_len);
-    printf("max_stagk_len: %d\n", stats.max_stagk_len);
-    printf("max_stagr_len: %d\n", stats.max_stagr_len);
-    printf("max_pos_len: %d\n", stats.max_pos_len);
-    printf("max_xref_len: %d\n", stats.max_xref_len);
-    printf("max_ant_len: %d\n", stats.max_ant_len);
-    printf("max_field_len: %d\n", stats.max_field_len);
-    printf("max_misc_len: %d\n", stats.max_misc_len);
-    printf("max_s_inf_len: %d\n", stats.max_s_inf_len);
-    printf("max_lsource_len: %d\n", stats.max_lsource_len);
-    printf("max_dial_len: %d\n", stats.max_dial_len);
-    printf("max_gloss_len: %d\n", stats.max_gloss_len);
-
-    printf("Análisis completado.\n");
-    printf("%zu bytes\n", sizeof(entry));
-    printf("%zu bytes\n", sizeof(entry) * 16);
-    printf("%zu bytes\n", sizeof(entry) * 32);
-    printf("%zu bytes\n", sizeof(entry) * 64);
-    printf("%zu bytes\n", sizeof(entry) * 128);
-    printf("%zu bytes\n", sizeof(entry) * 512);
-    printf("%zu bytes\n", sizeof(entry) * 1024);
 
     return EXIT_SUCCESS;
 }
