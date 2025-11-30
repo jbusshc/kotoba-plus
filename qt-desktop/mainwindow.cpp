@@ -219,7 +219,7 @@ void MainWindow::showEntryDetails(const entry* e) {
             allKanjis += QString::fromUtf8(e->k_elements[i].keb) + ", ";
         allKanjis.chop(2);
 
-        bigText += QString("<div style='font-size:42px; font-weight:bold;'>%1</div>")
+        bigText += QString("<div style='font-size:32px; font-weight:bold;'>%1</div>")
                     .arg(allKanjis);
 
         if (e->r_elements_count > 0) {
@@ -238,7 +238,7 @@ void MainWindow::showEntryDetails(const entry* e) {
             allReadings += QString::fromUtf8(e->r_elements[i].reb) + ", ";
         allReadings.chop(2);
 
-        bigText += QString("<div style='font-size:42px; font-weight:bold;'>%1</div>")
+        bigText += QString("<div style='font-size:32px; font-weight:bold;'>%1</div>")
                     .arg(allReadings);
     }
 
