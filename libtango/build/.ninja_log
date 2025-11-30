@@ -1,11 +1,11 @@
 # ninja log v7
-33	455	7859094794247284	CMakeFiles/libtango.dir/src/libtango.c.obj	21c1cd0ef9654e43
+31	538	7862419004188356	CMakeFiles/libtango.dir/src/libtango.c.obj	21c1cd0ef9654e43
 26	357	7758737140469137	CMakeFiles/libtango.dir/src/dictionary-search.c.obj	b350e35fdb06c13f
 16	360	7758737140369837	CMakeFiles/libtango.dir/src/cards.c.obj	37d0bc293c6f2350
 7	370	7758737140278312	CMakeFiles/libtango.dir/src/cards-review.c.obj	e94eede4c79e8b3c
 32	282	7758953827341782	CMakeFiles/libtango.dir/src/kana-converter.c.obj	b4ed11bb9343904f
-458	1266	7859094801777027	bin/tango.dll	f0e20645c4125635
-458	1266	7859094801777027	lib/libtango.dll.a	f0e20645c4125635
-14	858	7862269676134506	CMakeFiles/libtango.dir/src/libtango.c.obj	21c1cd0ef9654e43
-861	1849	7862269691410857	bin/tango.dll	f0e20645c4125635
-861	1849	7862269691410857	lib/libtango.dll.a	f0e20645c4125635
+543	1324	7862419013112238	bin/tango.dll	f0e20645c4125635
+543	1324	7862419013112238	lib/libtango.dll.a	f0e20645c4125635
+28	371	7862419969838624	CMakeFiles/libtango.dir/src/libtango.c.obj	21c1cd0ef9654e43
+373	1084	7862419975804769	bin/tango.dll	f0e20645c4125635
+373	1084	7862419975804769	lib/libtango.dll.a	f0e20645c4125635

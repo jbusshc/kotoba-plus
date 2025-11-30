@@ -20,7 +20,7 @@ clean:
 	rm -rf $(BIN)
 
 run: 
-	cd $(BIN) && ./cli-tango
+	make && cd $(BIN) && ./cli-tango
 
 build-lib: 
 	cd ../libtango/build && cmake .. && ninja

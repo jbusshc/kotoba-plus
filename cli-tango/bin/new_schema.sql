@@ -1,12 +1,11 @@
 -- Crear tabla principal entries con columnas JSON para kanjis, lecturas y sentidos
-CREATE TABLE entries (
+CREATE TABLE IF NOT EXISTS entries (
     id INTEGER PRIMARY KEY,
-    priority INTEGER DEFAULT 9999,
+    priority INTEGER DEFAULT 0,
     entry_json TEXT NOT NULL  -- JSON con { "k_ele": [...], "r_ele": [...], "sense": [...] }
 );
 
-
-CREATE VIRTUAL TABLE entry_search USING fts5(
+CREATE VIRTUAL TABLE IF NOT EXISTS entry_search USING fts5(
     entry_id UNINDEXED,
     priority UNINDEXED,  -- usada solo para ordenamiento en consultas
     content,
@@ -24,7 +23,7 @@ CREATE TABLE IF NOT EXISTS srs_reviews (
     PRIMARY KEY (entry_id)
 );
 
-CREATE TABLE stats (
+CREATE TABLE IF NOT EXISTS stats (
     key TEXT PRIMARY KEY,
     value INTEGER
 );
