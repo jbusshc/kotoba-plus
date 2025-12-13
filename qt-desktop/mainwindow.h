@@ -5,7 +5,7 @@
 #include <QStandardItemModel>
 #include <QModelIndex>
 #include <QTimer>
-#include "libtango.h"  // Aquí están entry y TangoSearchResult
+#include "libkotobaplus.h"  // Aquí están entry y KPSearchResult
 #include "listitemdelegate.h"
 
 QT_BEGIN_NAMESPACE
@@ -27,12 +27,12 @@ private slots:
 
 private:
     Ui::MainWindow *ui;
-    TangoDB *db;
+    KPDB *db;
     QStandardItemModel *searchResultModel;
     QTimer *searchTimer;               // temporizador para debounce
     entry *currentEntry;               // entrada actual
 
-    void handleResult(const TangoSearchResult* result);
+    void handleResult(const KPSearchResult* result);
     void showEntryDetails(const entry* e);
 };
 

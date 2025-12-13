@@ -12,7 +12,7 @@ MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent), ui(new Ui::MainWindow),
     db(nullptr), searchResultModel(nullptr), searchTimer(nullptr)
 {
-    db = tango_db_open("./debug/tango.db");
+    db = KP_db_open("./debug/tango.db");
     ui->setupUi(this);
     if (!db) {
         QStandardItem* item = new QStandardItem("No se pudo abrir la base de datos");
@@ -43,8 +43,8 @@ MainWindow::MainWindow(QWidget *parent)
         if (currentText.trimmed().isEmpty()) {
             return;
         }
-        tango_db_text_search(db, currentText.toUtf8().constData(),
-                             [](const TangoSearchResult* result, void* userdata) {
+        KP_db_text_search(db, currentText.toUtf8().constData(),
+                             [](const KPSearchResult* result, void* userdata) {
                                  MainWindow* self = static_cast<MainWindow*>(userdata);
                                  self->handleResult(result);
                              }, this);
@@ -75,7 +75,7 @@ MainWindow::MainWindow(QWidget *parent)
 
 MainWindow::~MainWindow() {
     if (db) {
-        tango_db_close(db);
+        KP_db_close(db);
     }
     delete currentEntry;
     delete ui;
@@ -85,7 +85,7 @@ void MainWindow::onSearchTextChanged() {
     searchTimer->start(SEARCH_DEBOUNCE_MS);
 }
 
-void MainWindow::handleResult(const TangoSearchResult* result) {
+void MainWindow::handleResult(const KPSearchResult* result) {
     QString kanjis = QString::fromUtf8(result->kanjis).trimmed();
     QString readings = QString::fromUtf8(result->readings).trimmed();
     QString glosses = QString::fromUtf8(result->glosses).trimmed();
@@ -181,7 +181,7 @@ void MainWindow::onSearchResultClicked(const QModelIndex &index) {
     int ent_seq = index.data(Qt::UserRole).toInt();
     qDebug() << "Clicked ent_seq:" << ent_seq;
     memset(currentEntry, 0, sizeof(entry));
-    tango_db_id_search(db, ent_seq, currentEntry, [](const entry* /*e*/, void* userdata) {
+    KP_db_id_search(db, ent_seq, currentEntry, [](const entry* /*e*/, void* userdata) {
         MainWindow* self = static_cast<MainWindow*>(userdata);
 
         // Esto ocurre en el siguiente ciclo de eventos

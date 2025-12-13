@@ -8,14 +8,14 @@ SOURCES += \
 
 HEADERS += \
     mainwindow.h \
-    ../libtango/include/libtango.h \
+    ../libkotobaplus/include/libkotobaplus.h \
     listitemdelegate.h \
 
 
 
-INCLUDEPATH += ../libtango/include
+INCLUDEPATH += ../libkotobaplus/include
 
-LIBS += -L$$PWD/../libtango/build/lib -ltango
+LIBS += -L$$PWD/../libkotobaplus/build/lib -ltango
 
 FORMS += \
     mainwindow.ui

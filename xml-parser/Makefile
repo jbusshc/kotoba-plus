@@ -4,7 +4,7 @@ LDFLAGS := $(shell xml2-config --libs) -lsqlite3
 SRC_DIR := src
 OBJ_DIR := build
 BIN_DIR := bin
-BIN := $(BIN_DIR)/gotango-parser
+BIN := $(BIN_DIR)/xml-parser
 
 SRCS := $(wildcard $(SRC_DIR)/*.c)
 OBJS := $(patsubst $(SRC_DIR)/%.c,$(OBJ_DIR)/%.o,$(SRCS))
@@ -21,9 +21,13 @@ $(BIN): $(OBJS)
 .PHONY: all clean run
 
 run:
-	cd $(BIN_DIR) && ./gotango-parser.exe && cp tango.db ../../cli-tango/bin/tango.db
+	cd $(BIN_DIR) && ./xml-parser.exe && cp kotoba.db ../../cli-kotobaplus/bin/kotoba.db
 
 all: $(BIN)
 
 clean:
 	rm -rf $(OBJ_DIR) $(BIN_DIR)
+
+get-jmdict:
+	curl -O ftp://ftp.edrdg.org/pub/Nihongo/JMdict.gz
+	gunzip JMdict.gz

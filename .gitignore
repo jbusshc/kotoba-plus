@@ -2,7 +2,7 @@
 *.db
 *.xml
 *.o
-xml-parser\build
+bin\build
 *-shm
 *-wal
 *.sqbpro
@@ -11,3 +11,11 @@ bak/
 *.log
 *.tmp
 *.db
+*.bak
+*.old
+xml-parser/assets/
+xml-parser/build
+*.dll
+*.dll.a
+build/
+*.bin

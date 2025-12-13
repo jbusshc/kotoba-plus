@@ -11,7 +11,7 @@
 #define ROUTE_JMDICT_IDX 0
 #define MAX_ENTRIES 209000
 char *routes[] = {
-    "../assets/JMdict_e_examp",
+    "../assets/JMdict",
 };
 int routes_count = sizeof(routes) / sizeof(routes[0]);
 
@@ -37,7 +37,7 @@ int routes_count = sizeof(routes) / sizeof(routes[0]);
 #define MAX_ANT          4   // max_s_ant 2
 #define MAX_FIELD        4   // max_s_field 3
 #define MAX_MISC         8   // max_s_misc 5
-#define MAX_S_INF        4   // max_s_sinf 1
+#define MAX_S_INF        4   // max_s_sinf 1 
 #define MAX_LSOURCE      8   // max_s_lsource 4
 #define MAX_DIAL         4   // max_s_dial 3
 #define MAX_GLOSS        24  // max_s_gloss 15
@@ -54,21 +54,21 @@ int routes_count = sizeof(routes) / sizeof(routes[0]);
 #define MAX_RE_INF_LEN   80   // max_re_inf_len 63
 #define MAX_RE_PRI_LEN   16   // max_re_pri_len 5
 
-#define MAX_EX_SRCE_LEN  16   // max_ex_srce_len 8
-#define MAX_EX_TEXT_LEN  64   // max_ex_text_len 45
-#define MAX_EX_SENT_LEN  160  // max_ex_sent_len 127
+#define MAX_EX_SRCE_LEN  100   // max_ex_srce_len 8
+#define MAX_EX_TEXT_LEN  200  // max_ex_text_len 45
+#define MAX_EX_SENT_LEN  600  // max_ex_sent_len 127
 
-#define MAX_STAGK_LEN    24   // max_stagk_len 18
-#define MAX_STAGR_LEN    32   // max_stagr_len 24
-#define MAX_POS_LEN      96   // max_pos_len 71
-#define MAX_XREF_LEN     128  // max_xref_len 111
-#define MAX_ANT_LEN      48   // max_ant_len 42
-#define MAX_FIELD_LEN    32   // max_field_len 23
-#define MAX_MISC_LEN     64   // max_misc_len 44
-#define MAX_S_INF_LEN    160  // max_s_inf_len 127
-#define MAX_LSOURCE_LEN  48   // max_lsource_len 36
-#define MAX_DIAL_LEN     16   // max_dial_len 12
-#define MAX_GLOSS_LEN    160  // max_gloss_len 127
+#define MAX_STAGK_LEN    100   // max_stagk_len 18
+#define MAX_STAGR_LEN    100  // max_stagr_len 24
+#define MAX_POS_LEN      200   // max_pos_len 71
+#define MAX_XREF_LEN     300  // max_xref_len 111
+#define MAX_ANT_LEN      100   // max_ant_len 42
+#define MAX_FIELD_LEN    100   // max_field_len 23
+#define MAX_MISC_LEN     100   // max_misc_len 44
+#define MAX_S_INF_LEN    300  // max_s_inf_len 127
+#define MAX_LSOURCE_LEN  100   // max_lsource_len 36
+#define MAX_DIAL_LEN     100   // max_dial_len 12
+#define MAX_GLOSS_LEN    300  // max_gloss_len 127
 
 
 typedef struct
@@ -126,6 +126,7 @@ typedef struct
     int gloss_count;
     example examples[MAX_EXAMPLES];
     int examples_count;
+    int lang;
 } sense;
 
 typedef struct
@@ -565,43 +566,9 @@ int main() {
     }
 
     
-    sqlite3* db = open_db("tango.db");
-    if (!db) exit(1); // abortar si falla
-    sqlite3_exec(db, "BEGIN TRANSACTION;", NULL, NULL, NULL);
-    // Create tables if not exist
-    sqlite3_exec(db, "CREATE TABLE IF NOT EXISTS entries (\
-        id INTEGER PRIMARY KEY,\
-        priority INTEGER DEFAULT 0,\
-        entry_json TEXT NOT NULL\
-    );", NULL, NULL, NULL);
+    //sqlite3* db = open_db("kotobaplus.db");
+    //if (!db) exit(1); // abortar si falla
 
-    sqlite3_exec(db, "CREATE VIRTUAL TABLE IF NOT EXISTS entry_search USING fts5(\
-        entry_id UNINDEXED,\
-        priority UNINDEXED,\
-        content,\
-        tokenize = \"unicode61\"\
-    );", NULL, NULL, NULL);
-
-    sqlite3_exec(db, "CREATE TABLE IF NOT EXISTS srs_reviews (\
-        entry_id INTEGER NOT NULL,\
-        last_review INTEGER NOT NULL,\
-        interval INTEGER NOT NULL,\
-        ease_factor REAL NOT NULL,\
-        repetitions INTEGER NOT NULL,\
-        due_date INTEGER NOT NULL,\
-        PRIMARY KEY (entry_id)\
-    );", NULL, NULL, NULL);
-
-    sqlite3_exec(db, "CREATE TABLE IF NOT EXISTS stats (\
-        key TEXT PRIMARY KEY,\
-        value INTEGER\
-    );", NULL, NULL, NULL);
-
-    // Delete all data from tables
-    sqlite3_exec(db, "DELETE FROM entries;", NULL, NULL, NULL);
-    sqlite3_exec(db, "DELETE FROM entry_search;", NULL, NULL, NULL);
-    sqlite3_exec(db, "DELETE FROM srs_reviews;", NULL, NULL, NULL);
-    sqlite3_exec(db, "DELETE FROM stats;", NULL, NULL, NULL);
     for (xmlNodePtr cur_node = root->children; cur_node; cur_node = cur_node->next)
     {
         if (cur_node->type == XML_ELEMENT_NODE)
@@ -609,6 +576,7 @@ int main() {
             if (xmlStrcmp(cur_node->name, (const xmlChar *)"entry") == 0)
             {
                 entry e = {0};
+                char buffer[BUFFER_SIZE];
                 xmlNodePtr child_node = NULL;
                 for (child_node = cur_node->children; child_node; child_node = child_node->next)
                 {
@@ -773,14 +741,15 @@ int main() {
                 // Aquí ya está la entrada completa
 
                 sqlite3_stmt* stmt;
-                const char* sql = "INSERT INTO entries (id, priority, entry_json) VALUES (?, ?, ?);";
+                //const char* sql = "INSERT INTO entries (id, priority, entry_json) VALUES (?, ?, ?);";
                 int ent_seq = e.ent_seq;
                 int priority = e.priority;
                 char entry_json[BUFFER_SIZE] = {0};
-                create_entry_json(&e, entry_json);
+                //create_entry_json(&e, entry_json);
                 char kanjis_plain[BUFFER_SIZE] = {0};
                 char readings_plain[BUFFER_SIZE] = {0};
                 char gloss_plain[BUFFER_SIZE] = {0};
+                /*
                 create_kanjis_plain_text(&e, kanjis_plain);
                 create_readings_plain_text(&e, readings_plain);
                 create_gloss_plain_text(&e, gloss_plain);
@@ -815,7 +784,7 @@ int main() {
                 snprintf(content, sizeof(content), "%s\x1F%s\x1F%s", k, r, g);
 
                 sqlite3_bind_int(stmt, 1, ent_seq);
-                sqlite3_bind_int(stmt, 2, priority);
+                sqlite3_bind_int(stmt, 2, priority); 
 
                 // SQLITE_TRANSIENT → SQLite hace copia interna del buffer
                 sqlite3_bind_text(stmt, 3, content, -1, SQLITE_TRANSIENT);
@@ -825,13 +794,15 @@ int main() {
                 }
 
                 sqlite3_finalize(stmt);
+                */
 
+                printf("Processed entry with ent_seq: %d\n", e.ent_seq);  
                 // Reset entry for next iteration
                 e = (entry){0}; // Reset entry structure
             }
         }
     }
-    sqlite3_exec(db, "COMMIT;", NULL, NULL, NULL);
+    //sqlite3_exec(db, "COMMIT;", NULL, NULL, NULL);
     xmlFreeDoc(doc);
     xmlCleanupParser();
 

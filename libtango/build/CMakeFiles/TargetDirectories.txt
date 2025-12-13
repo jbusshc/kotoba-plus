@@ -1,3 +1,0 @@
-C:/Users/Jorge/Desktop/Proyectos/tango/libtango/build/CMakeFiles/libtango.dir
-C:/Users/Jorge/Desktop/Proyectos/tango/libtango/build/CMakeFiles/edit_cache.dir
-C:/Users/Jorge/Desktop/Proyectos/tango/libtango/build/CMakeFiles/rebuild_cache.dir
