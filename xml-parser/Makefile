@@ -29,8 +29,7 @@ KOTOBA_LDFLAGS := \
 
 # Otras libs
 LDFLAGS := \
-	$(shell xml2-config --libs) \
-	-lsqlite3 \
+	$(shell xml2-config --libs) 
 
 # =========================
 # Sources
@@ -65,7 +64,6 @@ run:
 	# Copiar la DLL en runtime
 	cp $(KOTOBA_ROOT)/build/bin/kotobaplus.dll $(BIN_DIR)/
 	cd $(BIN_DIR) && ./xml-parser.exe
-	cp $(BIN_DIR)/kotoba.db ../../cli-kotobaplus/bin/kotoba.db
 
 clean:
 	rm -rf $(OBJ_DIR) $(BIN)

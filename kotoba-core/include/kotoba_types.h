@@ -6,24 +6,42 @@
 #include "api.h"
 
 
-/* =========================================================
- *  Archivo y versión
- * ========================================================= */
 
-#define KOTOBA_MAGIC   0x4B4F544F  /* 'KOTO' */
-#define KOTOBA_VERSION 0x0001
 
 /* =========================================================
  *  Idiomas
  * ========================================================= */
 
+// Idiomas soportados por JMdict (https://www.edrdg.org/jmdict/edict_doc.html#glosslang)
 enum kotoba_lang {
-    KOTOBA_LANG_EN = 0,
-    KOTOBA_LANG_ES,
-    KOTOBA_LANG_PT,
-    KOTOBA_LANG_FR,
-    KOTOBA_LANG_DE,
-    KOTOBA_LANG_RU,
+    KOTOBA_LANG_EN = 0,  // English
+    KOTOBA_LANG_FR,      // French
+    KOTOBA_LANG_DE,      // German
+    KOTOBA_LANG_RU,      // Russian
+    KOTOBA_LANG_ES,      // Spanish
+    KOTOBA_LANG_PT,      // Portuguese
+    KOTOBA_LANG_IT,      // Italian
+    KOTOBA_LANG_NL,      // Dutch
+    KOTOBA_LANG_HU,      // Hungarian
+    KOTOBA_LANG_SV,      // Swedish
+    KOTOBA_LANG_CS,      // Czech
+    KOTOBA_LANG_PL,      // Polish
+    KOTOBA_LANG_RO,      // Romanian
+    KOTOBA_LANG_HE,      // Hebrew
+    KOTOBA_LANG_AR,      // Arabic
+    KOTOBA_LANG_TR,      // Turkish
+    KOTOBA_LANG_TH,      // Thai
+    KOTOBA_LANG_VI,      // Vietnamese
+    KOTOBA_LANG_ID,      // Indonesian
+    KOTOBA_LANG_MS,      // Malay
+    KOTOBA_LANG_KO,      // Korean
+    KOTOBA_LANG_ZH,      // Chinese (unspecified)
+    KOTOBA_LANG_ZH_CN,   // Chinese (Simplified)
+    KOTOBA_LANG_ZH_TW,   // Chinese (Traditional)
+    KOTOBA_LANG_FA,      // Persian
+    KOTOBA_LANG_EO,      // Esperanto
+    KOTOBA_LANG_UNK,     // Unknown/other
+    KOTOBA_LANG_COUNT
 };
 
 /* =========================================================
@@ -53,13 +71,20 @@ static inline uint32_t le32(uint32_t x) {
  *  Header del archivo
  * ========================================================= */
 
+#define KOTOBA_MAGIC 0x4B54422B /* 'KTB+' */
+#define KOTOBA_VERSION 0x0001
+#define KOTOBA_IDX_VERSION 0x0001
+
+
 typedef struct {
-    uint32_t magic;
-    uint16_t version;
-    uint16_t flags;
-    uint32_t entry_count;
-    uint32_t index_off;   // offset al índice
-} kotoba_file_header;
+    uint32_t magic;     /* KOTOB A BIN */
+    uint16_t version;   /* formato */
+    uint16_t reserved;  /* reservado */
+    uint32_t entry_count; /* número de entries */
+
+} kotoba_bin_header;
+
+typedef kotoba_bin_header kotoba_idx_header;
 
 /* =========================================================
  *  Tabla de índices
@@ -92,6 +117,7 @@ typedef struct {
     uint32_t s_off;        // offset a sense_bin contiguos
 
     int32_t  priority;
+    uint32_t __pad;   /* alineación explícita */
 } entry_bin;
 
 
@@ -163,6 +189,15 @@ typedef struct {
     uint32_t ex_sent_off_off; // offset al array de offsets de frases
 } example_bin;
 
+typedef struct {
+    const uint8_t   *base;
+    const entry_bin *eb;
+} entry_view;
+
+
+/* =========================================================
+ *  Estructuras en memoria (para parser / builder)
+ * ========================================================= */
 
 /* =========================================================
  *  LIMITES (parser / writer)
@@ -220,9 +255,6 @@ typedef struct {
 #define MAX_DIAL_LEN     13
 #define MAX_GLOSS_LEN    128
 
-/* =========================================================
- *  Estructuras en memoria (parser / builder)
- * ========================================================= */
 
 typedef struct {
     char keb[MAX_KEB_LEN];

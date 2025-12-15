@@ -19,3 +19,5 @@ xml-parser/build
 *.dll.a
 build/
 *.bin
+*.kotoba
+*.kotoba.idx
