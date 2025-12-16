@@ -29,7 +29,8 @@ KOTOBA_LDFLAGS := \
 
 # Otras libs
 LDFLAGS := \
-	$(shell xml2-config --libs) 
+	$(shell xml2-config --libs) \
+	-Wl,--stack,16777216
 
 # =========================
 # Sources
@@ -52,6 +53,10 @@ $(BIN): $(OBJS)
 	$(CC) $(CFLAGS) $^ -o $@ \
 	    $(KOTOBA_LDFLAGS) \
 	    $(LDFLAGS)
+
+# =========================
+
+
 
 # =========================
 # Targets
