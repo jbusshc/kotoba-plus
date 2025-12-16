@@ -217,7 +217,7 @@ typedef struct {
 
 #define MAX_K_ELEMENTS   18
 #define MAX_R_ELEMENTS   41
-#define MAX_SENSES       48
+#define MAX_SENSES       116
 
 #define MAX_KE_INF       3
 #define MAX_KE_PRI       5
