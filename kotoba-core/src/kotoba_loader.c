@@ -1,65 +1,127 @@
 #include "kotoba_loader.h"
+#include <string.h>
 
-/* =========================================================
- * Header global
- * ========================================================= */
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <sys/mman.h>
+#include <unistd.h>
+#endif
 
-int kotoba_check_header(const uint8_t *file, uint32_t magic, uint16_t version)
+#ifdef _WIN32
+
+static int map_file(const char *path, const uint8_t **base, uint32_t *size)
 {
-    const kotoba_bin_header *h = (const kotoba_bin_header *)file;
+    HANDLE hFile = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ,
+                              NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (hFile == INVALID_HANDLE_VALUE)
+        return 0;
 
-    if (h->magic != magic) return 0;
-    if (h->version != version) return 0;
+    DWORD sz = GetFileSize(hFile, NULL);
+    HANDLE hMap = CreateFileMapping(hFile, NULL, PAGE_READONLY, 0, 0, NULL);
+    if (!hMap)
+        return 0;
+
+    *base = (const uint8_t *)MapViewOfFile(hMap, FILE_MAP_READ, 0, 0, 0);
+    *size = sz;
+    return *base != NULL;
+}
+
+static void unmap_file(const uint8_t *base)
+{
+    if (base)
+        UnmapViewOfFile(base);
+}
+
+#else
+
+static int map_file(const char *path, const uint8_t **base, uint32_t *size)
+{
+    int fd = open(path, O_RDONLY);
+    if (fd < 0)
+        return 0;
+
+    struct stat st;
+    fstat(fd, &st);
+    *size = st.st_size;
+
+    *base = mmap(NULL, *size, PROT_READ, MAP_PRIVATE, fd, 0);
+    close(fd);
+
+    return *base != MAP_FAILED;
+}
+
+static void unmap_file(const uint8_t *base, uint32_t size)
+{
+    if (base)
+        munmap((void *)base, size);
+}
+
+#endif
+
+int kotoba_loader_open(kotoba_loader *l,
+                       const char *bin_path,
+                       const char *idx_path)
+{
+    memset(l, 0, sizeof(*l));
+
+    /* map BIN */
+    if (!map_file(bin_path, &l->bin_base, &l->bin_size))
+        return 0;
+
+    l->bin_hdr = (const kotoba_bin_header *)l->bin_base;
+
+    if (l->bin_hdr->magic != KOTOBA_MAGIC)
+        return 0;
+
+    /* map IDX */
+    if (!map_file(idx_path, &l->idx_base, &l->idx_size))
+        return 0;
+
+    l->idx_hdr = (const kotoba_idx_header *)l->idx_base;
+
+    if (l->idx_hdr->magic != KOTOBA_MAGIC)
+        return 0;
+
+    /* índice empieza justo después del header */
+    l->index = (const entry_index *)(l->idx_base +
+                                     sizeof(kotoba_idx_header));
+
     return 1;
 }
 
-/* =========================================================
- * Entry load
- * ========================================================= */
-
-int entry_load(const uint8_t *file, uint32_t off, entry_view *out)
+int kotoba_loader_get(const kotoba_loader *l,
+                      uint32_t i,
+                      entry_view *out)
 {
-    if (!file || !out) return 0;
+    if (i >= l->bin_hdr->entry_count)
+        return 0;
 
-    out->base = file + off;
-    out->eb   = (const entry_bin *)out->base;
+    uint32_t off = l->index[i].offset;
+
+    if (off >= l->bin_size)
+        return 0;
+
+    const entry_bin *eb =
+        (const entry_bin *)(l->bin_base + off);
+
+    out->base = (const uint8_t *)eb;
+    out->eb   = eb;
+
     return 1;
 }
 
-/* =========================================================
- * Helpers
- * ========================================================= */
-
-static inline const void *
-ptr(const entry_view *v, uint32_t off)
+void kotoba_loader_close(kotoba_loader *l)
 {
-    return off ? v->base + off : NULL;
-}
+#ifdef _WIN32
+    unmap_file(l->bin_base);
+    unmap_file(l->idx_base);
+#else
+    unmap_file(l->bin_base, l->bin_size);
+    unmap_file(l->idx_base, l->idx_size);
+#endif
 
-const char *entry_get_string(const entry_view *v, uint32_t off)
-{
-    return (const char *)ptr(v, off);
-}
-
-const uint32_t *entry_offsets(const entry_view *v, uint32_t off)
-{
-    return (const uint32_t *)ptr(v, off);
-}
-
-const k_ele_bin *entry_k_ele(const entry_view *v, uint32_t i)
-{
-    if (i >= v->eb->k_count) return NULL;
-    return &((const k_ele_bin *)(v->base + v->eb->k_off))[i];
-}
-
-const r_ele_bin *entry_r_ele(const entry_view *v, uint32_t i)
-{
-    if (i >= v->eb->r_count) return NULL;
-    return &((const r_ele_bin *)(v->base + v->eb->r_off))[i];
-}
-
-const sense_bin *entry_sense(const entry_view *v, uint32_t i)
-{
-    if (i >= v->eb->s_count) return NULL;
-    return &((const sense_bin *)(v->base + v->eb->s_off))[i];
+    memset(l, 0, sizeof(*l));
 }

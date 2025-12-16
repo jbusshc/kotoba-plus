@@ -40,6 +40,7 @@ enum kotoba_lang {
     KOTOBA_LANG_ZH_TW,   // Chinese (Traditional)
     KOTOBA_LANG_FA,      // Persian
     KOTOBA_LANG_EO,      // Esperanto
+    KOTOBA_LANG_SLV,     // Slovenian
     KOTOBA_LANG_UNK,     // Unknown/other
     KOTOBA_LANG_COUNT
 };
@@ -75,16 +76,27 @@ static inline uint32_t le32(uint32_t x) {
 #define KOTOBA_VERSION 0x0001
 #define KOTOBA_IDX_VERSION 0x0001
 
+#define KOTOBA_FILE_BIN 1
+#define KOTOBA_FILE_IDX 2
+
+
 
 typedef struct {
-    uint32_t magic;     /* KOTOB A BIN */
-    uint16_t version;   /* formato */
-    uint16_t reserved;  /* reservado */
+    uint32_t magic;       /* KTB+ */
+    uint16_t version;     /* formato BIN */
+    uint16_t type;        /* KOTOBA_FILE_BIN */
     uint32_t entry_count; /* número de entries */
-
 } kotoba_bin_header;
 
-typedef kotoba_bin_header kotoba_idx_header;
+typedef struct {
+    uint32_t magic;        /* KTB+ */
+    uint16_t version;      /* formato IDX */
+    uint16_t type;         /* KOTOBA_FILE_IDX */
+    uint32_t entry_count;  /* número de entries */
+    uint32_t entry_stride; /* sizeof(entry_index) */
+} kotoba_idx_header;
+
+
 
 /* =========================================================
  *  Tabla de índices

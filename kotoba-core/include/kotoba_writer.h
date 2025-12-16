@@ -7,7 +7,12 @@
 #include "api.h"
 
 /* Escribe el header global del archivo */
-KOTOBA_API int kotoba_write_header(FILE *fp, kotoba_bin_header *header);
+KOTOBA_API int kotoba_write_bin_header(FILE *fp,
+                                      uint32_t entry_count);
+
+KOTOBA_API int kotoba_write_idx_header(FILE *fp,
+                                      uint32_t entry_count);
+
 
 /* Escribe un entry y devuelve offset absoluto */
 KOTOBA_API uint32_t write_entry(FILE *fp, const entry *e);
