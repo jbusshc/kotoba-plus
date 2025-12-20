@@ -13,7 +13,7 @@
  *  Idiomas (JMdict gloss languages)
  * ============================================================================
  *
- * Se codifican como uint8_t.
+ * Codificados como uint8_t.
  * El orden es estable y forma parte del ABI del binario.
  */
 enum kotoba_lang
@@ -98,15 +98,48 @@ typedef struct
  * Reglas:
  *  - Sin arrays estáticos
  *  - Sin malloc
- *  - Todo acceso es offset + count (+ len)
+ *  - Todo acceso es offset + count
  *  - Totalmente mmapeable
  *  - ABI estable
  *
- * Strings:
- *  - Los strings viven en pools de bytes
- *  - El struct guarda offset + len
- *  - El writer escribe SOLO los bytes (sin uint8 len inline)
+ * Strings en binario:
+ *  - SIEMPRE se escriben como: [uint8_t len][bytes]
+ *  - El struct guarda SOLO el offset al inicio del len
+ *  - No existen *_len en structs binarios
  */
+
+/*
+ * Si *_count == 0, el correspondiente *_off es indefinido
+ * y no debe ser desreferenciado.
+ * 
+ * Convención OFF + COUNT:
+ *
+ * Para todo par (X_off, X_count):
+ *
+ * - Si X es una colección de elementos estructurados
+ *   (k_ele_bin, r_ele_bin, sense_bin),
+ *   entonces X_off apunta al primer struct de un arreglo contiguo.
+ *
+ * - Si X es una colección de strings o tokens,
+ *   entonces X_off apunta a un arreglo contiguo de uint32_t,
+ *   donde cada uint32_t es un offset absoluto a un string
+ *   codificado como [uint8_t len][bytes].
+ *
+ * - Si X_count == 0, X_off es 0 y no debe ser usado.
+ * - Los offsets son siempre absolutos dentro del archivo .bin
+ */
+
+/*
+    TAMAÑOS:
+         entry_bin:     20 bytes
+         k_ele_bin:     16 bytes
+         r_ele_bin:     20 bytes
+         sense_bin:     56 bytes
+         kotoba_bin_header: 12 bytes
+         kotoba_idx_header: 16 bytes
+         entry_index:    4 bytes
+
+*/
 
 /* -------------------------
  * Entry (unidad principal)
@@ -129,10 +162,6 @@ typedef struct
 /* -------------------------
  * Kanji element
  * -------------------------
- *
- * keb:
- *  - string único
- *  - len almacenado en el struct
  */
 typedef struct
 {
@@ -140,10 +169,9 @@ typedef struct
     uint32_t ke_inf_off;
     uint32_t ke_pri_off;
 
-    uint8_t keb_len;
     uint8_t ke_inf_count;
     uint8_t ke_pri_count;
-    uint8_t reserved;
+    uint16_t reserved;
 } k_ele_bin;
 
 /* -------------------------
@@ -157,10 +185,10 @@ typedef struct
     uint32_t re_inf_off;
     uint32_t re_pri_off;
 
-    uint8_t reb_len;
     uint8_t re_restr_count;
     uint8_t re_inf_count;
     uint8_t re_pri_count;
+    uint8_t reserved;
 } r_ele_bin;
 
 /* -------------------------
@@ -192,12 +220,12 @@ typedef struct
     uint8_t lsource_count;
     uint8_t dial_count;
     uint8_t gloss_count;
-    uint8_t lang;        /* enum kotoba_lang */
+    uint8_t lang; /* enum kotoba_lang */
 } sense_bin;
 
 /*
 ===============================================================================
-EXTENSIÓN DE EJEMPLOS (DISEÑO)
+EXTENSIÓN DE EJEMPLOS (DISEÑO) - NO IMPLEMENTADO AÚN
 ===============================================================================
 
 - Los ejemplos NO forman parte del binario principal.
@@ -214,7 +242,8 @@ Ventajas:
 */
 
 /* ============================================================================
- *  LIMITES (parser / writer)
+ *  Structs estáticos, NO son parte del runtime ni deben usarse fuera
+    del parser/writer.
  * ============================================================================
  */
 
@@ -243,6 +272,8 @@ Ventajas:
 /* ============================================================================
  *  Longitudes máximas (validadas por el parser)
  * ============================================================================
+ *
+ * Todas deben caber en uint8_t (<= 255)
  */
 
 #define MAX_KEB_LEN 82
@@ -268,9 +299,6 @@ Ventajas:
 /* ============================================================================
  *  Structs de parsing (NO binarios, NO mmapeables)
  * ============================================================================
- *
- * Usados solo por el parser XML.
- * Jamás se escriben tal cual al binario.
  */
 
 typedef struct
@@ -286,7 +314,7 @@ typedef struct
 {
     char reb[MAX_REB_LEN];
     int re_nokanji;
-    char re_restr[MAX_RE_RESTR][MAX_REB_LEN];
+    char re_restr[MAX_RE_RESTR][MAX_RE_RESTR_LEN];
     int re_restr_count;
     char re_inf[MAX_RE_INF][MAX_RE_INF_LEN];
     int re_inf_count;

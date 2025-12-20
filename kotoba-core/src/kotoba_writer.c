@@ -1,199 +1,246 @@
-#include <stdio.h>
-#include <stdint.h>
+#include "kotoba_writer.h"
 #include <string.h>
-#include "kotoba_types.h"
 
-// Helper to write a length-prefixed string
-static uint32_t write_lp_string(FILE *f, const char *str)
+/* ============================================================================
+ * Helpers binarios
+ * ============================================================================
+ */
+
+static uint32_t file_tell(FILE *f)
 {
-    uint8_t len = (uint8_t)strlen(str);
-    fwrite(&len, 1, 1, f);
-    fwrite(str, 1, len, f);
-    return 1 + len;
+    return (uint32_t)ftell(f);
 }
 
-// Write k_ele_bin array and return offset
-static uint32_t write_k_ele_bin(FILE *f, k_ele *k_elements, int count, uint32_t *str_off, uint32_t *str_base)
+static void write_u8(FILE *f, uint8_t v)   { fwrite(&v, 1, 1, f); }
+static void write_u16(FILE *f, uint16_t v) { fwrite(&v, 2, 1, f); }
+static void write_u32(FILE *f, uint32_t v) { fwrite(&v, 4, 1, f); }
+
+/* string: [u8 len][bytes] */
+static uint32_t write_string(FILE *f, const char *s)
 {
-    uint32_t start = (uint32_t)ftell(f);
-    for (int i = 0; i < count; ++i)
-    {
-        k_ele_bin keb;
-        keb.keb_off = *str_off;
-        keb.keb_len = (uint32_t)strlen(k_elements[i].keb);
-        *str_off += write_lp_string(f, k_elements[i].keb);
-
-        keb.ke_inf_off = *str_off;
-        keb.ke_inf_count = k_elements[i].ke_inf_count;
-        for (int j = 0; j < k_elements[i].ke_inf_count; ++j)
-            *str_off += write_lp_string(f, k_elements[i].ke_inf[j]);
-
-        keb.ke_pri_off = *str_off;
-        keb.ke_pri_count = k_elements[i].ke_pri_count;
-        for (int j = 0; j < k_elements[i].ke_pri_count; ++j)
-            *str_off += write_lp_string(f, k_elements[i].ke_pri[j]);
-
-        fwrite(&keb, sizeof(keb), 1, f);
-    }
-    return start;
+    uint32_t off = file_tell(f);
+    uint8_t len = (uint8_t)strlen(s);
+    write_u8(f, len);
+    fwrite(s, 1, len, f);
+    return off;
 }
 
-// Write r_ele_bin array and return offset
-static uint32_t write_r_ele_bin(FILE *f, r_ele *r_elements, int count, uint32_t *str_off, uint32_t *str_base)
+/* array de uint32 offsets */
+static uint32_t write_offset_array(FILE *f,
+                                   const uint32_t *offs,
+                                   uint32_t count)
 {
-    uint32_t start = (uint32_t)ftell(f);
-    for (int i = 0; i < count; ++i)
-    {
-        r_ele_bin reb;
-        reb.reb_off = *str_off;
-        reb.reb_len = (uint32_t)strlen(r_elements[i].reb);
-        *str_off += write_lp_string(f, r_elements[i].reb);
-
-        reb.re_restr_off = *str_off;
-        reb.re_restr_count = r_elements[i].re_restr_count;
-        for (int j = 0; j < r_elements[i].re_restr_count; ++j)
-            *str_off += write_lp_string(f, r_elements[i].re_restr[j]);
-
-        reb.re_inf_off = *str_off;
-        reb.re_inf_count = r_elements[i].re_inf_count;
-        for (int j = 0; j < r_elements[i].re_inf_count; ++j)
-            *str_off += write_lp_string(f, r_elements[i].re_inf[j]);
-
-        reb.re_pri_off = *str_off;
-        reb.re_pri_count = r_elements[i].re_pri_count;
-        for (int j = 0; j < r_elements[i].re_pri_count; ++j)
-            *str_off += write_lp_string(f, r_elements[i].re_pri[j]);
-
-        fwrite(&reb, sizeof(reb), 1, f);
-    }
-    return start;
+    uint32_t off = file_tell(f);
+    for (uint32_t i = 0; i < count; ++i)
+        write_u32(f, offs[i]);
+    return off;
 }
 
-// Write sense_bin array and return offset
-static uint32_t write_sense_bin(FILE *f, sense *senses, int count, uint32_t *str_off, uint32_t *str_base)
+/* ============================================================================
+ * Apertura
+ * ============================================================================
+ */
+
+int kotoba_writer_open(kotoba_writer *w,
+                       const char *bin_path,
+                       const char *idx_path)
 {
-    uint32_t start = (uint32_t)ftell(f);
-    for (int i = 0; i < count; ++i)
-    {
-        sense_bin sb = {0};
-        sb.stagk_off = *str_off;
-        sb.stagk_count = senses[i].stagk_count;
-        for (int j = 0; j < senses[i].stagk_count; ++j)
-            *str_off += write_lp_string(f, senses[i].stagk[j]);
+    memset(w, 0, sizeof(*w));
 
-        sb.stagr_off = *str_off;
-        sb.stagr_count = senses[i].stagr_count;
-        for (int j = 0; j < senses[i].stagr_count; ++j)
-            *str_off += write_lp_string(f, senses[i].stagr[j]);
+    w->bin = fopen(bin_path, "wb");
+    if (!w->bin)
+        return 0;
 
-        sb.pos_off = *str_off;
-        sb.pos_count = senses[i].pos_count;
-        for (int j = 0; j < senses[i].pos_count; ++j)
-            *str_off += write_lp_string(f, senses[i].pos[j]);
+    w->idx = fopen(idx_path, "wb");
+    if (!w->idx)
+        return 0;
 
-        sb.xref_off = *str_off;
-        sb.xref_count = senses[i].xref_count;
-        for (int j = 0; j < senses[i].xref_count; ++j)
-            *str_off += write_lp_string(f, senses[i].xref[j]);
+    /* BIN header (parche luego) */
+    write_u32(w->bin, KOTOBA_MAGIC);
+    write_u32(w->bin, 0); /* entry_count */
+    write_u16(w->bin, KOTOBA_VERSION);
+    write_u16(w->bin, KOTOBA_FILE_BIN);
 
-        sb.ant_off = *str_off;
-        sb.ant_count = senses[i].ant_count;
-        for (int j = 0; j < senses[i].ant_count; ++j)
-            *str_off += write_lp_string(f, senses[i].ant[j]);
+    /* IDX header */
+    write_u32(w->idx, KOTOBA_MAGIC);
+    write_u32(w->idx, 0); /* entry_count */
+    write_u32(w->idx, sizeof(entry_index));
+    write_u16(w->idx, KOTOBA_IDX_VERSION);
+    write_u16(w->idx, KOTOBA_FILE_IDX);
 
-        sb.field_off = *str_off;
-        sb.field_count = senses[i].field_count;
-        for (int j = 0; j < senses[i].field_count; ++j)
-            *str_off += write_lp_string(f, senses[i].field[j]);
-
-        sb.misc_off = *str_off;
-        sb.misc_count = senses[i].misc_count;
-        for (int j = 0; j < senses[i].misc_count; ++j)
-            *str_off += write_lp_string(f, senses[i].misc[j]);
-
-        sb.s_inf_off = *str_off;
-        sb.s_inf_count = senses[i].s_inf_count;
-        for (int j = 0; j < senses[i].s_inf_count; ++j)
-            *str_off += write_lp_string(f, senses[i].s_inf[j]);
-
-        sb.lsource_off = *str_off;
-        sb.lsource_count = senses[i].lsource_count;
-        for (int j = 0; j < senses[i].lsource_count; ++j)
-            *str_off += write_lp_string(f, senses[i].lsource[j]);
-
-        sb.dial_off = *str_off;
-        sb.dial_count = senses[i].dial_count;
-        for (int j = 0; j < senses[i].dial_count; ++j)
-            *str_off += write_lp_string(f, senses[i].dial[j]);
-
-        sb.gloss_off = *str_off;
-        sb.gloss_count = senses[i].gloss_count;
-        for (int j = 0; j < senses[i].gloss_count; ++j)
-            *str_off += write_lp_string(f, senses[i].gloss[j]);
-
-        sb.lang = (uint8_t)senses[i].lang;
-
-        fwrite(&sb, sizeof(sb), 1, f);
-    }
-    return start;
+    return 1;
 }
 
-// Write a single entry_bin and its sub-objects, return offset
-static uint32_t write_entry_bin(FILE *f, entry *e, uint32_t *str_off, uint32_t *str_base)
-{
-    uint32_t entry_start = (uint32_t)ftell(f);
+/* ============================================================================
+ * Escritura de ENTRY
+ * ============================================================================
+ */
 
+int kotoba_writer_write_entry(kotoba_writer *w, const entry *e)
+{
+    /* registrar offset en IDX */
+    write_u32(w->idx, file_tell(w->bin));
+
+    uint32_t entry_pos = file_tell(w->bin);
+
+    /* reservar entry_bin */
     entry_bin eb = {0};
-    eb.ent_seq = e->ent_seq;
-    eb.priority = (int16_t)e->priority;
+    fwrite(&eb, sizeof(eb), 1, w->bin);
 
-    // Write k_ele_bin array
-    eb.k_elements_off = (uint32_t)ftell(f) - *str_base;
-    eb.k_elements_count = e->k_elements_count;
-    write_k_ele_bin(f, e->k_elements, e->k_elements_count, str_off, str_base);
+    uint32_t k_off = 0, r_off = 0, s_off = 0;
 
-    // Write r_ele_bin array
-    eb.r_elements_off = (uint32_t)ftell(f) - *str_base;
-    eb.r_elements_count = e->r_elements_count;
-    write_r_ele_bin(f, e->r_elements, e->r_elements_count, str_off, str_base);
-
-    // Write sense_bin array
-    eb.senses_off = (uint32_t)ftell(f) - *str_base;
-    eb.senses_count = e->senses_count;
-    write_sense_bin(f, e->senses, e->senses_count, str_off, str_base);
-
-    // Go back and write entry_bin at entry_start
-    fseek(f, entry_start, SEEK_SET);
-    fwrite(&eb, sizeof(eb), 1, f);
-    fseek(f, 0, SEEK_END);
-
-    return entry_start - *str_base;
-}
-
-// Write kotoba_bin_header and all entries
-int kotoba_write_bin(const char *filename, entry *entries, uint32_t entry_count)
-{
-    FILE *f = fopen(filename, "wb");
-    if (!f)
-        return -1;
-
-    kotoba_bin_header hdr = {0};
-    hdr.magic = KOTOBA_MAGIC;
-    hdr.version = KOTOBA_VERSION;
-    hdr.type = KOTOBA_FILE_BIN;
-    hdr.entry_count = entry_count;
-
-    fwrite(&hdr, sizeof(hdr), 1, f);
-
-    uint32_t str_base = (uint32_t)ftell(f);
-    uint32_t str_off = str_base;
-
-    // Write all entries
-    for (uint32_t i = 0; i < entry_count; ++i)
+    /* =======================================================================
+     * k_ele_bin[]
+     * ======================================================================= */
+    if (e->k_elements_count > 0)
     {
-        write_entry_bin(f, &entries[i], &str_off, &str_base);
+        k_off = file_tell(w->bin);
+
+        k_ele_bin zero = {0};
+        for (uint32_t i = 0; i < e->k_elements_count; ++i)
+            fwrite(&zero, sizeof(zero), 1, w->bin);
+
+        for (uint32_t i = 0; i < e->k_elements_count; ++i)
+        {
+            const k_ele *src = &e->k_elements[i];
+            k_ele_bin kb = {0};
+
+            kb.keb_off = write_string(w->bin, src->keb);
+
+            if (src->ke_inf_count > 0)
+            {
+                uint32_t offs[MAX_KE_INF];
+                for (uint32_t j = 0; j < src->ke_inf_count; ++j)
+                    offs[j] = write_string(w->bin, src->ke_inf[j]);
+
+                kb.ke_inf_off   = write_offset_array(w->bin, offs, src->ke_inf_count);
+                kb.ke_inf_count = (uint8_t)src->ke_inf_count;
+            }
+
+            if (src->ke_pri_count > 0)
+            {
+                uint32_t offs[MAX_KE_PRI];
+                for (uint32_t j = 0; j < src->ke_pri_count; ++j)
+                    offs[j] = write_string(w->bin, src->ke_pri[j]);
+
+                kb.ke_pri_off   = write_offset_array(w->bin, offs, src->ke_pri_count);
+                kb.ke_pri_count = (uint8_t)src->ke_pri_count;
+            }
+
+            long cur = ftell(w->bin);
+            fseek(w->bin, k_off + i * sizeof(k_ele_bin), SEEK_SET);
+            fwrite(&kb, sizeof(kb), 1, w->bin);
+            fseek(w->bin, cur, SEEK_SET);
+        }
     }
 
-    fclose(f);
-    return 0;
+    /* =======================================================================
+     * r_ele_bin[]
+     * ======================================================================= */
+    if (e->r_elements_count > 0)
+    {
+        r_off = file_tell(w->bin);
+
+        r_ele_bin zero = {0};
+        for (uint32_t i = 0; i < e->r_elements_count; ++i)
+            fwrite(&zero, sizeof(zero), 1, w->bin);
+
+        for (uint32_t i = 0; i < e->r_elements_count; ++i)
+        {
+            const r_ele *src = &e->r_elements[i];
+            r_ele_bin rb = {0};
+
+            rb.reb_off = write_string(w->bin, src->reb);
+
+            if (src->re_restr_count > 0)
+            {
+                uint32_t offs[MAX_RE_RESTR];
+                for (uint32_t j = 0; j < src->re_restr_count; ++j)
+                    offs[j] = write_string(w->bin, src->re_restr[j]);
+
+                rb.re_restr_off   = write_offset_array(w->bin, offs, src->re_restr_count);
+                rb.re_restr_count = (uint8_t)src->re_restr_count;
+            }
+
+            long cur = ftell(w->bin);
+            fseek(w->bin, r_off + i * sizeof(r_ele_bin), SEEK_SET);
+            fwrite(&rb, sizeof(rb), 1, w->bin);
+            fseek(w->bin, cur, SEEK_SET);
+        }
+    }
+
+    /* =======================================================================
+     * sense_bin[]
+     * ======================================================================= */
+    if (e->senses_count > 0)
+    {
+        s_off = file_tell(w->bin);
+
+        sense_bin zero = {0};
+        for (uint32_t i = 0; i < e->senses_count; ++i)
+            fwrite(&zero, sizeof(zero), 1, w->bin);
+
+        for (uint32_t i = 0; i < e->senses_count; ++i)
+        {
+            const sense *src = &e->senses[i];
+            sense_bin sb = {0};
+
+            if (src->gloss_count > 0)
+            {
+                uint32_t offs[MAX_GLOSS];
+                for (uint32_t j = 0; j < src->gloss_count; ++j)
+                    offs[j] = write_string(w->bin, src->gloss[j]);
+
+                sb.gloss_off   = write_offset_array(w->bin, offs, src->gloss_count);
+                sb.gloss_count = (uint8_t)src->gloss_count;
+            }
+
+            sb.lang = (uint8_t)src->lang;
+
+            long cur = ftell(w->bin);
+            fseek(w->bin, s_off + i * sizeof(sense_bin), SEEK_SET);
+            fwrite(&sb, sizeof(sb), 1, w->bin);
+            fseek(w->bin, cur, SEEK_SET);
+        }
+    }
+
+    /* =======================================================================
+     * parchear entry_bin
+     * ======================================================================= */
+    long end = ftell(w->bin);
+    fseek(w->bin, entry_pos, SEEK_SET);
+
+    eb.ent_seq = (uint32_t)e->ent_seq;
+    eb.k_elements_off   = k_off;
+    eb.r_elements_off   = r_off;
+    eb.senses_off       = s_off;
+    eb.k_elements_count = (uint8_t)e->k_elements_count;
+    eb.r_elements_count = (uint8_t)e->r_elements_count;
+    eb.senses_count     = (uint8_t)e->senses_count;
+    eb.priority         = e->priority;
+
+    fwrite(&eb, sizeof(eb), 1, w->bin);
+    fseek(w->bin, end, SEEK_SET);
+
+    w->entry_count++;
+    return 1;
+}
+
+/* ============================================================================
+ * Cierre
+ * ============================================================================
+ */
+
+void kotoba_writer_close(kotoba_writer *w)
+{
+    /* BIN header */
+    fseek(w->bin, 4, SEEK_SET);
+    write_u32(w->bin, w->entry_count);
+
+    /* IDX header */
+    fseek(w->idx, 4, SEEK_SET);
+    write_u32(w->idx, w->entry_count);
+
+    fclose(w->bin);
+    fclose(w->idx);
 }

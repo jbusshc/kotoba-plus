@@ -8,9 +8,9 @@
 #endif
 
 #include "../../kotoba-core/include/kotoba_types.h"
-//#include "../../kotoba-core/include/kotoba_writer.h"
-//#include "../../kotoba-core/include/kotoba_loader.h"
-//#include "../../kotoba-core/include/kotoba_dict.h"
+#include "../../kotoba-core/include/kotoba_writer.h"
+#include "../../kotoba-core/include/kotoba_loader.h"
+#include "../../kotoba-core/include/kotoba_viewer.h"
 
 const char *dict_path = "dict.kotoba";
 const char *idx_path = "dict.kotoba.idx";
@@ -21,8 +21,9 @@ char *routes[] = {
     "../assets/JMdict",
 };
 int routes_count = sizeof(routes) / sizeof(routes[0]);
-void parse_jmdict(xmlNodePtr root, FILE *output_filename, FILE *idx_filename, uint64_t *entry_count)
+void parse_jmdict(xmlNodePtr root, kotoba_writer *writer)
 {
+    writer->entry_count = 0;
     entry e;
     for (xmlNodePtr cur_node = root->children; cur_node; cur_node = cur_node->next)
     {
@@ -302,13 +303,12 @@ void parse_jmdict(xmlNodePtr root, FILE *output_filename, FILE *idx_filename, ui
                         xmlFree(content);
                     }
                 }
-                //write_entry_with_index(output_filename, idx_filename, &e);
-                (*entry_count)++;
+                // write_entry_with_index(output_filename, idx_filename, &e);
+                kotoba_writer_write_entry(writer, &e);
             }
         }
     }
 }
-
 
 // Parses a single <entry> XML node into an entry struct
 static void parse_entry_from_xml(xmlNodePtr entry_node, entry *e)
@@ -544,7 +544,123 @@ static void parse_entry_from_xml(xmlNodePtr entry_node, entry *e)
     }
 }
 
+void print_entry(const kotoba_dict *d, uint32_t i)
+{
+    const entry_bin *e = kotoba_entry(d, i);
+    if (!e)
+        return;
 
+    printf("Entry %u\n", i);
+    printf("  ent_seq = %d\n", e->ent_seq);
+    /* -------------------------
+        * Kanji
+        * ------------------------- */
+
+    printf("  k_elements_count = %u\n", e->k_elements_count);
+
+    for (uint32_t i = 0; i < e->k_elements_count; ++i)
+    {
+        const k_ele_bin *k = kotoba_k_ele(d, e, i);
+        kotoba_str keb = kotoba_keb(d, k);
+
+        printf("  kanji[%u]: %.*s\n",
+                i, keb.len, keb.ptr);
+    }
+
+    printf("  r_elements_count = %u\n", e->r_elements_count);
+    /* -------------------------
+        * Readings
+        * ------------------------- */
+    for (uint32_t i = 0; i < e->r_elements_count; ++i)
+    {
+        const r_ele_bin *r = kotoba_r_ele(d, e, i);
+        printf("  post kotoba_r_ele\n");
+        kotoba_str reb = kotoba_reb(d, r);
+
+        printf("  reading[%u]: %.*s\n",
+                i, reb.len, reb.ptr);
+    }
+
+    printf("  senses_count = %u\n", e->senses_count);
+    /* -------------------------
+        * Senses
+        * ------------------------- */
+    for (uint32_t si = 0; si < e->senses_count; ++si)
+    {
+        const sense_bin *s = kotoba_sense(d, e, si);
+
+        printf("  sense[%u] (lang=%u)\n", si, s->lang);
+
+        /* POS */
+        for (uint32_t i = 0; i < s->pos_count; ++i)
+        {
+            kotoba_str pos = kotoba_pos(d, s, i);
+            printf("    pos: %.*s\n", pos.len, pos.ptr);
+        }
+
+        /* Gloss */
+        for (uint32_t i = 0; i < s->gloss_count; ++i)
+        {
+            kotoba_str g = kotoba_gloss(d, s, i);
+            printf("    gloss: %.*s\n", g.len, g.ptr);
+        }
+
+        /* Misc (ejemplo) */
+        for (uint32_t i = 0; i < s->misc_count; ++i)
+        {
+            kotoba_str m = kotoba_misc(d, s, i);
+            printf("    misc: %.*s\n", m.len, m.ptr);
+        }
+
+        for (uint32_t i = 0; i < s->stagk_count; ++i)
+        {
+            kotoba_str stg = kotoba_stagk(d, s, i);
+            printf("    stagk: %.*s\n", stg.len, stg.ptr);
+        }
+
+        for (uint32_t i = 0; i < s->stagr_count; ++i)
+        {
+            kotoba_str stg = kotoba_stagr(d, s, i);
+            printf("    stagr: %.*s\n", stg.len, stg.ptr);
+        }
+
+        for (uint32_t i = 0; i < s->xref_count; ++i)
+        {
+            kotoba_str xref = kotoba_xref(d, s, i);
+            printf("    xref: %.*s\n", xref.len, xref.ptr);
+        }
+
+        for (uint32_t i = 0; i < s->ant_count; ++i)
+        {
+            kotoba_str ant = kotoba_ant(d, s, i);
+            printf("    ant: %.*s\n", ant.len, ant.ptr);
+        }
+
+        for (uint32_t i = 0; i < s->field_count; ++i)
+        {
+            kotoba_str field = kotoba_field(d, s, i);
+            printf("    field: %.*s\n", field.len, field.ptr);
+        }
+
+        for (uint32_t i = 0; i < s->s_inf_count; ++i)
+        {
+            kotoba_str s_inf = kotoba_s_inf(d, s, i);
+            printf("    s_inf: %.*s\n", s_inf.len, s_inf.ptr);
+        }
+
+        for (uint32_t i = 0; i < s->lsource_count; ++i)
+        {
+            kotoba_str lsource = kotoba_lsource(d, s, i);
+            printf("    lsource: %.*s\n", lsource.len, lsource.ptr);
+        }
+
+        for (uint32_t i = 0; i < s->dial_count; ++i)
+        {
+            kotoba_str dial = kotoba_dial(d, s, i);
+            printf("    dial: %.*s\n", dial.len, dial.ptr);
+        }
+    }
+}
 
 
 
@@ -554,23 +670,61 @@ int main()
     system("chcp 65001"); // Change code page to UTF-8 for Windows
 #endif
 
+    /*
+    // xml parsing stuff
+    xmlDocPtr doc = xmlReadFile(routes[0], NULL, XML_PARSE_RECOVER | XML_PARSE_NOERROR | XML_PARSE_NOWARNING);
+    if (doc == NULL)
+    {
+        fprintf(stderr, "Failed to parse XML file: %s\n", routes[0]);
+        return -1;
+    }
+    xmlNodePtr root = xmlDocGetRootElement(doc);
     // writing stuff
-     //create_kotoba_bin();
+    kotoba_writer writer;
+    kotoba_writer_open(&writer, "dict.kotoba", "dict.kotoba.idx");
+    parse_jmdict(root, &writer);
+    kotoba_writer_close(&writer);
+    printf("Total entries written: %u\n", writer.entry_count);
 
-    // validating stuff
 
-    // validate();
+    */
 
+    ///*
     // loading stuff
-    
-    printf("sizeof(kotoba_bin_header) = %zu bytes\n", sizeof(kotoba_bin_header));
-    printf("sizeof(kotoba_idx_header) = %zu bytes\n", sizeof(kotoba_idx_header));
-    printf("sizeof(entry_bin) = %zu bytes\n", sizeof(entry_bin));
-    printf("sizeof(k_ele_bin) = %zu bytes\n", sizeof(k_ele_bin));
-    printf("sizeof(r_ele_bin) = %zu bytes\n", sizeof(r_ele_bin));
-    printf("sizeof(sense_bin) = %zu bytes\n", sizeof(sense_bin));
+    kotoba_dict dict;
+    if (!kotoba_dict_open(&dict, "dict.kotoba", "dict.kotoba.idx"))
+    {
+        fprintf(stderr, "Failed to open dictionary files.\n");
+    }
+    printf("Total entries in dictionary: %u\n", dict.entry_count);
 
 
+    const entry_bin *ebin;
+    const int test_id = 99;
+    ebin = malloc(sizeof(entry_bin));
+    if ((ebin = kotoba_dict_get_entry(&dict, test_id)) != NULL)
+    {
+        printf("Entry 99: ent_seq=%d, k_elements_count=%u, r_elements_count=%u, senses_count=%u\n",
+               ebin->ent_seq,
+               ebin->k_elements_count,
+               ebin->r_elements_count,
+               ebin->senses_count);
+        print_entry(&dict, test_id);
+    }
+    else
+    {
+        printf("Failed to get entry 100.\n");
+    }
 
+
+    kotoba_dict_close(&dict);
+
+    //*/
+
+
+    /*
+    xmlFreeDoc(doc);
+    xmlCleanupParser();
+    */
     return 0;
 }
