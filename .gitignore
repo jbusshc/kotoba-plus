@@ -21,3 +21,4 @@ build/
 *.bin
 *.kotoba
 *.kotoba.idx
+xml-parser\assets
