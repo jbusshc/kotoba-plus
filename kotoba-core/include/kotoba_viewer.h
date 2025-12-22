@@ -48,15 +48,7 @@ KOTOBA_API kotoba_str kotoba_s_inf(const kotoba_dict *d, const sense_bin *s, uin
 KOTOBA_API kotoba_str kotoba_lsource(const kotoba_dict *d, const sense_bin *s, uint32_t i);
 KOTOBA_API kotoba_str kotoba_dial(const kotoba_dict *d, const sense_bin *s, uint32_t i);
 
-void print_entry(const kotoba_dict *d, uint32_t i);
 
-static inline kotoba_str
-kotoba_view_string(const uint8_t *base, uint32_t off)
-{
-    kotoba_str s;
-    s.len = base[off];
-    s.ptr = (const char *)(base + off + 1);
-    return s;
-}
+
 
 #endif

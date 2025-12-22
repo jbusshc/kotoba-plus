@@ -1,5 +1,13 @@
 #include "kotoba_viewer.h"
-#include <stdio.h>
+
+static inline kotoba_str
+kotoba_view_string(const uint8_t *base, uint32_t off)
+{
+    kotoba_str s;
+    s.len = base[off];
+    s.ptr = (const char *)(base + off + 1);
+    return s;
+}
 
 /* ============================================================================
  * Entry
@@ -7,7 +15,6 @@
  */
 const entry_bin *kotoba_entry(const kotoba_dict *d, uint32_t i)
 {
-    printf("kotoba_entry: requesting entry %u of %u\n", i, d->entry_count);
     if (i >= d->entry_count)
         return NULL;
 
@@ -43,7 +50,6 @@ kotoba_r_ele(const kotoba_dict *d,
              const entry_bin *e,
              uint32_t i)
 {
-    printf("kotoba_r_ele: requesting r_ele %u of %u\n", i, e->r_elements_count);
     if (i >= e->r_elements_count)
         return NULL;
 
