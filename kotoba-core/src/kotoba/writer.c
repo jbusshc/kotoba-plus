@@ -1,4 +1,4 @@
-#include "kotoba_writer.h"
+#include "kotoba/writer.h"
 #include <string.h>
 
 /* ============================================================================

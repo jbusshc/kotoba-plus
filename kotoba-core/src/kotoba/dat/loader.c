@@ -1,4 +1,4 @@
-#include "kotoba_dat.h"
+#include "kotoba/dat/loader.h"
 #include <string.h>
 
 #define DAT_ROOT 1

@@ -1,8 +1,8 @@
 #ifndef KOTOBA_DAT_COLLECT_H
 #define KOTOBA_DAT_COLLECT_H
 
-#include "kotoba_dat.h"
-#include "api.h"
+#include "dat.h"
+#include "../../kotoba.h"
 
 #define KOTOBA_COLLECT_MAX 1024
 

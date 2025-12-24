@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 #include <stdio.h>
-#include "api.h"
+#include "../../kotoba.h"
 
 typedef struct
 {

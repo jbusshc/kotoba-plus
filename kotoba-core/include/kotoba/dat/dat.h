@@ -2,8 +2,8 @@
 #define KOTOBA_DAT_H
 
 #include <stdint.h>
-#include "api.h"
-#include "kotoba_loader.h"
+#include "../../kotoba.h"
+#include "../loader.h"
 
 /* ============================================================================
  * DAT binary header

@@ -1,8 +1,8 @@
 #ifndef KOTOBA_DAT_LOADER_H
 #define KOTOBA_DAT_LOADER_H
 
-#include "kotoba_dat.h"
-#include "api.h"
+#include "dat.h"
+#include "../../kotoba.h"
 #include <string.h>
 
 #define DAT_ROOT 1

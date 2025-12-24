@@ -1,4 +1,4 @@
-#include "kotoba_kana.h"
+#include "kotoba/kana.h"
 
 #include <string.h>
 #include <ctype.h>

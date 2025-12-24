@@ -7,7 +7,9 @@
 #include <stdint.h>
 #endif
 
-#include "api.h"
+
+
+#include "../kotoba.h"
 
 /* ============================================================================
  *  Idiomas (JMdict gloss languages)

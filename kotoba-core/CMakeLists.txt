@@ -8,7 +8,7 @@ set(CMAKE_C_STANDARD 99)
 include_directories(include)
 
 # Archivos fuente
-file(GLOB SRC_FILES src/*.c)
+file(GLOB_RECURSE SRC_FILES src/*.c)
 
 # Crear la librería dinámica
 add_library(libkotobaplus SHARED ${SRC_FILES})

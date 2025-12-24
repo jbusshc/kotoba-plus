@@ -1,4 +1,4 @@
-#include "kotoba_loader.h"
+#include "kotoba/loader.h"
 #include <string.h>
 
 /* ============================================================================

@@ -1,4 +1,4 @@
-#include "kotoba_dat_builder.h"
+#include "kotoba/dat/builder.h"
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>

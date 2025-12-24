@@ -2,11 +2,9 @@
 #define KOTOBA_LOADER_H
 
 #include <stdint.h>
-#include "kotoba_types.h"
-#include "api.h"
+#include "types.h"
+#include "../kotoba.h"
 
-#include "kotoba_types.h"
-#include "api.h"
 
 #include <string.h>
 #include <assert.h>

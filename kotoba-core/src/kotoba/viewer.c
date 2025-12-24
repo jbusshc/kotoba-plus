@@ -1,4 +1,4 @@
-#include "kotoba_viewer.h"
+#include "kotoba/viewer.h"
 
 static inline kotoba_str
 kotoba_view_string(const uint8_t *base, uint32_t off)

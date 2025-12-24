@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
-#include "api.h"
+#include "../kotoba.h"
 
 #define MAX_KANA_OUTPUT 512
 #define MAX_KANA_CODES  128

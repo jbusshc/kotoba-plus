@@ -7,10 +7,10 @@
 #include <windows.h>
 #endif
 
-#include "../../kotoba-core/include/kotoba_types.h"
-#include "../../kotoba-core/include/kotoba_writer.h"
-#include "../../kotoba-core/include/kotoba_loader.h"
-#include "../../kotoba-core/include/kotoba_viewer.h"
+#include "../../kotoba-core/include/kotoba/types.h"
+#include "../../kotoba-core/include/kotoba/writer.h"
+#include "../../kotoba-core/include/kotoba/loader.h"
+#include "../../kotoba-core/include/kotoba/viewer.h"
 
 const char *dict_path = "dict.kotoba";
 const char *idx_path = "dict.kotoba.idx";
@@ -433,12 +433,12 @@ void print_entry(const kotoba_dict *d, uint32_t i)
 /* ================= main ================= */
 
 /* DAT */
-#include "../../kotoba-core/include/kotoba_dat_builder.h"
-#include "../../kotoba-core/include/kotoba_dat_writer.h"
-#include "../../kotoba-core/include/kotoba_dat.h"
-#include "../../kotoba-core/include/kotoba_dat_collect.h"
-#include "../../kotoba-core/include/kotoba_kana.h"
-
+#include "../../kotoba-core/include/kotoba/dat/loader.h"
+#include "../../kotoba-core/include/kotoba/dat/builder.h"
+#include "../../kotoba-core/include/kotoba/dat/writer.h"
+#include "../../kotoba-core/include/kotoba/dat/dat.h"
+#include "../../kotoba-core/include/kotoba/dat/collect.h"
+#include "../../kotoba-core/include/kotoba/kana.h"
 /* file loader (mmap) */
 
 /* ------------------------------------------------------------

@@ -1,4 +1,5 @@
-#pragma once
+#ifndef KOTOBA_H
+#define KOTOBA_H
 
 
 #if defined(_WIN32)
@@ -10,3 +11,5 @@
 #else
   #define KOTOBA_API
 #endif
+
+#endif // KOTOBA_H

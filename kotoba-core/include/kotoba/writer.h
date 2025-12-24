@@ -2,8 +2,8 @@
 #define KOTOBA_WRITER_H
 
 
-#include "kotoba_types.h"
-#include "api.h"
+#include "types.h"
+#include "../kotoba.h"
 #include <stdio.h>
 #include <string.h>
 #include <assert.h>

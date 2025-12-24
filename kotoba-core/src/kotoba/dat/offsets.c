@@ -1,4 +1,4 @@
-#include "kotoba_kana_offsets.h"
+#include "kotoba/dat/offsets.h"
 #include <string.h>
 
 int kana_offsets_load(kana_offsets *o,

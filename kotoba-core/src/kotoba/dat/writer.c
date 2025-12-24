@@ -1,5 +1,5 @@
-#include "kotoba_dat_writer.h"
-#include "kotoba_dat.h"
+#include "kotoba/dat/writer.h"
+#include "kotoba/dat/dat.h"
 #include <string.h>
 
 static void write_u32(FILE *f, uint32_t v)

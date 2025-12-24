@@ -1,4 +1,4 @@
-#include "kotoba_dat_collect.h"
+#include "kotoba/dat/collect.h"
 #include <string.h>
 
 typedef struct

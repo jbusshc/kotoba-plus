@@ -3,7 +3,7 @@
 
 #include <stdio.h>
 #include <stdint.h>
-#include "api.h"
+#include "../../kotoba.h"
 
 /* ============================================================================
  * DAT writer

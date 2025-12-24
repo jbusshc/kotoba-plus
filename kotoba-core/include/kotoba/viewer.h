@@ -1,9 +1,9 @@
 #ifndef KOTOBA_VIEWER_H
 #define KOTOBA_VIEWER_H
 
-#include "kotoba_types.h"
-#include "kotoba_loader.h"
-#include "api.h"
+#include "types.h"
+#include "loader.h"
+#include "../kotoba.h"
 
 /* -------------------------
  * String binario
