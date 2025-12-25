@@ -319,8 +319,8 @@ void print_entry(const kotoba_dict *d, uint32_t i)
     printf("Entry %u\n", i);
     printf("  ent_seq = %d\n", e->ent_seq);
     /* -------------------------
-        * Kanji
-        * ------------------------- */
+     * Kanji
+     * ------------------------- */
 
     printf("  k_elements_count = %u\n", e->k_elements_count);
 
@@ -330,13 +330,13 @@ void print_entry(const kotoba_dict *d, uint32_t i)
         kotoba_str keb = kotoba_keb(d, k);
 
         printf("  kanji[%u]: %.*s\n",
-                i, keb.len, keb.ptr);
+               i, keb.len, keb.ptr);
     }
 
     printf("  r_elements_count = %u\n", e->r_elements_count);
     /* -------------------------
-        * Readings
-        * ------------------------- */
+     * Readings
+     * ------------------------- */
     for (uint32_t i = 0; i < e->r_elements_count; ++i)
     {
         const r_ele_bin *r = kotoba_r_ele(d, e, i);
@@ -344,13 +344,13 @@ void print_entry(const kotoba_dict *d, uint32_t i)
         kotoba_str reb = kotoba_reb(d, r);
 
         printf("  reading[%u]: %.*s\n",
-                i, reb.len, reb.ptr);
+               i, reb.len, reb.ptr);
     }
 
     printf("  senses_count = %u\n", e->senses_count);
     /* -------------------------
-        * Senses
-        * ------------------------- */
+     * Senses
+     * ------------------------- */
     for (uint32_t si = 0; si < e->senses_count; ++si)
     {
         const sense_bin *s = kotoba_sense(d, e, si);
@@ -428,8 +428,6 @@ void print_entry(const kotoba_dict *d, uint32_t i)
     }
 }
 
-
-
 /* ================= main ================= */
 
 /* DAT */
@@ -460,13 +458,18 @@ static void print_array(const char *name,
 
 int main(void)
 {
+#if _WIN32
+    // Set Windows console to UTF-8
+    SetConsoleOutputCP(CP_UTF8);
+    SetConsoleCP(CP_UTF8);
+#endif
     dat_builder b;
     dat_builder_init(&b);
 
     /* insertar palabras */
-    int ka[]     = { 10 };
-    int kaki[]   = { 10, 20 };
-    int sakura[] = { 30, 40, 50 };
+    int ka[] = {10};
+    int kaki[] = {10, 20};
+    int sakura[] = {30, 40, 50};
 
     dat_builder_insert(&b, ka, 1, 0);
     dat_builder_insert(&b, kaki, 2, 4);
@@ -498,8 +501,47 @@ int main(void)
     kotoba_dat_collect(&d, ka, 1, &res);
 
     printf("prefix 'ka':\n");
-    for (int i = 0; i < res.count; ++i) {
+    for (int i = 0; i < res.count; ++i)
+    {
         printf("  offset = %d\n", res.values[i]);
+    }
+
+    char *input = " コンピュテーション";
+    char output[256];
+    mixed_to_hiragana(input, output, sizeof(output));
+    printf("Input: %s\n", input);
+    printf("Output: %s\n", output);
+    int codes[128];
+    int n_codes = kana_utf8_to_codes(output, codes);
+    printf("Codes:");
+    for (int i = 0; i < n_codes; ++i)
+    {
+        printf(" %d", codes[i]);
+    }
+
+
+    // Test handle_input function
+    printf("\nhandle_input tests:\n");
+    const char *test_inputs[] = {
+        "ひらがな",
+        "カタカナ",
+        "カタひら",
+        "漢字abc",
+        "",
+        NULL};
+    for (int i = 0; test_inputs[i] != NULL; ++i)
+    {
+        char buf[256];
+        int ret = handle_input(test_inputs[i], buf, sizeof(buf), codes, &n_codes);
+        if (ret == KANA_TYPE_NON_KANA)
+            printf("input: '%s' | ret: %d | output: '%s'\n", test_inputs[i], ret, buf);
+        else if (ret == KANA_TYPE_KANA)
+            printf("input: '%s' | ret: %d | codes:", test_inputs[i], ret);
+            for (int j = 0; j < n_codes; ++j)
+            {
+                printf(" %d", codes[j]);
+            }
+            printf("\n");
 
     }
     return 0;

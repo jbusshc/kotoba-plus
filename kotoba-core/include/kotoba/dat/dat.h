@@ -41,18 +41,6 @@ typedef struct
  * ============================================================================
  */
 
-/* loader */
-KOTOBA_API int  kotoba_dat_load(kotoba_dat *d, const kotoba_file *file);
-KOTOBA_API void kotoba_dat_unload(kotoba_dat *d);
 
-/* search */
-KOTOBA_API int kotoba_dat_search(const kotoba_dat *d,
-                                 const int *codes,
-                                 int len);
-
-/* prefix node */
-KOTOBA_API int kotoba_dat_prefix_node(const kotoba_dat *d,
-                                      const int *codes,
-                                      int len);
 
 #endif /* KOTOBA_DAT_H */

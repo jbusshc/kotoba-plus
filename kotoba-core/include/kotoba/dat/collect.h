@@ -3,6 +3,7 @@
 
 #include "dat.h"
 #include "../../kotoba.h"
+#include "loader.h"
 
 #define KOTOBA_COLLECT_MAX 1024
 
