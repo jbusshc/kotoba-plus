@@ -257,11 +257,50 @@ static void mixed_to_hiragana(const char *input, char *output, size_t out_size)
 
 static int kana_code(uint32_t cp)
 {
-    if (cp >= 0x3041 && cp <= 0x3093)
+    // Hiragana
+    if (cp >= 0x3041 && cp <= 0x3096)
         return (int)(cp - 0x3040);
+
+    switch (cp)
+    {
+    case 0x30FC:
+        return 87; // ー (Cho-onpu)
+    case 0x309D:
+        return 88; // ゝ (Iteración Hiragana)
+    case 0x309E:
+        return 89; // ゞ (Iteración Hiragana con dakuten)
+    case 0x30FD:
+        return 88; // ヽ (Iteración Katakana -> mapea a 88)
+    case 0x30FE:
+        return 89; // ヾ (Iteración Katakana -> mapea a 89)
+    case 0x309F:
+        return 90; // ゟ (Yori)
+    case 0x30FF:
+        return 91; // ヿ (Koto - Katakana, pero útil)
+    case 0x3005:
+        return 92; // 々 (Iteración Kanji)
+    case 0x30FB:
+        return 93; // ・ (Punto medio)
+    case 0x3000:
+        return 94; // Espacio japonés
+    case 0x301C:
+        return 87; // 〜 (Wave dash, treat as prolongation mark)
+    case 0xFF5E:
+        return 87; // ～ (Fullwidth tilde, treat as prolongation mark)
+    }
+    // Halfwidth Katakana block (U+FF66–U+FF9D)
+    if (cp >= 0xFF66 && cp <= 0xFF9D)
+        return kana_code(kana_to_hiragana(0x30A1 + (cp - 0xFF67)));
+
+    // 4. Katakana fonético extendido (Ainu)
+    // Si realmente aparecen, los mapeamos del 95 en adelante
+    if (cp >= 0x31F0 && cp <= 0x31FF)
+        return (int)(cp - 0x31F0 + 95);
+
     return -1;
 }
 
+// Convert UTF-8 kana string to array of DAT codes. Array out_codes must have space for at least MAX_KANA_CODES integers.
 static int kana_utf8_to_codes(const char *utf8, int *out_codes)
 {
     int n = 0;
@@ -279,6 +318,29 @@ static int kana_utf8_to_codes(const char *utf8, int *out_codes)
     return n;
 }
 
+static int kana_utf8_to_codes_n(const char *utf8, const uint8_t len, int *out_codes)
+{
+    int n = 0;
+    uint32_t cp;
+    const char *end = utf8 + len;
+
+    while (utf8 < end && n < MAX_KANA_CODES)
+    {
+        utf8 = utf8_decode(utf8, &cp);
+        cp = normalize_kana(cp);
+
+        int code = kana_code(cp);
+        if (code > 0)
+            out_codes[n++] = code;
+    }
+    return n;
+}
+
+static inline int kana_kotoba_str_to_codes(const kotoba_str str, int *out_codes)
+{
+    return kana_utf8_to_codes_n(str.ptr, str.len, out_codes);
+}
+
 enum kana_input_type
 {
     KANA_TYPE_KANA = 0,
@@ -286,7 +348,7 @@ enum kana_input_type
     KANA_TYPE_ERROR = 2
 };
 
-static int handle_input(const char *input, char *string_output, size_t out_size, int *codes_output, int *n_codes)
+static int handle_search_input(const char *input, char *string_output, size_t out_size, int *codes_output, int *n_codes)
 {
     if (!input || !string_output || !codes_output || !n_codes || input[0] == '\0')
         return KANA_TYPE_ERROR;
@@ -323,5 +385,6 @@ static int handle_input(const char *input, char *string_output, size_t out_size,
         return KANA_TYPE_NON_KANA;
     }
 }
+
 
 #endif /* KOTOBA_KANA_H */

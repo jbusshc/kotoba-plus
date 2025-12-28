@@ -11,6 +11,8 @@
 #include "../../kotoba-core/include/kotoba/writer.h"
 #include "../../kotoba-core/include/kotoba/loader.h"
 #include "../../kotoba-core/include/kotoba/viewer.h"
+#include "../../kotoba-core/include/kotoba/kana.h"
+
 
 const char *dict_path = "dict.kotoba";
 const char *idx_path = "dict.kotoba.idx";
@@ -431,13 +433,8 @@ void print_entry(const kotoba_dict *d, uint32_t i)
 /* ================= main ================= */
 
 /* DAT */
-#include "../../kotoba-core/include/kotoba/dat/loader.h"
-#include "../../kotoba-core/include/kotoba/dat/builder.h"
-#include "../../kotoba-core/include/kotoba/dat/writer.h"
+
 #include "../../kotoba-core/include/kotoba/dat/dat.h"
-#include "../../kotoba-core/include/kotoba/dat/collect.h"
-#include "../../kotoba-core/include/kotoba/kana.h"
-/* file loader (mmap) */
 
 /* ------------------------------------------------------------
  * helpers
@@ -452,9 +449,35 @@ static void print_array(const char *name,
         printf("  [%3u] %d\n", i, a[i]);
 }
 
+typedef struct
+{
+    int codes[MAX_KANA_CODES];
+    int n_codes;
+    uint32_t entry_index;
+} reb_entry;
+
+/* ------------------------------------------------------------------ */
+/* compare                                                             */
+/* ------------------------------------------------------------------ */
+
+static int compare_reb_entry(const void *a, const void *b)
+{
+    const reb_entry *ra = (const reb_entry *)a;
+    const reb_entry *rb = (const reb_entry *)b;
+
+    int min_len = ra->n_codes < rb->n_codes ? ra->n_codes : rb->n_codes;
+    for (int i = 0; i < min_len; ++i)
+    {
+        if (ra->codes[i] != rb->codes[i])
+            return ra->codes[i] - rb->codes[i];
+    }
+    return ra->n_codes - rb->n_codes;
+}
+
 /* ------------------------------------------------------------
  * main
  * ------------------------------------------------------------ */
+
 
 int main(void)
 {
@@ -463,21 +486,111 @@ int main(void)
     SetConsoleOutputCP(CP_UTF8);
     SetConsoleCP(CP_UTF8);
 #endif
+
+    /*
+    kotoba_dict d;
+    if (!kotoba_dict_open(&d, dict_path, idx_path))
+    {
+        printf("Error al cargar el diccionario.\n");
+        return 1;
+    }
+
+
+    size_t max_reb = d.entry_count * MAX_R_ELEMENTS;
+    reb_entry *reb_list = malloc(sizeof(reb_entry) * max_reb);
+    if (!reb_list)
+    {
+        printf("No se pudo asignar memoria para reb_list.\n");
+        return 1;
+    }
+
+    size_t reb_count = 0;
+
+    for (uint32_t i = 0; i < d.entry_count; ++i)
+    {
+        const entry_bin *e = kotoba_dict_get_entry(&d, i);
+
+        // Para este entry, vamos a guardar los readings únicos
+        // Usamos un array temporal para comparar
+        int entry_codes[MAX_R_ELEMENTS][MAX_KANA_CODES];
+        int entry_n_codes[MAX_R_ELEMENTS];
+        int entry_unique_count = 0;
+
+        for (uint32_t j = 0; j < e->r_elements_count; ++j)
+        {
+            const r_ele_bin *r = kotoba_r_ele(&d, e, j);
+            kotoba_str reb = kotoba_reb(&d, r);
+
+            int n_codes = kana_kotoba_str_to_codes(reb, entry_codes[entry_unique_count]);
+            if (n_codes <= 0)
+                continue;
+
+            // Chequear si este reading ya está en entry_codes
+            bool is_duplicate = false;
+            for (int k = 0; k < entry_unique_count; ++k)
+            {
+                if (entry_n_codes[k] == n_codes &&
+                    memcmp(entry_codes[k], entry_codes[entry_unique_count], n_codes * sizeof(int)) == 0)
+                {
+                    is_duplicate = true;
+                    break;
+                }
+            }
+            if (is_duplicate)
+                continue;
+
+            // Es único, lo agregamos a la lista global
+            memcpy(reb_list[reb_count].codes, entry_codes[entry_unique_count], n_codes * sizeof(int));
+            reb_list[reb_count].n_codes = n_codes;
+            reb_list[reb_count].entry_index = i;
+            reb_count++;
+
+            // También lo agregamos a la lista temporal para este entry
+            entry_n_codes[entry_unique_count] = n_codes;
+            entry_unique_count++;
+        }
+    }
+
+    printf("Collected %zu readings\n", reb_count);
+
+    qsort(reb_list, reb_count, sizeof(reb_entry), compare_reb_entry);
+
+
     dat_builder b;
     dat_builder_init(&b);
 
-    /* insertar palabras */
-    int ka[] = {10};
-    int kaki[] = {10, 20};
-    int sakura[] = {30, 40, 50};
+    printf("Building DAT...\n");
 
-    dat_builder_insert(&b, ka, 1, 0);
-    dat_builder_insert(&b, kaki, 2, 4);
-    dat_builder_insert(&b, sakura, 3, 8);
+    for (size_t i = 0; i < reb_count; ++i)
+    {
+        if ((i % 10000) == 0)
+            printf("  inserted %zu / %zu\n", i, reb_count);
 
+        dat_builder_insert(&b,
+                           reb_list[i].codes,
+                           reb_list[i].n_codes,
+                           reb_list[i].entry_index);
+    }
+
+
+    printf("Writing kana offsets...\n");
+
+    FILE *fo = fopen("kana_offsets.dat", "wb");
+    if (!fo)
+    {
+        printf("Cannot open kana_offsets.dat\n");
+        return 1;
+    }
+
+    dat_builder_finalize_offsets(&b, fo);
+    fclose(fo);
+
+
+    printf("Compacting DAT...\n");
     dat_builder_compact(&b);
 
-    /* escribir DAT */
+    printf("Writing DAT...\n");
+
     kotoba_dat_writer w;
     kotoba_dat_writer_open(&w, "kana_values.dat");
     kotoba_dat_writer_write(&w,
@@ -487,62 +600,37 @@ int main(void)
                             b.size);
     kotoba_dat_writer_close(&w);
 
+
     dat_builder_destroy(&b);
+    free(reb_list);
+    kotoba_dict_close(&d);
 
-    /* cargar DAT */
-    kotoba_file f;
-    kotoba_file_open(&f, "kana_values.dat");
+    printf("Done.\n");
 
-    kotoba_dat d;
-    kotoba_dat_load(&d, &f);
-
-    /* buscar prefijo */
-    kotoba_collect_result res;
-    kotoba_dat_collect(&d, ka, 1, &res);
-
-    printf("prefix 'ka':\n");
-    for (int i = 0; i < res.count; ++i)
-    {
-        printf("  offset = %d\n", res.values[i]);
-    }
-
-    char *input = " コンピュテーション";
-    char output[256];
-    mixed_to_hiragana(input, output, sizeof(output));
-    printf("Input: %s\n", input);
-    printf("Output: %s\n", output);
-    int codes[128];
-    int n_codes = kana_utf8_to_codes(output, codes);
-    printf("Codes:");
-    for (int i = 0; i < n_codes; ++i)
-    {
-        printf(" %d", codes[i]);
-    }
+    */
 
 
-    // Test handle_input function
-    printf("\nhandle_input tests:\n");
-    const char *test_inputs[] = {
-        "ひらがな",
-        "カタカナ",
-        "カタひら",
-        "漢字abc",
-        "",
-        NULL};
-    for (int i = 0; test_inputs[i] != NULL; ++i)
-    {
-        char buf[256];
-        int ret = handle_input(test_inputs[i], buf, sizeof(buf), codes, &n_codes);
-        if (ret == KANA_TYPE_NON_KANA)
-            printf("input: '%s' | ret: %d | output: '%s'\n", test_inputs[i], ret, buf);
-        else if (ret == KANA_TYPE_KANA)
-            printf("input: '%s' | ret: %d | codes:", test_inputs[i], ret);
-            for (int j = 0; j < n_codes; ++j)
-            {
-                printf(" %d", codes[j]);
-            }
-            printf("\n");
+    trie_t t;
+    trie_init(&t);
 
-    }
+    uint8_t a[] = {1,2,3};
+    uint8_t b[] = {1,2};
+    uint8_t c[] = {0xFF,0xAA};
+
+    trie_insert(&t, a, sizeof(a));
+    trie_insert(&t, c, sizeof(c));
+
+    dat_t d;
+    dat_build_from_trie(&d, &t);
+
+    printf("a -> %d\n", dat_search(&d, a, sizeof(a)));
+    printf("b -> %d\n", dat_search(&d, b, sizeof(b)));
+    printf("c -> %d\n", dat_search(&d, c, sizeof(c)));
+
+    trie_free(&t);
+    dat_free(&d);
+
+
+
     return 0;
 }
