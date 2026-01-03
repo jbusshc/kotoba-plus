@@ -7,12 +7,13 @@
 #include <windows.h>
 #endif
 
-#include "../../kotoba-core/include/kotoba/types.h"
-#include "../../kotoba-core/include/kotoba/writer.h"
-#include "../../kotoba-core/include/kotoba/loader.h"
-#include "../../kotoba-core/include/kotoba/viewer.h"
-#include "../../kotoba-core/include/kotoba/kana.h"
+#include "../../kotoba-core/include/types.h"
+#include "../../kotoba-core/include/writer.h"
+#include "../../kotoba-core/include/loader.h"
+#include "../../kotoba-core/include/viewer.h"
+#include "../../kotoba-core/include/kana.h"
 
+#include <sqlite3.h>
 
 const char *dict_path = "dict.kotoba";
 const char *idx_path = "dict.kotoba.idx";
@@ -431,206 +432,321 @@ void print_entry(const kotoba_dict *d, uint32_t i)
 }
 
 /* ================= main ================= */
+// index_cli.c
+#define _POSIX_C_SOURCE 200809L
+#include "index.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdint.h>
 
-/* DAT */
+#ifdef _WIN32
+#include <windows.h>
+#include <io.h>
+#include <fcntl.h>
 
-#include "../../kotoba-core/include/kotoba/dat/dat.h"
-
-/* ------------------------------------------------------------
- * helpers
- * ------------------------------------------------------------ */
-
-static void print_array(const char *name,
-                        const int32_t *a,
-                        uint32_t n)
+/* strsep implementation for Windows */
+char *strsep(char **stringp, const char *delim)
 {
-    printf("%s:\n", name);
-    for (uint32_t i = 0; i < n; ++i)
-        printf("  [%3u] %d\n", i, a[i]);
-}
-
-typedef struct
-{
-    int codes[MAX_KANA_CODES];
-    int n_codes;
-    uint32_t entry_index;
-} reb_entry;
-
-/* ------------------------------------------------------------------ */
-/* compare                                                             */
-/* ------------------------------------------------------------------ */
-
-static int compare_reb_entry(const void *a, const void *b)
-{
-    const reb_entry *ra = (const reb_entry *)a;
-    const reb_entry *rb = (const reb_entry *)b;
-
-    int min_len = ra->n_codes < rb->n_codes ? ra->n_codes : rb->n_codes;
-    for (int i = 0; i < min_len; ++i)
+    char *start = *stringp;
+    char *p;
+    if (!start)
+        return NULL;
+    p = start + strcspn(start, delim);
+    if (*p)
     {
-        if (ra->codes[i] != rb->codes[i])
-            return ra->codes[i] - rb->codes[i];
+        *p = '\0';
+        *stringp = p + 1;
     }
-    return ra->n_codes - rb->n_codes;
+    else
+    {
+        *stringp = NULL;
+    }
+    return start;
 }
 
-/* ------------------------------------------------------------
- * main
- * ------------------------------------------------------------ */
-
-
-int main(void)
+/* Simple getline replacement para Windows */
+ssize_t getline(char **lineptr, size_t *n, FILE *stream)
 {
-#if _WIN32
-    // Set Windows console to UTF-8
-    SetConsoleOutputCP(CP_UTF8);
-    SetConsoleCP(CP_UTF8);
+    if (!lineptr || !n || !stream)
+        return -1;
+    if (*lineptr == NULL || *n == 0)
+    {
+        *n = 4096;
+        *lineptr = malloc(*n);
+        if (!*lineptr)
+            return -1;
+    }
+    size_t pos = 0;
+    int c;
+    while ((c = fgetc(stream)) != EOF)
+    {
+        if (pos + 1 >= *n)
+        {
+            *n *= 2;
+            char *tmp = realloc(*lineptr, *n);
+            if (!tmp)
+                return -1;
+            *lineptr = tmp;
+        }
+        (*lineptr)[pos++] = (char)c;
+        if (c == '\n')
+            break;
+    }
+    if (pos == 0 && c == EOF)
+        return -1;
+    (*lineptr)[pos] = '\0';
+    return pos;
+}
 #endif
 
-    /*
-    kotoba_dict d;
-    if (!kotoba_dict_open(&d, dict_path, idx_path))
+/* ---------- TSV reader ---------- */
+static int read_tsv_pairs(const char *tsv, const char ***texts_out, uint32_t **ids_out, size_t *count_out)
+{
+    FILE *f = fopen(tsv, "r");
+    if (!f)
     {
-        printf("Error al cargar el diccionario.\n");
-        return 1;
+        perror("fopen tsv");
+        return -1;
     }
-
-
-    size_t max_reb = d.entry_count * MAX_R_ELEMENTS;
-    reb_entry *reb_list = malloc(sizeof(reb_entry) * max_reb);
-    if (!reb_list)
+    char *line = NULL;
+    size_t lcap = 0;
+    size_t cap = 0, cnt = 0;
+    const char **texts = NULL;
+    uint32_t *ids = NULL;
+    while (getline(&line, &lcap, f) != -1)
     {
-        printf("No se pudo asignar memoria para reb_list.\n");
-        return 1;
-    }
-
-    size_t reb_count = 0;
-
-    for (uint32_t i = 0; i < d.entry_count; ++i)
-    {
-        const entry_bin *e = kotoba_dict_get_entry(&d, i);
-
-        // Para este entry, vamos a guardar los readings únicos
-        // Usamos un array temporal para comparar
-        int entry_codes[MAX_R_ELEMENTS][MAX_KANA_CODES];
-        int entry_n_codes[MAX_R_ELEMENTS];
-        int entry_unique_count = 0;
-
-        for (uint32_t j = 0; j < e->r_elements_count; ++j)
+        if (line[0] == '#' || line[0] == '\n')
+            continue;
+        char *p = line;
+        char *id_s = strsep(&p, "\t\n");
+        char *txt = strsep(&p, "\t\n");
+        if (!id_s || !txt)
+            continue;
+        if (cnt == cap)
         {
-            const r_ele_bin *r = kotoba_r_ele(&d, e, j);
-            kotoba_str reb = kotoba_reb(&d, r);
-
-            int n_codes = kana_kotoba_str_to_codes(reb, entry_codes[entry_unique_count]);
-            if (n_codes <= 0)
-                continue;
-
-            // Chequear si este reading ya está en entry_codes
-            bool is_duplicate = false;
-            for (int k = 0; k < entry_unique_count; ++k)
+            cap = cap ? cap * 2 : 1024;
+            texts = realloc(texts, cap * sizeof(char *));
+            ids = realloc(ids, cap * sizeof(uint32_t));
+            if (!texts || !ids)
             {
-                if (entry_n_codes[k] == n_codes &&
-                    memcmp(entry_codes[k], entry_codes[entry_unique_count], n_codes * sizeof(int)) == 0)
+                perror("realloc");
+                return -1;
+            }
+        }
+        ids[cnt] = (uint32_t)atoi(id_s);
+        texts[cnt] = strdup(txt);
+        cnt++;
+    }
+    free(line);
+    fclose(f);
+    *texts_out = texts;
+    *ids_out = ids;
+    *count_out = cnt;
+    return 0;
+}
+
+static void free_pairs(const char **texts, uint32_t *ids, size_t n)
+{
+    for (size_t i = 0; i < n; ++i)
+        free((void *)texts[i]);
+    free(texts);
+    free(ids);
+}
+typedef void (*gram_cb)(const uint8_t *p, size_t len, void *ud);
+
+void utf8_1_2_grams_cb(const char *s, gram_cb cb, void *ud)
+{
+    const uint8_t *p = (const uint8_t *)s;
+    const uint8_t *prev = NULL;
+    size_t prev_len = 0;
+    while (*p)
+    {
+        size_t len = utf8_char_len(*p);
+        /* unigram */
+        cb(p, len, ud);
+        /* bigram (if we have prev) */
+        if (prev)
+        {
+            /* copy prev + curr into small buffer (max 8 bytes for 4+4) */
+            uint8_t tmp[8];
+            memcpy(tmp, prev, prev_len);
+            memcpy(tmp + prev_len, p, len);
+            cb(tmp, prev_len + len, ud);
+        }
+        prev = p;
+        prev_len = len;
+        p += len;
+    }
+}
+
+void print_grams(const char *s) {
+    void cb(const uint8_t *p, size_t len, void *ud) {
+        printf("gram: %.*s  hash: %08x\n", (int)len, p, fnv1a(p,len));
+    }
+    utf8_1_2_grams_cb(s, cb, NULL);
+}
+
+static char *read_utf8_file(const char *path) {
+    FILE *f = fopen(path, "rb");
+    if (!f) { perror("fopen"); return NULL; }
+
+    fseek(f, 0, SEEK_END);
+    long sz = ftell(f);
+    fseek(f, 0, SEEK_SET);
+
+    char *buf = malloc(sz + 1);
+    if (!buf) { fclose(f); return NULL; }
+
+    if (fread(buf, 1, sz, f) != (size_t)sz) { free(buf); fclose(f); return NULL; }
+    fclose(f);
+
+    buf[sz] = '\0';
+
+    // trim newline / carriage return
+    while (sz > 0 && (buf[sz-1]=='\n' || buf[sz-1]=='\r')) buf[--sz]='\0';
+
+    return buf;
+}
+
+
+/* ---------- CLI ---------- */
+int main(int argc, char **argv)
+{
+    #ifdef _WIN32
+        // Set Windows console to UTF-8 for input/output
+        system("chcp 65001");
+
+    #endif
+
+    if (argc < 2)
+    {
+        fprintf(stderr, "Usage: %s build <tsv> out.idx\n       %s search <index.idx> <query>\n", argv[0], argv[0]);
+        return 1;
+    }
+
+    if (strcmp(argv[1], "build") == 0)
+    {
+        if (argc != 4)
+        {
+            fprintf(stderr, "build <tsv> out.idx\n");
+            return 1;
+        }
+        const char *tsv = argv[2], *out = argv[3];
+        const char **texts;
+        uint32_t *ids;
+        size_t n;
+        if (read_tsv_pairs(tsv, &texts, &ids, &n) != 0)
+            return 1;
+        int rc = index_build_from_pairs(out, texts, ids, n);
+        free_pairs(texts, ids, n);
+        return rc == 0 ? 0 : 1;
+    }
+    else if (strcmp(argv[1], "search") == 0)
+    {
+        if (argc != 4)
+        {
+            fprintf(stderr, "search <index.idx> <query>\n");
+            return 1;
+        }
+        const char *idxpath = argv[2];
+        const char *query_file = argv[3];
+
+        char *query = read_utf8_file(query_file);
+        if (!query) { fprintf(stderr, "failed read query file\n"); return 1; }
+        print_grams(query);
+
+        InvertedIndex idx;
+        if (index_load(idxpath, &idx) != 0)
+        {
+            fprintf(stderr, "failed load index\n");
+            return 1;
+        }
+        for (size_t i=0;i<strlen(query);i++) printf("%02x ", (unsigned char)query[i]);
+        printf("\n");
+
+        uint32_t hashes[128];
+        size_t hcount = query_1_2_gram_hashes(query, hashes, 128);
+        if (hcount == 0)
+        {
+            fprintf(stderr, "no grams from query\n");
+            index_unload(&idx);
+            return 1;
+        }
+
+        uint32_t *lists_buf[128];
+        size_t sizes[128];
+        uint32_t *tmp_alloc[128];
+        size_t alloc_n = 0;
+
+        for (size_t i = 0; i < hcount; ++i)
+        {
+            const Term *t = index_find_term(&idx, hashes[i]);
+            if (!t)
+            {
+                for (size_t a = 0; a < alloc_n; ++a)
+                    free(tmp_alloc[a]);
+                index_unload(&idx);
+                return 0;
+            }
+            size_t n = t->postings_count;
+            uint32_t *arr = malloc(n * sizeof(uint32_t));
+            for (size_t j = 0; j < n; ++j)
+                arr[j] = idx.postings[t->postings_offset + j].doc_id;
+            lists_buf[i] = arr;
+            sizes[i] = n;
+            tmp_alloc[alloc_n++] = arr;
+        }
+
+        /* simple intersection */
+        size_t min_i = 0;
+        for (size_t i = 1; i < hcount; ++i)
+            if (sizes[i] < sizes[min_i])
+                min_i = i;
+        uint32_t *base = lists_buf[min_i];
+        size_t base_n = sizes[min_i];
+
+        for (size_t bi = 0; bi < base_n; ++bi)
+        {
+            uint32_t val = base[bi];
+            int ok = 1;
+            for (size_t j = 0; j < hcount; ++j)
+            {
+                if (j == min_i)
+                    continue;
+                uint32_t lo = 0, hi = (uint32_t)sizes[j];
+                while (lo < hi)
                 {
-                    is_duplicate = true;
+                    uint32_t mid = (lo + hi) >> 1;
+                    uint32_t v = lists_buf[j][mid];
+                    if (v == val)
+                    {
+                        lo = hi = mid;
+                        break;
+                    }
+                    if (v < val)
+                        lo = mid + 1;
+                    else
+                        hi = mid;
+                }
+                if (lo >= sizes[j] || lists_buf[j][lo] != val)
+                {
+                    ok = 0;
                     break;
                 }
             }
-            if (is_duplicate)
-                continue;
-
-            // Es único, lo agregamos a la lista global
-            memcpy(reb_list[reb_count].codes, entry_codes[entry_unique_count], n_codes * sizeof(int));
-            reb_list[reb_count].n_codes = n_codes;
-            reb_list[reb_count].entry_index = i;
-            reb_count++;
-
-            // También lo agregamos a la lista temporal para este entry
-            entry_n_codes[entry_unique_count] = n_codes;
-            entry_unique_count++;
+            if (ok)
+                printf("%u\n", val);
         }
+
+        for (size_t a = 0; a < alloc_n; ++a)
+            free(tmp_alloc[a]);
+        index_unload(&idx);
+        return 0;
     }
-
-    printf("Collected %zu readings\n", reb_count);
-
-    qsort(reb_list, reb_count, sizeof(reb_entry), compare_reb_entry);
-
-
-    dat_builder b;
-    dat_builder_init(&b);
-
-    printf("Building DAT...\n");
-
-    for (size_t i = 0; i < reb_count; ++i)
+    else
     {
-        if ((i % 10000) == 0)
-            printf("  inserted %zu / %zu\n", i, reb_count);
-
-        dat_builder_insert(&b,
-                           reb_list[i].codes,
-                           reb_list[i].n_codes,
-                           reb_list[i].entry_index);
-    }
-
-
-    printf("Writing kana offsets...\n");
-
-    FILE *fo = fopen("kana_offsets.dat", "wb");
-    if (!fo)
-    {
-        printf("Cannot open kana_offsets.dat\n");
+        fprintf(stderr, "unknown command\n");
         return 1;
     }
-
-    dat_builder_finalize_offsets(&b, fo);
-    fclose(fo);
-
-
-    printf("Compacting DAT...\n");
-    dat_builder_compact(&b);
-
-    printf("Writing DAT...\n");
-
-    kotoba_dat_writer w;
-    kotoba_dat_writer_open(&w, "kana_values.dat");
-    kotoba_dat_writer_write(&w,
-                            b.base,
-                            b.check,
-                            b.value,
-                            b.size);
-    kotoba_dat_writer_close(&w);
-
-
-    dat_builder_destroy(&b);
-    free(reb_list);
-    kotoba_dict_close(&d);
-
-    printf("Done.\n");
-
-    */
-
-
-    trie_t t;
-    trie_init(&t);
-
-    uint8_t a[] = {1,2,3};
-    uint8_t b[] = {1,2};
-    uint8_t c[] = {0xFF,0xAA};
-
-    trie_insert(&t, a, sizeof(a));
-    trie_insert(&t, c, sizeof(c));
-
-    dat_t d;
-    dat_build_from_trie(&d, &t);
-
-    printf("a -> %d\n", dat_search(&d, a, sizeof(a)));
-    printf("b -> %d\n", dat_search(&d, b, sizeof(b)));
-    printf("c -> %d\n", dat_search(&d, c, sizeof(c)));
-
-    trie_free(&t);
-    dat_free(&d);
-
-
-
-    return 0;
 }

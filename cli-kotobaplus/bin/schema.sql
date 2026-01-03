@@ -1,12 +1,12 @@
 -- Tabla principal: solo IDs y prioridad
 CREATE TABLE IF NOT EXISTS entries (
-    ent_seq INTEGER PRIMARY KEY,   -- ID igual al archivo binario
+    id INTEGER PRIMARY KEY,   -- ID igual al archivo binario
     priority INTEGER DEFAULT 0
 );
 
 -- Índice FTS5 para buscar en el diccionario
 CREATE VIRTUAL TABLE IF NOT EXISTS entry_search USING fts5(
-    ent_seq UNINDEXED,     -- referencia a la entrada binaria
+    id UNINDEXED,     -- referencia a la entrada binaria
     priority UNINDEXED,    -- usado para ordenar resultados
     kanji,
     reading,
