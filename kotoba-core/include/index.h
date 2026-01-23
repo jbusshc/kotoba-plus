@@ -1,6 +1,10 @@
 #pragma once
 #include <stdint.h>
 #include <stddef.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdint.h>
 
 #define IDX_MAGIC 0x494E5658u  // "INVX"
 #define IDX_VERSION 2u         // bumped because Posting layout changed
@@ -29,8 +33,9 @@ typedef struct {
 */
 typedef struct {
     uint32_t doc_id;
-    uint32_t meta1;
-    uint32_t meta2;
+    uint8_t meta1;
+    uint8_t meta2;
+    uint8_t reserved[2];
 } __attribute__((packed)) Posting;
 
 /* runtime mmap view */
@@ -56,8 +61,8 @@ KOTOBA_API int index_build_from_pairs(
     const char *out_path,
     const char **texts,
     const uint32_t *doc_ids,
-    const uint32_t *meta1,   /* optional, can be NULL */
-    const uint32_t *meta2,   /* optional, can be NULL */
+    const uint8_t *meta1,   /* optional, can be NULL */
+    const uint8_t *meta2,   /* optional, can be NULL */
     size_t count
 );
 
@@ -71,9 +76,6 @@ KOTOBA_API const Term *index_find_term(const InvertedIndex *idx, uint32_t hash);
 /* copy postings into out_postings (out_cap must be >= postings_count) */
 KOTOBA_API size_t index_term_postings(const InvertedIndex *idx, const Term *t, Posting *out_postings, size_t out_cap);
 
-/* helpers for query side: generate unigram+bigram hashes from a UTF-8 query */
-/* optimized: fills a preallocated array, no malloc/free interno */
-KOTOBA_API size_t query_1_2_gram_hashes(const char *q, uint32_t *out_hashes, size_t max);
 
 KOTOBA_API size_t index_intersect_hashes(
     const InvertedIndex *idx,
@@ -95,3 +97,72 @@ KOTOBA_API size_t index_intersect_postings(
     PostingRef *out,
     size_t out_cap
 );
+
+
+/* ---------- bigram/unigram generation (UTF-8 aware) ---------- */
+/* callback type */
+typedef void (*gram_cb)(const uint8_t *p, size_t len, void *ud);
+
+/* generate 1-grams (each codepoint) and 2-grams (prev+curr) */
+void utf8_grams_cb(const char *s, gram_cb cb, void *ud)
+{
+    const uint8_t *p = (const uint8_t *)s;
+    const uint8_t *prev = NULL;
+    size_t prev_len = 0;
+    int has_bigram = 0;
+
+    /* primera pasada lógica: generar solo bigramas */
+    while (*p)
+    {
+        size_t len = utf8_char_len(*p);
+
+        if (prev)
+        {
+            uint8_t tmp[8];
+            memcpy(tmp, prev, prev_len);
+            memcpy(tmp + prev_len, p, len);
+            cb(tmp, prev_len + len, ud);
+            has_bigram = 1;
+        }
+
+        prev = p;
+        prev_len = len;
+        p += len;
+    }
+
+    /* si no hubo bigramas → palabra de 1 carácter → generar unigrama */
+    if (!has_bigram)
+    {
+        p = (const uint8_t *)s;
+        size_t len = utf8_char_len(*p);
+        cb(p, len, ud);
+    }
+}
+/* capture callback ud */
+struct QGramUD {
+    uint32_t *out;
+    size_t max;
+    size_t count;
+};
+
+static void query_capture_cb(const uint8_t *p, size_t len, void *ud)
+{
+    struct QGramUD *q = ud;
+    if (q->count >= q->max)
+        return;
+    q->out[q->count++] = fnv1a(p, len);
+}
+size_t query_gram_hashes(const char *q, uint32_t *out_hashes, size_t max)
+{
+    if (!q || !out_hashes || max == 0)
+        return 0;
+
+    struct QGramUD ud = {
+        .out = out_hashes,
+        .max = max,
+        .count = 0
+    };
+
+    utf8_grams_cb(q, query_capture_cb, &ud);
+    return ud.count;
+}

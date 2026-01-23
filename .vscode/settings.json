@@ -69,5 +69,6 @@
         "libtango.h": "c",
         "cjson.h": "c",
         "ctype.h": "c"
-    }
+    },
+    "cmake.sourceDirectory": "C:/Users/Jorge/Desktop/Proyectos/kotobaplus/kotoba-core"
 }

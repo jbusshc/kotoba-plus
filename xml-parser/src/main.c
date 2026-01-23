@@ -12,6 +12,7 @@
 #include "../../kotoba-core/include/loader.h"
 #include "../../kotoba-core/include/viewer.h"
 #include "../../kotoba-core/include/kana.h"
+#include "../../kotoba-core/include/index.h"
 
 #include <sqlite3.h>
 
@@ -383,7 +384,7 @@ ssize_t getline(char **lineptr, size_t *n, FILE *stream)
 #endif
 
 /* ---------- TSV reader ---------- */
-static int read_tsv_pairs(const char *tsv, const char ***texts_out, uint32_t **ids_out, uint32_t **ids2_out, uint32_t **ids3_out, size_t *count_out, bool read_fourth_col)
+static int read_tsv_pairs(const char *tsv, const char ***texts_out, uint32_t **ids_out, uint8_t **ids2_out, uint8_t **ids3_out, size_t *count_out, bool read_fourth_col)
 {
     FILE *f = fopen(tsv, "r");
     if (!f)
@@ -395,7 +396,8 @@ static int read_tsv_pairs(const char *tsv, const char ***texts_out, uint32_t **i
     size_t lcap = 0;
     size_t cap = 0, cnt = 0;
     const char **texts = NULL;
-    uint32_t *ids = NULL, *ids2 = NULL, *ids3 = NULL;
+    uint32_t *ids = NULL;
+    uint8_t *ids2 = NULL, *ids3 = NULL;
     while (getline(&line, &lcap, f) != -1)
     {
         if (line[0] == '#' || line[0] == '\n')
@@ -414,9 +416,9 @@ static int read_tsv_pairs(const char *tsv, const char ***texts_out, uint32_t **i
             cap = cap ? cap * 2 : 1024;
             texts = realloc(texts, cap * sizeof(char *));
             ids = realloc(ids, cap * sizeof(uint32_t));
-            ids2 = realloc(ids2, cap * sizeof(uint32_t));
+            ids2 = realloc(ids2, cap * sizeof(uint8_t));
             if (read_fourth_col)
-                ids3 = realloc(ids3, cap * sizeof(uint32_t));
+                ids3 = realloc(ids3, cap * sizeof(uint8_t));
             if (!texts || !ids || !ids2 || (read_fourth_col && !ids3))
             {
                 perror("realloc");
@@ -425,9 +427,9 @@ static int read_tsv_pairs(const char *tsv, const char ***texts_out, uint32_t **i
         }
         ids[cnt] = (uint32_t)atoi(id_s);
         texts[cnt] = strdup(txt);
-        ids2[cnt] = id2_s ? (uint32_t)atoi(id2_s) : 0;
+        ids2[cnt] = id2_s ? (uint8_t)atoi(id2_s) : 0;
         if (read_fourth_col)
-            ids3[cnt] = id3_s ? (uint32_t)atoi(id3_s) : 0;
+            ids3[cnt] = id3_s ? (uint8_t)atoi(id3_s) : 0;
         cnt++;
     }
     free(line);
@@ -442,39 +444,16 @@ static int read_tsv_pairs(const char *tsv, const char ***texts_out, uint32_t **i
     return 0;
 }
 
-static void free_pairs(const char **texts, uint32_t *ids, size_t n)
+static void free_pairs(const char **texts, uint32_t *ids, uint8_t *ids2, uint8_t *ids3, size_t n)
 {
     for (size_t i = 0; i < n; ++i)
         free((void *)texts[i]);
     free(texts);
     free(ids);
+    free(ids2);
+    free(ids3);
 }
-typedef void (*gram_cb)(const uint8_t *p, size_t len, void *ud);
 
-void utf8_1_2_grams_cb(const char *s, gram_cb cb, void *ud)
-{
-    const uint8_t *p = (const uint8_t *)s;
-    const uint8_t *prev = NULL;
-    size_t prev_len = 0;
-    while (*p)
-    {
-        size_t len = utf8_char_len(*p);
-        /* unigram */
-        cb(p, len, ud);
-        /* bigram (if we have prev) */
-        if (prev)
-        {
-            /* copy prev + curr into small buffer (max 8 bytes for 4+4) */
-            uint8_t tmp[8];
-            memcpy(tmp, prev, prev_len);
-            memcpy(tmp + prev_len, p, len);
-            cb(tmp, prev_len + len, ud);
-        }
-        prev = p;
-        prev_len = len;
-        p += len;
-    }
-}
 
 void print_grams(const char *s)
 {
@@ -482,7 +461,7 @@ void print_grams(const char *s)
     {
         printf("gram: %.*s  hash: %08x\n", (int)len, p, fnv1a(p, len));
     }
-    utf8_1_2_grams_cb(s, cb, NULL);
+    utf8_grams_cb(s, cb, NULL);
 }
 
 static char *read_utf8_file(const char *path)
@@ -665,7 +644,7 @@ void query_search(struct SearchContext *ctx, const char *query)
     reset_search_context(ctx);
 
     uint32_t hashes[SEARCH_MAX_QUERY_HASHES];
-    size_t hcount = query_1_2_gram_hashes(query, hashes, SEARCH_MAX_QUERY_HASHES);
+    size_t hcount = query_gram_hashes(query, hashes, SEARCH_MAX_QUERY_HASHES);
     if (hcount == 0)
     {
         fprintf(stderr, "no grams from query\n");
@@ -676,7 +655,7 @@ void query_search(struct SearchContext *ctx, const char *query)
     char mixed[256];
     mixed_to_hiragana(query, mixed, sizeof(mixed));
     uint32_t mixed_hashes[SEARCH_MAX_QUERY_HASHES];
-    size_t mixed_hcount = query_1_2_gram_hashes(mixed, mixed_hashes, SEARCH_MAX_QUERY_HASHES);
+    size_t mixed_hcount = query_gram_hashes(mixed, mixed_hashes, SEARCH_MAX_QUERY_HASHES);
 
     // Search Kanji index if query contains Kanji
     if (has_kanji(query) && ctx->kanji_idx)
@@ -1009,8 +988,8 @@ int main(int argc, char **argv)
 
         const char **texts;
         uint32_t *ids;
-        uint32_t *ids2;
-        uint32_t *ids3;
+        uint8_t *ids2;
+        uint8_t *ids3;
         size_t n;
 
         if (read_tsv_pairs(tsv, &texts, &ids, &ids2, &ids3, &n, read_fourth_col) != 0)
@@ -1021,10 +1000,8 @@ int main(int argc, char **argv)
             rc = index_build_from_pairs(out, texts, ids, ids2, ids3, n);
         else
             rc = index_build_from_pairs(out, texts, ids, ids2, NULL, n);
-        free_pairs(texts, ids, n);
-        free(ids2);
+        free_pairs(texts, ids, ids2, ids3, n);
         if (read_fourth_col)
-            free(ids3);
         return rc == 0 ? 0 : 1;
     }
 
@@ -1057,7 +1034,7 @@ int main(int argc, char **argv)
         }
 
         uint32_t hashes[128];
-        size_t hcount = query_1_2_gram_hashes(query, hashes, 128);
+        size_t hcount = query_gram_hashes(query, hashes, 128);
         if (hcount == 0)
         {
             fprintf(stderr, "no grams from query\n");

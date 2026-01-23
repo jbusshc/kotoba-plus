@@ -1,10 +1,7 @@
 // index.c
 #define _POSIX_C_SOURCE 200809L
 #include "index.h"
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <stdint.h>
+
 
 #ifndef _WIN32
 #include <sys/mman.h>
@@ -63,35 +60,6 @@ static void *append_bytes(void *buf, size_t *cap, size_t *len, const void *data,
     return buf;
 }
 
-/* ---------- bigram/unigram generation (UTF-8 aware) ---------- */
-/* callback type */
-typedef void (*gram_cb)(const uint8_t *p, size_t len, void *ud);
-
-/* generate 1-grams (each codepoint) and 2-grams (prev+curr) */
-void utf8_1_2_grams_cb(const char *s, gram_cb cb, void *ud)
-{
-    const uint8_t *p = (const uint8_t *)s;
-    const uint8_t *prev = NULL;
-    size_t prev_len = 0;
-    while (*p)
-    {
-        size_t len = utf8_char_len(*p);
-        /* unigram */
-        cb(p, len, ud);
-        /* bigram (if we have prev) */
-        if (prev)
-        {
-            /* copy prev + curr into small buffer (max 8 bytes for 4+4) */
-            uint8_t tmp[8];
-            memcpy(tmp, prev, prev_len);
-            memcpy(tmp + prev_len, p, len);
-            cb(tmp, prev_len + len, ud);
-        }
-        prev = p;
-        prev_len = len;
-        p += len;
-    }
-}
 
 /* ---------- builder ---------- */
 
@@ -99,8 +67,8 @@ typedef struct
 {
     uint32_t hash;
     uint32_t doc_id;
-    uint32_t meta1;
-    uint32_t meta2;
+    uint8_t meta1;
+    uint8_t meta2;
 } Pair;
 
 static int cmp_pair(const void *a, const void *b)
@@ -118,10 +86,10 @@ static int cmp_pair(const void *a, const void *b)
 }
 
 
-#define META_NONE UINT32_MAX
+#define META_NONE UINT8_MAX
 
 /* build index: texts[i] corresponds to doc_ids[i], optional meta1/meta2 arrays */
-int index_build_from_pairs(const char *out_path, const char **texts, const uint32_t *doc_ids, const uint32_t *meta1, const uint32_t *meta2, size_t count)
+int index_build_from_pairs(const char *out_path, const char **texts, const uint32_t *doc_ids, const uint8_t *meta1, const uint8_t *meta2, size_t count)
 {
     Pair *pairs = NULL;
     size_t pcap = 0, pcount = 0;
@@ -129,7 +97,7 @@ int index_build_from_pairs(const char *out_path, const char **texts, const uint3
     /* generator callback that appends Pair(hash, doc_id, meta1, meta2)
        ud is pointer to a small struct with the three values for the current text.
     */
-    struct GramUD { uint32_t doc; uint32_t m1; uint32_t m2; };
+    struct GramUD { uint32_t doc; uint8_t m1; uint8_t m2; };
     void capture_cb(const uint8_t *p, size_t len, void *ud)
     {
         struct GramUD *g = (struct GramUD *)ud;
@@ -161,7 +129,7 @@ int index_build_from_pairs(const char *out_path, const char **texts, const uint3
         ud.doc = doc_ids ? doc_ids[i] : 0;
         ud.m1 = meta1 ? meta1[i] : META_NONE;
         ud.m2 = meta2 ? meta2[i] : META_NONE;
-        utf8_1_2_grams_cb(txt, capture_cb, &ud);
+        utf8_grams_cb(txt, capture_cb, &ud);
     }
 
     if (pcount == 0)
@@ -199,14 +167,14 @@ int index_build_from_pairs(const char *out_path, const char **texts, const uint3
         size_t j = i;
         /* dedupe by (doc_id, meta1, meta2) within same hash */
         uint32_t last_doc = 0xFFFFFFFFu;
-        uint32_t last_m1 = 0xFFFFFFFFu;
-        uint32_t last_m2 = 0xFFFFFFFFu;
+        uint8_t last_m1 = 0xFFu;
+        uint8_t last_m2 = 0xFFu;
         size_t group_start = pi;
         while (j < pcount && pairs[j].hash == pairs[i].hash)
         {
             uint32_t doc = pairs[j].doc_id;
-            uint32_t m1 = pairs[j].meta1;
-            uint32_t m2 = pairs[j].meta2;
+            uint8_t m1 = pairs[j].meta1;
+            uint8_t m2 = pairs[j].meta2;
             if (!(doc == last_doc && m1 == last_m1 && m2 == last_m2))
             {
                 postings[pi].doc_id = doc;
@@ -392,42 +360,22 @@ size_t index_term_postings(const InvertedIndex *idx, const Term *t, Posting *out
     return n;
 }
 
-/* ---------- query helper: generate 1+2 gram hashes ---------- */
-
-
-size_t query_1_2_gram_hashes(const char *q, uint32_t *out_hashes, size_t max)
+/* ---------- query gram hashes from string ---------- */
+size_t query_gram_hashes(const char *q, uint32_t *out_hashes, size_t max)
 {
-    if (!q || !out_hashes || max == 0) return 0;
+    if (!q || !out_hashes || max == 0)
+        return 0;
 
-    const uint8_t *p = (const uint8_t *)q;
-    const uint8_t *prev = NULL;
-    size_t prev_len = 0;
-    size_t count = 0;
+    struct QGramUD ud = {
+        .out = out_hashes,
+        .max = max,
+        .count = 0
+    };
 
-    while (*p && count < max)
-    {
-        size_t len = utf8_char_len(*p);
-
-        /* unigram */
-        out_hashes[count++] = fnv1a(p, len);
-        if (count >= max) break;
-
-        /* bigram */
-        if (prev)
-        {
-            uint8_t tmp[8];
-            memcpy(tmp, prev, prev_len);
-            memcpy(tmp + prev_len, p, len);
-            out_hashes[count++] = fnv1a(tmp, prev_len + len);
-        }
-
-        prev = p;
-        prev_len = len;
-        p += len;
-    }
-
-    return count;
+    utf8_grams_cb(q, query_capture_cb, &ud);
+    return ud.count;
 }
+
 
 /* intersect postings of multiple gram hashes
    - hashes: array de hashes de grams
