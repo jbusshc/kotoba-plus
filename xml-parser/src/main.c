@@ -313,6 +313,414 @@ void parse_jmdict(xmlNodePtr root, kotoba_writer *writer)
     }
 }
 
+/* ================= main ================= */
+// index_cli.c
+#define _POSIX_C_SOURCE 200809L
+#include "index.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdint.h>
+
+#ifdef _WIN32
+#include <windows.h>
+#include <io.h>
+#include <fcntl.h>
+
+/* strsep implementation for Windows */
+char *strsep(char **stringp, const char *delim)
+{
+    char *start = *stringp;
+    char *p;
+    if (!start)
+        return NULL;
+    p = start + strcspn(start, delim);
+    if (*p)
+    {
+        *p = '\0';
+        *stringp = p + 1;
+    }
+    else
+    {
+        *stringp = NULL;
+    }
+    return start;
+}
+
+/* Simple getline replacement para Windows */
+ssize_t getline(char **lineptr, size_t *n, FILE *stream)
+{
+    if (!lineptr || !n || !stream)
+        return -1;
+    if (*lineptr == NULL || *n == 0)
+    {
+        *n = 4096;
+        *lineptr = malloc(*n);
+        if (!*lineptr)
+            return -1;
+    }
+    size_t pos = 0;
+    int c;
+    while ((c = fgetc(stream)) != EOF)
+    {
+        if (pos + 1 >= *n)
+        {
+            *n *= 2;
+            char *tmp = realloc(*lineptr, *n);
+            if (!tmp)
+                return -1;
+            *lineptr = tmp;
+        }
+        (*lineptr)[pos++] = (char)c;
+        if (c == '\n')
+            break;
+    }
+    if (pos == 0 && c == EOF)
+        return -1;
+    (*lineptr)[pos] = '\0';
+    return pos;
+}
+#endif
+
+/* ---------- TSV reader ---------- */
+static int read_tsv_pairs(const char *tsv, const char ***texts_out, uint32_t **ids_out, uint32_t **ids2_out, uint32_t **ids3_out, size_t *count_out, bool read_fourth_col)
+{
+    FILE *f = fopen(tsv, "r");
+    if (!f)
+    {
+        perror("fopen tsv");
+        return -1;
+    }
+    char *line = NULL;
+    size_t lcap = 0;
+    size_t cap = 0, cnt = 0;
+    const char **texts = NULL;
+    uint32_t *ids = NULL, *ids2 = NULL, *ids3 = NULL;
+    while (getline(&line, &lcap, f) != -1)
+    {
+        if (line[0] == '#' || line[0] == '\n')
+            continue;
+        char *p = line;
+        char *id_s = strsep(&p, "\t\n");
+        char *txt = strsep(&p, "\t\n");
+        char *id2_s = strsep(&p, "\t\n");
+        char *id3_s = NULL;
+        if (read_fourth_col)
+            id3_s = strsep(&p, "\t\n");
+        if (!id_s || !txt)
+            continue;
+        if (cnt == cap)
+        {
+            cap = cap ? cap * 2 : 1024;
+            texts = realloc(texts, cap * sizeof(char *));
+            ids = realloc(ids, cap * sizeof(uint32_t));
+            ids2 = realloc(ids2, cap * sizeof(uint32_t));
+            if (read_fourth_col)
+                ids3 = realloc(ids3, cap * sizeof(uint32_t));
+            if (!texts || !ids || !ids2 || (read_fourth_col && !ids3))
+            {
+                perror("realloc");
+                return -1;
+            }
+        }
+        ids[cnt] = (uint32_t)atoi(id_s);
+        texts[cnt] = strdup(txt);
+        ids2[cnt] = id2_s ? (uint32_t)atoi(id2_s) : 0;
+        if (read_fourth_col)
+            ids3[cnt] = id3_s ? (uint32_t)atoi(id3_s) : 0;
+        cnt++;
+    }
+    free(line);
+    fclose(f);
+    *texts_out = texts;
+    *ids_out = ids;
+    *ids2_out = ids2;
+    if (read_fourth_col)
+        *ids3_out = ids3;
+    if (count_out)
+        *count_out = cnt;
+    return 0;
+}
+
+static void free_pairs(const char **texts, uint32_t *ids, size_t n)
+{
+    for (size_t i = 0; i < n; ++i)
+        free((void *)texts[i]);
+    free(texts);
+    free(ids);
+}
+typedef void (*gram_cb)(const uint8_t *p, size_t len, void *ud);
+
+void utf8_1_2_grams_cb(const char *s, gram_cb cb, void *ud)
+{
+    const uint8_t *p = (const uint8_t *)s;
+    const uint8_t *prev = NULL;
+    size_t prev_len = 0;
+    while (*p)
+    {
+        size_t len = utf8_char_len(*p);
+        /* unigram */
+        cb(p, len, ud);
+        /* bigram (if we have prev) */
+        if (prev)
+        {
+            /* copy prev + curr into small buffer (max 8 bytes for 4+4) */
+            uint8_t tmp[8];
+            memcpy(tmp, prev, prev_len);
+            memcpy(tmp + prev_len, p, len);
+            cb(tmp, prev_len + len, ud);
+        }
+        prev = p;
+        prev_len = len;
+        p += len;
+    }
+}
+
+void print_grams(const char *s)
+{
+    void cb(const uint8_t *p, size_t len, void *ud)
+    {
+        printf("gram: %.*s  hash: %08x\n", (int)len, p, fnv1a(p, len));
+    }
+    utf8_1_2_grams_cb(s, cb, NULL);
+}
+
+static char *read_utf8_file(const char *path)
+{
+    FILE *f = fopen(path, "rb");
+    if (!f)
+    {
+        perror("fopen");
+        return NULL;
+    }
+
+    fseek(f, 0, SEEK_END);
+    long sz = ftell(f);
+    fseek(f, 0, SEEK_SET);
+
+    char *buf = malloc(sz + 1);
+    if (!buf)
+    {
+        fclose(f);
+        return NULL;
+    }
+
+    if (fread(buf, 1, sz, f) != (size_t)sz)
+    {
+        free(buf);
+        fclose(f);
+        return NULL;
+    }
+    fclose(f);
+
+    buf[sz] = '\0';
+
+    // trim newline / carriage return
+    while (sz > 0 && (buf[sz - 1] == '\n' || buf[sz - 1] == '\r'))
+        buf[--sz] = '\0';
+
+    return buf;
+}
+
+#define SEARCH_MAX_RESULTS 1024
+#define SEARCH_MAX_QUERY_HASHES 128
+struct SearchContext
+{
+    InvertedIndex *kanji_idx;
+    InvertedIndex *reading_idx;
+    InvertedIndex *gloss_idxs;
+    bool is_gloss_active[KOTOBA_LANG_COUNT];
+    uint32_t *results;
+    uint32_t result_count;
+    kotoba_dict *dict;
+};
+
+void free_search_context(struct SearchContext *ctx)
+{
+    if (ctx->kanji_idx)
+    {
+        index_unload(ctx->kanji_idx);
+        free(ctx->kanji_idx);
+    }
+    if (ctx->reading_idx)
+    {
+        index_unload(ctx->reading_idx);
+        free(ctx->reading_idx);
+    }
+    if (ctx->gloss_idxs)
+    {
+        // debug
+        for (size_t i = 0; i < KOTOBA_LANG_COUNT; ++i)
+        {
+            if (ctx->gloss_idxs[i].hdr)
+            {
+                index_unload(&ctx->gloss_idxs[i]);
+            }
+        }
+        free(ctx->gloss_idxs);
+    }
+}
+
+void init_search_context(struct SearchContext *ctx, kotoba_dict *dict)
+{
+    ctx->kanji_idx = NULL;
+    ctx->reading_idx = NULL;
+    ctx->gloss_idxs = NULL;
+    ctx->result_count = 0;
+    ctx->results = malloc(SEARCH_MAX_RESULTS * sizeof(uint32_t));
+    ctx->dict = dict;
+
+    ctx->kanji_idx = malloc(sizeof(InvertedIndex));
+    if (ctx->kanji_idx && index_load("kanjis.idx", ctx->kanji_idx) != 0)
+    {
+        free(ctx->kanji_idx);
+        ctx->kanji_idx = NULL;
+    }
+
+    ctx->reading_idx = malloc(sizeof(InvertedIndex));
+    if (ctx->reading_idx && index_load("readings.idx", ctx->reading_idx) != 0)
+    {
+        free(ctx->reading_idx);
+        ctx->reading_idx = NULL;
+    }
+
+    ctx->gloss_idxs = calloc(KOTOBA_LANG_COUNT, sizeof(InvertedIndex));
+    if (ctx->gloss_idxs)
+    {
+        if (ctx->gloss_idxs)
+        {
+            // Only open English gloss index for debugging
+            if (index_load("gloss_en.idx", &ctx->gloss_idxs[KOTOBA_LANG_EN]) != 0)
+            {
+                // If loading fails, set header to NULL for safety
+                ctx->gloss_idxs[KOTOBA_LANG_EN].hdr = NULL;
+                ctx->is_gloss_active[KOTOBA_LANG_EN] = false;
+            }
+            else
+            {
+                ctx->is_gloss_active[KOTOBA_LANG_EN] = true;
+            }
+
+            if (index_load("gloss_es.idx", &ctx->gloss_idxs[KOTOBA_LANG_ES]) != 0)
+            {
+                ctx->gloss_idxs[KOTOBA_LANG_ES].hdr = NULL;
+                ctx->is_gloss_active[KOTOBA_LANG_ES] = false;
+            }
+            else
+            {
+                ctx->is_gloss_active[KOTOBA_LANG_ES] = true;
+            }
+            // All other gloss_idxs remain uninitialized (NULL)
+        }
+    }
+}
+
+void reset_search_context(struct SearchContext *ctx)
+{
+    ctx->result_count = 0;
+}
+
+int has_kanji(const char *query)
+{
+    const uint8_t *p = (const uint8_t *)query;
+    while (*p)
+    {
+        size_t len = utf8_char_len(*p);
+        if (len == 3)
+        { // Kanji characters are typically 3 bytes in UTF-8
+            uint32_t codepoint = 0;
+            if (len == 3)
+            {
+                codepoint = ((p[0] & 0x0F) << 12) | ((p[1] & 0x3F) << 6) | (p[2] & 0x3F);
+            }
+            if (codepoint >= 0x4E00 && codepoint <= 0x9FAF)
+            {
+                return 1; // Found a Kanji character
+            }
+        }
+        p += len;
+    }
+    return 0; // No Kanji characters found
+}
+
+// Devuelve 0 si es exacta, MAX_SCORE si no hay substring, o diferencia de longitudes si contiene
+#define MAX_SCORE 1000000
+
+int score_substr(const char *haystack, const char *needle, size_t nlen, size_t hlen)
+{
+    if (!*needle)
+        return 0;
+    if (nlen > hlen)
+        return MAX_SCORE;
+    if (strcmp(haystack, needle) == 0)
+        return 0;
+    const char *pos = strstr(haystack, needle);
+    if (!pos)
+        return MAX_SCORE;
+    return (int)(hlen - nlen);
+}
+
+void query_search(struct SearchContext *ctx, const char *query)
+{
+    reset_search_context(ctx);
+
+    uint32_t hashes[SEARCH_MAX_QUERY_HASHES];
+    size_t hcount = query_1_2_gram_hashes(query, hashes, SEARCH_MAX_QUERY_HASHES);
+    if (hcount == 0)
+    {
+        fprintf(stderr, "no grams from query\n");
+        return;
+    }
+
+    size_t total_results = 0;
+    char mixed[256];
+    mixed_to_hiragana(query, mixed, sizeof(mixed));
+    uint32_t mixed_hashes[SEARCH_MAX_QUERY_HASHES];
+    size_t mixed_hcount = query_1_2_gram_hashes(mixed, mixed_hashes, SEARCH_MAX_QUERY_HASHES);
+
+    // Search Kanji index if query contains Kanji
+    if (has_kanji(query) && ctx->kanji_idx)
+    {
+        size_t rcount = index_intersect_hashes(
+            ctx->kanji_idx,
+            mixed_hashes,
+            mixed_hcount,
+            ctx->results + total_results,
+            SEARCH_MAX_RESULTS - total_results);
+        total_results += rcount;
+    }
+
+    // Search Reading index
+    if (ctx->reading_idx)
+    {
+        size_t rcount = index_intersect_hashes(
+            ctx->reading_idx,
+            mixed_hashes,
+            mixed_hcount,
+            ctx->results + total_results,
+            SEARCH_MAX_RESULTS - total_results);
+        total_results += rcount;
+    }
+
+    // Search active Gloss indexes (use plain query, not mixed)
+    for (size_t lang = 0; lang < KOTOBA_LANG_COUNT; ++lang)
+    {
+        if (ctx->is_gloss_active[lang])
+        {
+            InvertedIndex *gloss_idx = &ctx->gloss_idxs[lang];
+            size_t rcount = index_intersect_hashes(
+                gloss_idx,
+                hashes,
+                hcount,
+                ctx->results + total_results,
+                SEARCH_MAX_RESULTS - total_results);
+            total_results += rcount;
+        }
+    }
+
+    ctx->result_count = total_results;
+}
+
 void print_entry(const kotoba_dict *d, uint32_t i)
 {
     const entry_bin *e = kotoba_entry(d, i);
@@ -431,239 +839,222 @@ void print_entry(const kotoba_dict *d, uint32_t i)
     }
 }
 
-/* ================= main ================= */
-// index_cli.c
-#define _POSIX_C_SOURCE 200809L
-#include "index.h"
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <stdint.h>
-
-#ifdef _WIN32
-#include <windows.h>
-#include <io.h>
-#include <fcntl.h>
-
-/* strsep implementation for Windows */
-char *strsep(char **stringp, const char *delim)
+void write_all_tsv(const kotoba_dict *d)
 {
-    char *start = *stringp;
-    char *p;
-    if (!start)
-        return NULL;
-    p = start + strcspn(start, delim);
-    if (*p)
-    {
-        *p = '\0';
-        *stringp = p + 1;
-    }
-    else
-    {
-        *stringp = NULL;
-    }
-    return start;
-}
-
-/* Simple getline replacement para Windows */
-ssize_t getline(char **lineptr, size_t *n, FILE *stream)
-{
-    if (!lineptr || !n || !stream)
-        return -1;
-    if (*lineptr == NULL || *n == 0)
-    {
-        *n = 4096;
-        *lineptr = malloc(*n);
-        if (!*lineptr)
-            return -1;
-    }
-    size_t pos = 0;
-    int c;
-    while ((c = fgetc(stream)) != EOF)
-    {
-        if (pos + 1 >= *n)
-        {
-            *n *= 2;
-            char *tmp = realloc(*lineptr, *n);
-            if (!tmp)
-                return -1;
-            *lineptr = tmp;
-        }
-        (*lineptr)[pos++] = (char)c;
-        if (c == '\n')
-            break;
-    }
-    if (pos == 0 && c == EOF)
-        return -1;
-    (*lineptr)[pos] = '\0';
-    return pos;
-}
-#endif
-
-/* ---------- TSV reader ---------- */
-static int read_tsv_pairs(const char *tsv, const char ***texts_out, uint32_t **ids_out, size_t *count_out)
-{
-    FILE *f = fopen(tsv, "r");
+    FILE *f = fopen("./tsv/kanjis.tsv", "w");
     if (!f)
     {
-        perror("fopen tsv");
-        return -1;
+        perror("fopen kanjis.tsv");
+        return;
     }
-    char *line = NULL;
-    size_t lcap = 0;
-    size_t cap = 0, cnt = 0;
-    const char **texts = NULL;
-    uint32_t *ids = NULL;
-    while (getline(&line, &lcap, f) != -1)
+
+    FILE *f2 = fopen("./tsv/readings.tsv", "w");
+    if (!f2)
     {
-        if (line[0] == '#' || line[0] == '\n')
-            continue;
-        char *p = line;
-        char *id_s = strsep(&p, "\t\n");
-        char *txt = strsep(&p, "\t\n");
-        if (!id_s || !txt)
-            continue;
-        if (cnt == cap)
+        perror("fopen readings.tsv");
+        return;
+    }
+
+    FILE *lang_f[KOTOBA_LANG_COUNT] = {0};
+    // Correspondence with enum kotoba_lang:
+    // KOTOBA_LANG_EN = 0,
+    // KOTOBA_LANG_FR,
+    // KOTOBA_LANG_DE,
+    // KOTOBA_LANG_RU,
+    // KOTOBA_LANG_ES,
+    // KOTOBA_LANG_PT,
+    // KOTOBA_LANG_IT,
+    // KOTOBA_LANG_NL,
+    // KOTOBA_LANG_HU,
+    // KOTOBA_LANG_SV,
+    // KOTOBA_LANG_CS,
+    // KOTOBA_LANG_PL,
+    // KOTOBA_LANG_RO,
+    // KOTOBA_LANG_HE,
+    // KOTOBA_LANG_AR,
+    // KOTOBA_LANG_TR,
+    // KOTOBA_LANG_TH,
+    // KOTOBA_LANG_VI,
+    // KOTOBA_LANG_ID,
+    // KOTOBA_LANG_MS,
+    // KOTOBA_LANG_KO,
+    // KOTOBA_LANG_ZH,
+    // KOTOBA_LANG_ZH_CN,
+    // KOTOBA_LANG_ZH_TW,
+    // KOTOBA_LANG_FA,
+    // KOTOBA_LANG_EO,
+    // KOTOBA_LANG_SLV,
+
+    const char *lang_fnames[KOTOBA_LANG_COUNT] = {
+        "gloss_en.tsv",    // KOTOBA_LANG_EN
+        "gloss_fr.tsv",    // KOTOBA_LANG_FR
+        "gloss_de.tsv",    // KOTOBA_LANG_DE
+        "gloss_ru.tsv",    // KOTOBA_LANG_RU
+        "gloss_es.tsv",    // KOTOBA_LANG_ES
+        "gloss_pt.tsv",    // KOTOBA_LANG_PT
+        "gloss_it.tsv",    // KOTOBA_LANG_IT
+        "gloss_nl.tsv",    // KOTOBA_LANG_NL
+        "gloss_hu.tsv",    // KOTOBA_LANG_HU
+        "gloss_sv.tsv",    // KOTOBA_LANG_SV
+        "gloss_cs.tsv",    // KOTOBA_LANG_CS
+        "gloss_pl.tsv",    // KOTOBA_LANG_PL
+        "gloss_ro.tsv",    // KOTOBA_LANG_RO
+        "gloss_he.tsv",    // KOTOBA_LANG_HE
+        "gloss_ar.tsv",    // KOTOBA_LANG_AR
+        "gloss_tr.tsv",    // KOTOBA_LANG_TR
+        "gloss_th.tsv",    // KOTOBA_LANG_TH
+        "gloss_vi.tsv",    // KOTOBA_LANG_VI
+        "gloss_id.tsv",    // KOTOBA_LANG_ID
+        "gloss_ms.tsv",    // KOTOBA_LANG_MS
+        "gloss_ko.tsv",    // KOTOBA_LANG_KO
+        "gloss_zh.tsv",    // KOTOBA_LANG_ZH
+        "gloss_zh_cn.tsv", // KOTOBA_LANG_ZH_CN
+        "gloss_zh_tw.tsv", // KOTOBA_LANG_ZH_TW
+        "gloss_fa.tsv",    // KOTOBA_LANG_FA
+        "gloss_eo.tsv",    // KOTOBA_LANG_EO
+        "gloss_slv.tsv"    // KOTOBA_LANG_SLV
+    };
+
+    // Open all gloss language files at once
+    char tsv_dir[64] = "./tsv/";
+    for (size_t i = 0; i < KOTOBA_LANG_COUNT; ++i)
+    {
+        char path[256];
+        snprintf(path, sizeof(path), "%s%s", tsv_dir, lang_fnames[i]);
+        lang_f[i] = fopen(path, "w");
+        if (!lang_f[i])
         {
-            cap = cap ? cap * 2 : 1024;
-            texts = realloc(texts, cap * sizeof(char *));
-            ids = realloc(ids, cap * sizeof(uint32_t));
-            if (!texts || !ids)
+            fprintf(stderr, "Failed to open %s for writing\n", path);
+        }
+    }
+
+    for (uint32_t i = 0; i < d->entry_count; ++i)
+    {
+        entry_bin *e = kotoba_entry(d, i);
+
+        for (uint32_t j = 0; j < e->k_elements_count; ++j)
+        {
+            const k_ele_bin *k = kotoba_k_ele(d, e, j);
+            kotoba_str keb = kotoba_keb(d, k);
+
+            fprintf(f, "%u\t%.*s\t%u\n", i, keb.len, keb.ptr, j);
+        }
+
+        for (uint32_t r = 0; r < e->r_elements_count; ++r)
+        {
+            const r_ele_bin *re = kotoba_r_ele(d, e, r);
+            kotoba_str reb = kotoba_reb(d, re);
+
+            fprintf(f2, "%u\t%.*s\t%u\n", i, reb.len, reb.ptr, r);
+        }
+
+        for (uint32_t s = 0; s < e->senses_count; ++s)
+        {
+            const sense_bin *se = kotoba_sense(d, e, s);
+
+            for (uint32_t g = 0; g < se->gloss_count; ++g)
             {
-                perror("realloc");
-                return -1;
+                kotoba_str gloss = kotoba_gloss(d, se, g);
+                uint32_t lang = se->lang;
+
+                if (lang < KOTOBA_LANG_COUNT)
+                {
+
+                    fprintf(lang_f[lang], "%u\t%.*s\t%u\t%u\n", i, gloss.len, gloss.ptr, s, g);
+                }
             }
         }
-        ids[cnt] = (uint32_t)atoi(id_s);
-        texts[cnt] = strdup(txt);
-        cnt++;
-    }
-    free(line);
-    fclose(f);
-    *texts_out = texts;
-    *ids_out = ids;
-    *count_out = cnt;
-    return 0;
-}
-
-static void free_pairs(const char **texts, uint32_t *ids, size_t n)
-{
-    for (size_t i = 0; i < n; ++i)
-        free((void *)texts[i]);
-    free(texts);
-    free(ids);
-}
-typedef void (*gram_cb)(const uint8_t *p, size_t len, void *ud);
-
-void utf8_1_2_grams_cb(const char *s, gram_cb cb, void *ud)
-{
-    const uint8_t *p = (const uint8_t *)s;
-    const uint8_t *prev = NULL;
-    size_t prev_len = 0;
-    while (*p)
-    {
-        size_t len = utf8_char_len(*p);
-        /* unigram */
-        cb(p, len, ud);
-        /* bigram (if we have prev) */
-        if (prev)
-        {
-            /* copy prev + curr into small buffer (max 8 bytes for 4+4) */
-            uint8_t tmp[8];
-            memcpy(tmp, prev, prev_len);
-            memcpy(tmp + prev_len, p, len);
-            cb(tmp, prev_len + len, ud);
-        }
-        prev = p;
-        prev_len = len;
-        p += len;
     }
 }
-
-void print_grams(const char *s) {
-    void cb(const uint8_t *p, size_t len, void *ud) {
-        printf("gram: %.*s  hash: %08x\n", (int)len, p, fnv1a(p,len));
-    }
-    utf8_1_2_grams_cb(s, cb, NULL);
-}
-
-static char *read_utf8_file(const char *path) {
-    FILE *f = fopen(path, "rb");
-    if (!f) { perror("fopen"); return NULL; }
-
-    fseek(f, 0, SEEK_END);
-    long sz = ftell(f);
-    fseek(f, 0, SEEK_SET);
-
-    char *buf = malloc(sz + 1);
-    if (!buf) { fclose(f); return NULL; }
-
-    if (fread(buf, 1, sz, f) != (size_t)sz) { free(buf); fclose(f); return NULL; }
-    fclose(f);
-
-    buf[sz] = '\0';
-
-    // trim newline / carriage return
-    while (sz > 0 && (buf[sz-1]=='\n' || buf[sz-1]=='\r')) buf[--sz]='\0';
-
-    return buf;
-}
-
 
 /* ---------- CLI ---------- */
 int main(int argc, char **argv)
 {
-    #ifdef _WIN32
-        // Set Windows console to UTF-8 for input/output
-        system("chcp 65001");
-
-    #endif
+#ifdef _WIN32
+    /* Set Windows console to UTF-8 for input/output */
+    system("chcp 65001");
+#endif
 
     if (argc < 2)
     {
-        fprintf(stderr, "Usage: %s build <tsv> out.idx\n       %s search <index.idx> <query>\n", argv[0], argv[0]);
+        fprintf(stderr,
+                "Usage:  build <tsv> out.idx\n"
+                "        search <index.idx> <query>\n");
         return 1;
     }
 
+    /* ---------- build ---------- */
     if (strcmp(argv[1], "build") == 0)
     {
-        if (argc != 4)
+        if (argc != 5)
         {
-            fprintf(stderr, "build <tsv> out.idx\n");
+            fprintf(stderr, "build <tsv> gloss out.idx\n"
+                            "                            or build <tsv> nogloss out.idx\n");
             return 1;
         }
-        const char *tsv = argv[2], *out = argv[3];
+
+        const char *tsv = argv[2];
+        const char *out = argv[4];
+        const char *gloss_flag = argv[3];
+        bool read_fourth_col = false;
+        if (strcmp(gloss_flag, "gloss") == 0)
+            read_fourth_col = true;
+        else if (strcmp(gloss_flag, "nogloss") == 0)
+            read_fourth_col = false;
+        else
+        {
+            fprintf(stderr, "invalid gloss flag: %s\n", gloss_flag);
+            return 1;
+        }
+
         const char **texts;
         uint32_t *ids;
+        uint32_t *ids2;
+        uint32_t *ids3;
         size_t n;
-        if (read_tsv_pairs(tsv, &texts, &ids, &n) != 0)
+
+        if (read_tsv_pairs(tsv, &texts, &ids, &ids2, &ids3, &n, read_fourth_col) != 0)
             return 1;
-        int rc = index_build_from_pairs(out, texts, ids, n);
+        printf("a");
+        int rc;
+        if (read_fourth_col)
+            rc = index_build_from_pairs(out, texts, ids, ids2, ids3, n);
+        else
+            rc = index_build_from_pairs(out, texts, ids, ids2, NULL, n);
         free_pairs(texts, ids, n);
+        free(ids2);
+        if (read_fourth_col)
+            free(ids3);
         return rc == 0 ? 0 : 1;
     }
+
+    /* ---------- search ---------- */
     else if (strcmp(argv[1], "search") == 0)
     {
         if (argc != 4)
         {
-            fprintf(stderr, "search <index.idx> <query>\n");
+            fprintf(stderr, "search <idx> <query> \n");
             return 1;
         }
-        const char *idxpath = argv[2];
+
         const char *query_file = argv[3];
 
         char *query = read_utf8_file(query_file);
-        if (!query) { fprintf(stderr, "failed read query file\n"); return 1; }
+        if (!query)
+        {
+            fprintf(stderr, "failed read query file\n");
+            return 1;
+        }
+
         print_grams(query);
 
         InvertedIndex idx;
-        if (index_load(idxpath, &idx) != 0)
+        const char *invdx_path = argv[2];
+        if (index_load(invdx_path, &idx) != 0)
         {
-            fprintf(stderr, "failed load index\n");
+            fprintf(stderr, "failed to load index: %s\n", invdx_path);
             return 1;
         }
-        for (size_t i=0;i<strlen(query);i++) printf("%02x ", (unsigned char)query[i]);
-        printf("\n");
 
         uint32_t hashes[128];
         size_t hcount = query_1_2_gram_hashes(query, hashes, 128);
@@ -674,76 +1065,36 @@ int main(int argc, char **argv)
             return 1;
         }
 
-        uint32_t *lists_buf[128];
-        size_t sizes[128];
-        uint32_t *tmp_alloc[128];
-        size_t alloc_n = 0;
 
-        for (size_t i = 0; i < hcount; ++i)
+
+        PostingRef  results[1024];
+        size_t rcount = index_intersect_postings(
+            &idx,
+            hashes,
+            hcount,
+            results,
+            1024);
+
+        kotoba_dict d;
+        kotoba_dict_open(&d, dict_path, idx_path);
+
+        printf("Results (%zu):\n", rcount);
+        for (size_t i = 0; i < rcount; ++i)
         {
-            const Term *t = index_find_term(&idx, hashes[i]);
-            if (!t)
-            {
-                for (size_t a = 0; a < alloc_n; ++a)
-                    free(tmp_alloc[a]);
-                index_unload(&idx);
-                return 0;
-            }
-            size_t n = t->postings_count;
-            uint32_t *arr = malloc(n * sizeof(uint32_t));
-            for (size_t j = 0; j < n; ++j)
-                arr[j] = idx.postings[t->postings_offset + j].doc_id;
-            lists_buf[i] = arr;
-            sizes[i] = n;
-            tmp_alloc[alloc_n++] = arr;
+                printf(
+            "doc_id=%u reading_id=%u reading_variant=%u\n",
+            results[i].p->doc_id,
+            results[i].p->meta1,
+            results[i].p->meta2
+        );
+            print_entry(&d, results[i].p->doc_id);
         }
 
-        /* simple intersection */
-        size_t min_i = 0;
-        for (size_t i = 1; i < hcount; ++i)
-            if (sizes[i] < sizes[min_i])
-                min_i = i;
-        uint32_t *base = lists_buf[min_i];
-        size_t base_n = sizes[min_i];
-
-        for (size_t bi = 0; bi < base_n; ++bi)
-        {
-            uint32_t val = base[bi];
-            int ok = 1;
-            for (size_t j = 0; j < hcount; ++j)
-            {
-                if (j == min_i)
-                    continue;
-                uint32_t lo = 0, hi = (uint32_t)sizes[j];
-                while (lo < hi)
-                {
-                    uint32_t mid = (lo + hi) >> 1;
-                    uint32_t v = lists_buf[j][mid];
-                    if (v == val)
-                    {
-                        lo = hi = mid;
-                        break;
-                    }
-                    if (v < val)
-                        lo = mid + 1;
-                    else
-                        hi = mid;
-                }
-                if (lo >= sizes[j] || lists_buf[j][lo] != val)
-                {
-                    ok = 0;
-                    break;
-                }
-            }
-            if (ok)
-                printf("%u\n", val);
-        }
-
-        for (size_t a = 0; a < alloc_n; ++a)
-            free(tmp_alloc[a]);
         index_unload(&idx);
         return 0;
     }
+
+    /* ---------- unknown ---------- */
     else
     {
         fprintf(stderr, "unknown command\n");

@@ -68,4 +68,9 @@ if(WIN32)
             $<TARGET_FILE:libkotobaplus>
             "C:/Users/Jorge/Desktop/Proyectos/kotobaplus/qt-desktop/build/Desktop_Qt_6_9_1_MinGW_64_bit-Debug/debug"
     )
+    add_custom_command(TARGET libkotobaplus POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            $<TARGET_FILE:libkotobaplus>
+            "C:/Users/Jorge/Desktop/Proyectos/kotobaplus/xml-parser/bin"
+    )
 endif()

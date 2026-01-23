@@ -25,3 +25,6 @@ xml-parser\assets
 /build/
 /bin/
 *.dat
+*.tsv
+*.txt
+*.idx
