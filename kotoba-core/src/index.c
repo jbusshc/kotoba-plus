@@ -360,23 +360,7 @@ size_t index_term_postings(const InvertedIndex *idx, const Term *t, Posting *out
     return n;
 }
 
-/* ---------- query gram hashes from string ---------- */
-size_t query_gram_hashes(const char *q, uint32_t *out_hashes, size_t max)
-{
-    if (!q || !out_hashes || max == 0)
-        return 0;
-
-    struct QGramUD ud = {
-        .out = out_hashes,
-        .max = max,
-        .count = 0
-    };
-
-    utf8_grams_cb(q, query_capture_cb, &ud);
-    return ud.count;
-}
-
-
+ 
 /* intersect postings of multiple gram hashes
    - hashes: array de hashes de grams
    - hcount: cantidad de hashes

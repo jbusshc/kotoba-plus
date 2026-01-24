@@ -28,3 +28,6 @@ xml-parser\assets
 *.tsv
 *.txt
 *.idx
+!CMakeLists.txt
+assets/
+tsv/

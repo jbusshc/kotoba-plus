@@ -503,14 +503,22 @@ static char *read_utf8_file(const char *path)
 
 #define SEARCH_MAX_RESULTS 1024
 #define SEARCH_MAX_QUERY_HASHES 128
+
+typedef struct SearchIdxScore
+{
+    uint32_t doc_id;
+    int score;
+} SearchIdxScore;
+
 struct SearchContext
 {
     InvertedIndex *kanji_idx;
     InvertedIndex *reading_idx;
     InvertedIndex *gloss_idxs;
     bool is_gloss_active[KOTOBA_LANG_COUNT];
-    uint32_t *results;
+    PostingRef *results;
     uint32_t result_count;
+    SearchIdxScore *scores;
     kotoba_dict *dict;
 };
 
@@ -546,8 +554,9 @@ void init_search_context(struct SearchContext *ctx, kotoba_dict *dict)
     ctx->reading_idx = NULL;
     ctx->gloss_idxs = NULL;
     ctx->result_count = 0;
-    ctx->results = malloc(SEARCH_MAX_RESULTS * sizeof(uint32_t));
+    ctx->results = malloc(SEARCH_MAX_RESULTS * sizeof(PostingRef));
     ctx->dict = dict;
+    ctx->scores = malloc(SEARCH_MAX_RESULTS * sizeof(struct SearchIdxScore));
 
     ctx->kanji_idx = malloc(sizeof(InvertedIndex));
     if (ctx->kanji_idx && index_load("kanjis.idx", ctx->kanji_idx) != 0)
@@ -660,7 +669,7 @@ void query_search(struct SearchContext *ctx, const char *query)
     // Search Kanji index if query contains Kanji
     if (has_kanji(query) && ctx->kanji_idx)
     {
-        size_t rcount = index_intersect_hashes(
+        size_t rcount = index_intersect_postings(
             ctx->kanji_idx,
             mixed_hashes,
             mixed_hcount,
@@ -672,7 +681,7 @@ void query_search(struct SearchContext *ctx, const char *query)
     // Search Reading index
     if (ctx->reading_idx)
     {
-        size_t rcount = index_intersect_hashes(
+        size_t rcount = index_intersect_postings(
             ctx->reading_idx,
             mixed_hashes,
             mixed_hcount,
@@ -687,7 +696,7 @@ void query_search(struct SearchContext *ctx, const char *query)
         if (ctx->is_gloss_active[lang])
         {
             InvertedIndex *gloss_idx = &ctx->gloss_idxs[lang];
-            size_t rcount = index_intersect_hashes(
+            size_t rcount = index_intersect_postings(
                 gloss_idx,
                 hashes,
                 hcount,
@@ -698,6 +707,8 @@ void query_search(struct SearchContext *ctx, const char *query)
     }
 
     ctx->result_count = total_results;
+
+
 }
 
 void print_entry(const kotoba_dict *d, uint32_t i)
@@ -909,7 +920,7 @@ void write_all_tsv(const kotoba_dict *d)
 
     for (uint32_t i = 0; i < d->entry_count; ++i)
     {
-        entry_bin *e = kotoba_entry(d, i);
+        const entry_bin *e = kotoba_entry(d, i);
 
         for (uint32_t j = 0; j < e->k_elements_count; ++j)
         {
@@ -994,7 +1005,6 @@ int main(int argc, char **argv)
 
         if (read_tsv_pairs(tsv, &texts, &ids, &ids2, &ids3, &n, read_fourth_col) != 0)
             return 1;
-        printf("a");
         int rc;
         if (read_fourth_col)
             rc = index_build_from_pairs(out, texts, ids, ids2, ids3, n);
@@ -1004,7 +1014,7 @@ int main(int argc, char **argv)
         if (read_fourth_col)
         return rc == 0 ? 0 : 1;
     }
-
+ 
     /* ---------- search ---------- */
     else if (strcmp(argv[1], "search") == 0)
     {
@@ -1032,7 +1042,7 @@ int main(int argc, char **argv)
             fprintf(stderr, "failed to load index: %s\n", invdx_path);
             return 1;
         }
-
+ 
         uint32_t hashes[128];
         size_t hcount = query_gram_hashes(query, hashes, 128);
         if (hcount == 0)

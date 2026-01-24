@@ -109,33 +109,27 @@ void utf8_grams_cb(const char *s, gram_cb cb, void *ud)
     const uint8_t *p = (const uint8_t *)s;
     const uint8_t *prev = NULL;
     size_t prev_len = 0;
-    int has_bigram = 0;
 
-    /* primera pasada lógica: generar solo bigramas */
+    /* generate unigrams and bigrams in a single pass */
     while (*p)
     {
         size_t len = utf8_char_len(*p);
 
+        /* unigram: current character */
+        cb(p, len, ud);
+
+        /* bigram: previous + current character */
         if (prev)
         {
             uint8_t tmp[8];
             memcpy(tmp, prev, prev_len);
             memcpy(tmp + prev_len, p, len);
             cb(tmp, prev_len + len, ud);
-            has_bigram = 1;
         }
 
         prev = p;
         prev_len = len;
         p += len;
-    }
-
-    /* si no hubo bigramas → palabra de 1 carácter → generar unigrama */
-    if (!has_bigram)
-    {
-        p = (const uint8_t *)s;
-        size_t len = utf8_char_len(*p);
-        cb(p, len, ud);
     }
 }
 /* capture callback ud */

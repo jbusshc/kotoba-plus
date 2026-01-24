@@ -1,76 +1,39 @@
 cmake_minimum_required(VERSION 3.10)
-project(libkotobaplus C)
+project(kotoba-core C)
 
-# Estándar C
 set(CMAKE_C_STANDARD 99)
+set(CMAKE_C_STANDARD_REQUIRED ON)
 
-# Incluir headers
-include_directories(include)
+# Opción principal
+option(KOTOBA_BUILD_SHARED "Build kotoba-core as a shared library (DLL)" ON)
 
-# Archivos fuente
-file(GLOB_RECURSE SRC_FILES src/*.c)
+# Headers públicos
+set(KOTOBA_PUBLIC_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
-# Crear la librería dinámica
-add_library(libkotobaplus SHARED ${SRC_FILES})
-
-# Exportar símbolos en Windows
-if(MSVC OR WIN32)
-    target_compile_definitions(libkotobaplus PRIVATE KOTOBA_BUILD_DLL)
-endif()
-
-# Salida de archivos según plataforma
-if(WIN32)
-    set_target_properties(libkotobaplus PROPERTIES
-        OUTPUT_NAME "kotobaplus"
-        PREFIX ""    # Sin 'lib' en Windows
-        SUFFIX ".dll"
-    )
-elseif(APPLE)
-    set_target_properties(libkotobaplus PROPERTIES
-        OUTPUT_NAME "kotobaplus"
-        PREFIX "lib"
-        SUFFIX ".dylib"
-    )
-else()
-    set_target_properties(libkotobaplus PROPERTIES
-        OUTPUT_NAME "kotobaplus"
-        PREFIX "lib"
-        SUFFIX ".so"
-    )
-endif()
-
-# Directorios de salida organizados
-set_target_properties(libkotobaplus PROPERTIES
-    ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
-    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
-    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+# Fuentes
+file(GLOB_RECURSE KOTOBA_SRC
+    src/*.c
 )
 
-# SQLite3 support
-find_package(SQLite3 REQUIRED)
-target_include_directories(libkotobaplus PRIVATE ${SQLite3_INCLUDE_DIRS})
-target_link_libraries(libkotobaplus PRIVATE ${SQLite3_LIBRARIES})
+if(KOTOBA_BUILD_SHARED)
+    add_library(kotoba-core SHARED ${KOTOBA_SRC})
 
-# CJSON support
-find_package(CJSON REQUIRED)
-target_include_directories(libkotobaplus PRIVATE ${CJSON_INCLUDE_DIRS})
-target_link_libraries(libkotobaplus PRIVATE ${CJSON_LIBRARIES})
+    target_compile_definitions(kotoba-core PRIVATE KOTOBA_BUILD_DLL)
 
-# Copiar el DLL generado a dos carpetas específicas en Windows
-if(WIN32)
-    add_custom_command(TARGET libkotobaplus POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            $<TARGET_FILE:libkotobaplus>
-            "C:/Users/Jorge/Desktop/Proyectos/kotobaplus/cli-kotobaplus/bin"
-    )
-    add_custom_command(TARGET libkotobaplus POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            $<TARGET_FILE:libkotobaplus>
-            "C:/Users/Jorge/Desktop/Proyectos/kotobaplus/qt-desktop/build/Desktop_Qt_6_9_1_MinGW_64_bit-Debug/debug"
-    )
-    add_custom_command(TARGET libkotobaplus POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            $<TARGET_FILE:libkotobaplus>
-            "C:/Users/Jorge/Desktop/Proyectos/kotobaplus/xml-parser/bin"
-    )
+    if(WIN32)
+        set_target_properties(kotoba-core PROPERTIES
+            OUTPUT_NAME "kotoba-core"
+            PREFIX ""
+            SUFFIX ".dll"
+        )
+    endif()
+else()
+    add_library(kotoba-core OBJECT ${KOTOBA_SRC})
 endif()
+
+target_include_directories(kotoba-core
+    PUBLIC
+        ${KOTOBA_PUBLIC_INCLUDE_DIR}
+)
+
+# No target_link_libraries needed
