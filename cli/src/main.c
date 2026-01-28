@@ -1,7 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <libxml2/libxml/parser.h>
-#include <libxml2/libxml/tree.h>
+
 #include <stdbool.h>
 #if _WIN32
 #include <windows.h>
@@ -14,310 +13,12 @@
 #include "../../kotoba-core/include/kana.h"
 #include "../../kotoba-core/include/index.h"
 
-#include <sqlite3.h>
 
 const char *dict_path = "dict.kotoba";
 const char *idx_path = "dict.kotoba.idx";
 
-#define ROUTE_JMDICT_IDX 0
-#define MAX_ENTRIES 209000
-char *routes[] = {
-    "../assets/JMdict",
-};
-int routes_count = sizeof(routes) / sizeof(routes[0]);
-void parse_jmdict(xmlNodePtr root, kotoba_writer *writer)
-{
-    writer->entry_count = 0;
-    entry e;
-    for (xmlNodePtr cur_node = root->children; cur_node; cur_node = cur_node->next)
-    {
-        if (cur_node->type == XML_ELEMENT_NODE)
-        {
-            if (xmlStrcmp(cur_node->name, (const xmlChar *)"entry") == 0)
-            {
-                memset(&e, 0, sizeof(entry));
-                for (xmlNodePtr child_node = cur_node->children; child_node; child_node = child_node->next)
-                {
-                    if (child_node->type == XML_ELEMENT_NODE)
-                    {
-                        xmlChar *content = xmlNodeGetContent(child_node);
-                        if (xmlStrcmp(child_node->name, (const xmlChar *)"ent_seq") == 0)
-                        {
-                            e.ent_seq = atoi((const char *)content);
-                        }
-                        else if (xmlStrcmp(child_node->name, (const xmlChar *)"k_ele") == 0)
-                        {
-                            if (e.k_elements_count < MAX_K_ELEMENTS)
-                            {
-                                k_ele *k = &e.k_elements[e.k_elements_count];
-                                memset(k, 0, sizeof(k_ele));
-                                for (xmlNodePtr k_child = child_node->children; k_child; k_child = k_child->next)
-                                {
-                                    if (k_child->type == XML_ELEMENT_NODE)
-                                    {
-                                        xmlChar *k_content = xmlNodeGetContent(k_child);
-                                        if (xmlStrcmp(k_child->name, (const xmlChar *)"keb") == 0)
-                                        {
-                                            strncpy(k->keb, (const char *)k_content, MAX_KEB_LEN);
-                                        }
-                                        else if (xmlStrcmp(k_child->name, (const xmlChar *)"ke_inf") == 0)
-                                        {
-                                            if (k->ke_inf_count < MAX_KE_INF)
-                                                strncpy(k->ke_inf[k->ke_inf_count++], (const char *)k_content, MAX_KE_INF_LEN);
-                                            else
-                                                printf("[WARN] ent_seq=%u: se excedió MAX_KE_INF (%d)\n", e.ent_seq, MAX_KE_INF);
-                                        }
-                                        else if (xmlStrcmp(k_child->name, (const xmlChar *)"ke_pri") == 0)
-                                        {
-                                            if (k->ke_pri_count < MAX_KE_PRI)
-                                                strncpy(k->ke_pri[k->ke_pri_count++], (const char *)k_content, MAX_KE_PRI_LEN);
-                                            else
-                                                printf("[WARN] ent_seq=%u: se excedió MAX_KE_PRI (%d)\n", e.ent_seq, MAX_KE_PRI);
-                                        }
-                                        xmlFree(k_content);
-                                    }
-                                }
-                                e.k_elements_count++;
-                            }
-                            else
-                            {
-                                printf("[WARN] ent_seq=%u: se excedió MAX_K_ELEMENTS (%d)\n", e.ent_seq, MAX_K_ELEMENTS);
-                            }
-                        }
-                        else if (xmlStrcmp(child_node->name, (const xmlChar *)"r_ele") == 0)
-                        {
-                            if (e.r_elements_count < MAX_R_ELEMENTS)
-                            {
-                                r_ele *r = &e.r_elements[e.r_elements_count];
-                                memset(r, 0, sizeof(r_ele));
-                                for (xmlNodePtr r_child = child_node->children; r_child; r_child = r_child->next)
-                                {
-                                    if (r_child->type == XML_ELEMENT_NODE)
-                                    {
-                                        xmlChar *r_content = xmlNodeGetContent(r_child);
-                                        if (xmlStrcmp(r_child->name, (const xmlChar *)"reb") == 0)
-                                        {
-                                            strncpy(r->reb, (const char *)r_content, MAX_REB_LEN);
-                                        }
-                                        else if (xmlStrcmp(r_child->name, (const xmlChar *)"re_nokanji") == 0)
-                                        {
-                                            r->re_nokanji = true;
-                                        }
-                                        else if (xmlStrcmp(r_child->name, (const xmlChar *)"re_restr") == 0)
-                                        {
-                                            if (r->re_restr_count < MAX_RE_RESTR)
-                                                strncpy(r->re_restr[r->re_restr_count++], (const char *)r_content, MAX_RE_RESTR_LEN);
-                                            else
-                                                printf("[WARN] ent_seq=%u: se excedió MAX_RE_RESTR (%d)\n", e.ent_seq, MAX_RE_RESTR);
-                                        }
-                                        else if (xmlStrcmp(r_child->name, (const xmlChar *)"re_inf") == 0)
-                                        {
-                                            if (r->re_inf_count < MAX_RE_INF)
-                                                strncpy(r->re_inf[r->re_inf_count++], (const char *)r_content, MAX_RE_INF_LEN);
-                                            else
-                                                printf("[WARN] ent_seq=%u: se excedió MAX_RE_INF (%d)\n", e.ent_seq, MAX_RE_INF);
-                                        }
-                                        else if (xmlStrcmp(r_child->name, (const xmlChar *)"re_pri") == 0)
-                                        {
-                                            if (r->re_pri_count < MAX_RE_PRI)
-                                                strncpy(r->re_pri[r->re_pri_count++], (const char *)r_content, MAX_RE_PRI_LEN);
-                                            else
-                                                printf("[WARN] ent_seq=%u: se excedió MAX_RE_PRI (%d)\n", e.ent_seq, MAX_RE_PRI);
-                                        }
-                                        xmlFree(r_content);
-                                    }
-                                }
-                                e.r_elements_count++;
-                            }
-                            else
-                            {
-                                printf("[WARN] ent_seq=%u: se excedió MAX_R_ELEMENTS (%d)\n", e.ent_seq, MAX_R_ELEMENTS);
-                            }
-                        }
-                        else if (xmlStrcmp(child_node->name, (const xmlChar *)"sense") == 0)
-                        {
-                            if (e.senses_count < MAX_SENSES)
-                            {
-                                sense *s = &e.senses[e.senses_count];
-                                memset(s, 0, sizeof(sense));
-                                s->lang = KOTOBA_LANG_EN; // default
-                                for (xmlNodePtr s_child = child_node->children; s_child; s_child = s_child->next)
-                                {
-                                    if (s_child->type == XML_ELEMENT_NODE)
-                                    {
-                                        xmlChar *s_content = xmlNodeGetContent(s_child);
-                                        if (xmlStrcmp(s_child->name, (const xmlChar *)"stagk") == 0)
-                                        {
-                                            if (s->stagk_count < MAX_STAGK)
-                                                strncpy(s->stagk[s->stagk_count++], (const char *)s_content, MAX_STAGK_LEN);
-                                            else
-                                                printf("[WARN] ent_seq=%u: se excedió MAX_STAGK (%d)\n", e.ent_seq, MAX_STAGK);
-                                        }
-                                        else if (xmlStrcmp(s_child->name, (const xmlChar *)"stagr") == 0)
-                                        {
-                                            if (s->stagr_count < MAX_STAGR)
-                                                strncpy(s->stagr[s->stagr_count++], (const char *)s_content, MAX_STAGR_LEN);
-                                            else
-                                                printf("[WARN] ent_seq=%u: se excedió MAX_STAGR (%d)\n", e.ent_seq, MAX_STAGR);
-                                        }
-                                        else if (xmlStrcmp(s_child->name, (const xmlChar *)"pos") == 0)
-                                        {
-                                            if (s->pos_count < MAX_POS)
-                                                strncpy(s->pos[s->pos_count++], (const char *)s_content, MAX_POS_LEN);
-                                            else
-                                                printf("[WARN] ent_seq=%u: se excedió MAX_POS (%d)\n", e.ent_seq, MAX_POS);
-                                        }
-                                        else if (xmlStrcmp(s_child->name, (const xmlChar *)"xref") == 0)
-                                        {
-                                            if (s->xref_count < MAX_XREF)
-                                                strncpy(s->xref[s->xref_count++], (const char *)s_content, MAX_XREF_LEN);
-                                            else
-                                                printf("[WARN] ent_seq=%u: se excedió MAX_XREF (%d)\n", e.ent_seq, MAX_XREF);
-                                        }
-                                        else if (xmlStrcmp(s_child->name, (const xmlChar *)"ant") == 0)
-                                        {
-                                            if (s->ant_count < MAX_ANT)
-                                                strncpy(s->ant[s->ant_count++], (const char *)s_content, MAX_ANT_LEN);
-                                            else
-                                                printf("[WARN] ent_seq=%u: se excedió MAX_ANT (%d)\n", e.ent_seq, MAX_ANT);
-                                        }
-                                        else if (xmlStrcmp(s_child->name, (const xmlChar *)"field") == 0)
-                                        {
-                                            if (s->field_count < MAX_FIELD)
-                                                strncpy(s->field[s->field_count++], (const char *)s_content, MAX_FIELD_LEN);
-                                            else
-                                                printf("[WARN] ent_seq=%u: se excedió MAX_FIELD (%d)\n", e.ent_seq, MAX_FIELD);
-                                        }
-                                        else if (xmlStrcmp(s_child->name, (const xmlChar *)"misc") == 0)
-                                        {
-                                            if (s->misc_count < MAX_MISC)
-                                                strncpy(s->misc[s->misc_count++], (const char *)s_content, MAX_MISC_LEN);
-                                            else
-                                                printf("[WARN] ent_seq=%u: se excedió MAX_MISC (%d)\n", e.ent_seq, MAX_MISC);
-                                        }
-                                        else if (xmlStrcmp(s_child->name, (const xmlChar *)"s_inf") == 0)
-                                        {
-                                            if (s->s_inf_count < MAX_S_INF)
-                                                strncpy(s->s_inf[s->s_inf_count++], (const char *)s_content, MAX_S_INF_LEN);
-                                            else
-                                                printf("[WARN] ent_seq=%u: se excedió MAX_S_INF (%d)\n", e.ent_seq, MAX_S_INF);
-                                        }
-                                        else if (xmlStrcmp(s_child->name, (const xmlChar *)"lsource") == 0)
-                                        {
-                                            if (s->lsource_count < MAX_LSOURCE)
-                                                strncpy(s->lsource[s->lsource_count++], (const char *)s_content, MAX_LSOURCE_LEN);
-                                            else
-                                                printf("[WARN] ent_seq=%u: se excedió MAX_LSOURCE (%d)\n", e.ent_seq, MAX_LSOURCE);
-                                        }
-                                        else if (xmlStrcmp(s_child->name, (const xmlChar *)"dial") == 0)
-                                        {
-                                            if (s->dial_count < MAX_DIAL)
-                                                strncpy(s->dial[s->dial_count++], (const char *)s_content, MAX_DIAL_LEN);
-                                            else
-                                                printf("[WARN] ent_seq=%u: se excedió MAX_DIAL (%d)\n", e.ent_seq, MAX_DIAL);
-                                        }
-                                        else if (xmlStrcmp(s_child->name, (const xmlChar *)"gloss") == 0)
-                                        {
-                                            // Set lang if first gloss and lang attribute exists
-                                            if (s->gloss_count == 0)
-                                            {
-                                                xmlChar *lang_attr = xmlGetProp(s_child, (const xmlChar *)"lang");
-                                                if (lang_attr)
-                                                {
-                                                    if (xmlStrcmp(lang_attr, (const xmlChar *)"eng") == 0)
-                                                        s->lang = KOTOBA_LANG_EN;
-                                                    else if (xmlStrcmp(lang_attr, (const xmlChar *)"fra") == 0 || xmlStrcmp(lang_attr, (const xmlChar *)"fre") == 0)
-                                                        s->lang = KOTOBA_LANG_FR;
-                                                    else if (xmlStrcmp(lang_attr, (const xmlChar *)"deu") == 0 || xmlStrcmp(lang_attr, (const xmlChar *)"ger") == 0)
-                                                        s->lang = KOTOBA_LANG_DE;
-                                                    else if (xmlStrcmp(lang_attr, (const xmlChar *)"rus") == 0)
-                                                        s->lang = KOTOBA_LANG_RU;
-                                                    else if (xmlStrcmp(lang_attr, (const xmlChar *)"spa") == 0)
-                                                        s->lang = KOTOBA_LANG_ES;
-                                                    else if (xmlStrcmp(lang_attr, (const xmlChar *)"por") == 0)
-                                                        s->lang = KOTOBA_LANG_PT;
-                                                    else if (xmlStrcmp(lang_attr, (const xmlChar *)"ita") == 0)
-                                                        s->lang = KOTOBA_LANG_IT;
-                                                    else if (xmlStrcmp(lang_attr, (const xmlChar *)"nld") == 0 || xmlStrcmp(lang_attr, (const xmlChar *)"dut") == 0)
-                                                        s->lang = KOTOBA_LANG_NL;
-                                                    else if (xmlStrcmp(lang_attr, (const xmlChar *)"hun") == 0)
-                                                        s->lang = KOTOBA_LANG_HU;
-                                                    else if (xmlStrcmp(lang_attr, (const xmlChar *)"swe") == 0)
-                                                        s->lang = KOTOBA_LANG_SV;
-                                                    else if (xmlStrcmp(lang_attr, (const xmlChar *)"ces") == 0 || xmlStrcmp(lang_attr, (const xmlChar *)"cze") == 0)
-                                                        s->lang = KOTOBA_LANG_CS;
-                                                    else if (xmlStrcmp(lang_attr, (const xmlChar *)"pol") == 0)
-                                                        s->lang = KOTOBA_LANG_PL;
-                                                    else if (xmlStrcmp(lang_attr, (const xmlChar *)"ron") == 0 || xmlStrcmp(lang_attr, (const xmlChar *)"rum") == 0)
-                                                        s->lang = KOTOBA_LANG_RO;
-                                                    else if (xmlStrcmp(lang_attr, (const xmlChar *)"heb") == 0)
-                                                        s->lang = KOTOBA_LANG_HE;
-                                                    else if (xmlStrcmp(lang_attr, (const xmlChar *)"ara") == 0)
-                                                        s->lang = KOTOBA_LANG_AR;
-                                                    else if (xmlStrcmp(lang_attr, (const xmlChar *)"tur") == 0)
-                                                        s->lang = KOTOBA_LANG_TR;
-                                                    else if (xmlStrcmp(lang_attr, (const xmlChar *)"tha") == 0)
-                                                        s->lang = KOTOBA_LANG_TH;
-                                                    else if (xmlStrcmp(lang_attr, (const xmlChar *)"vie") == 0)
-                                                        s->lang = KOTOBA_LANG_VI;
-                                                    else if (xmlStrcmp(lang_attr, (const xmlChar *)"ind") == 0)
-                                                        s->lang = KOTOBA_LANG_ID;
-                                                    else if (xmlStrcmp(lang_attr, (const xmlChar *)"msa") == 0)
-                                                        s->lang = KOTOBA_LANG_MS;
-                                                    else if (xmlStrcmp(lang_attr, (const xmlChar *)"kor") == 0)
-                                                        s->lang = KOTOBA_LANG_KO;
-                                                    else if (xmlStrcmp(lang_attr, (const xmlChar *)"zho") == 0)
-                                                        s->lang = KOTOBA_LANG_ZH;
-                                                    else if (xmlStrcmp(lang_attr, (const xmlChar *)"cmn") == 0)
-                                                        s->lang = KOTOBA_LANG_ZH_CN;
-                                                    else if (xmlStrcmp(lang_attr, (const xmlChar *)"yue") == 0)
-                                                        s->lang = KOTOBA_LANG_ZH_TW;
-                                                    else if (xmlStrcmp(lang_attr, (const xmlChar *)"wuu") == 0)
-                                                        s->lang = KOTOBA_LANG_ZH;
-                                                    else if (xmlStrcmp(lang_attr, (const xmlChar *)"nan") == 0)
-                                                        s->lang = KOTOBA_LANG_ZH;
-                                                    else if (xmlStrcmp(lang_attr, (const xmlChar *)"hak") == 0)
-                                                        s->lang = KOTOBA_LANG_ZH;
-                                                    else if (xmlStrcmp(lang_attr, (const xmlChar *)"fas") == 0 || xmlStrcmp(lang_attr, (const xmlChar *)"per") == 0)
-                                                        s->lang = KOTOBA_LANG_FA;
-                                                    else if (xmlStrcmp(lang_attr, (const xmlChar *)"epo") == 0)
-                                                        s->lang = KOTOBA_LANG_EO;
-                                                    else if (xmlStrcmp(lang_attr, (const xmlChar *)"slv") == 0)
-                                                        s->lang = KOTOBA_LANG_SLV;
-                                                    else
-                                                        s->lang = KOTOBA_LANG_UNK;
-                                                    xmlFree(lang_attr);
-                                                }
-                                            }
-                                            if (s->gloss_count < MAX_GLOSS)
-                                                strncpy(s->gloss[s->gloss_count++], (const char *)s_content, MAX_GLOSS_LEN);
-                                            else
-                                                printf("[WARN] ent_seq=%u: se excedió MAX_GLOSS (%d)\n", e.ent_seq, MAX_GLOSS);
-                                        }
-                                        xmlFree(s_content);
-                                    }
-                                }
-                                e.senses_count++;
-                            }
-                            else
-                            {
-                                printf("[WARN] ent_seq=%u: se excedió MAX_SENSES (%d)\n", e.ent_seq, MAX_SENSES);
-                            }
-                        }
-                        xmlFree(content);
-                    }
-                }
-                // write_entry_with_index(output_filename, idx_filename, &e);
-                kotoba_writer_write_entry(writer, &e);
-            }
-        }
-    }
-}
 
-/* ================= main ================= */
-// index_cli.c
 #define _POSIX_C_SOURCE 200809L
-#include "index.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -454,7 +155,6 @@ static void free_pairs(const char **texts, uint32_t *ids, uint8_t *ids2, uint8_t
     free(ids3);
 }
 
-
 void print_grams(const char *s)
 {
     void cb(const uint8_t *p, size_t len, void *ud)
@@ -504,212 +204,533 @@ static char *read_utf8_file(const char *path)
 #define SEARCH_MAX_RESULTS 1024
 #define SEARCH_MAX_QUERY_HASHES 128
 
-typedef struct SearchIdxScore
+typedef struct
 {
-    uint32_t doc_id;
-    int score;
-} SearchIdxScore;
+    const char *s;
+    uint8_t len;
+    char first;
+    uint8_t _pad[6]; // pad to 16 bytes (8-byte aligned)
+} query_t;
+
+enum InputTypeFlag
+{
+    INPUT_TYPE_NONE = 0,
+    INPUT_TYPE_KANJI = 1,
+    INPUT_TYPE_KANA = 2,
+    INPUT_TYPE_ROMAJI = 4
+};
+
+int get_input_type(const char *query)
+{
+    if (!query || *query == '\0')
+        return INPUT_TYPE_NONE;
+    int type = INPUT_TYPE_ROMAJI;
+    const uint8_t *p = (const uint8_t *)query;
+    while (*p)
+    {
+        int len = utf8_char_len(*p);
+        uint32_t codepoint = 0;
+        if (len == 3)
+        {
+            codepoint = ((p[0] & 0x0F) << 12) | ((p[1] & 0x3F) << 6) | (p[2] & 0x3F);
+            if (codepoint >= 0x4E00 && codepoint <= 0x9FAF)
+            {
+                type = type | INPUT_TYPE_KANJI;
+            }
+            else if ((codepoint >= 0x3040 && codepoint <= 0x309F) || // Hiragana
+                     (codepoint >= 0x30A0 && codepoint <= 0x30FF))
+            { // Katakana
+                type = type | INPUT_TYPE_KANA;
+            }
+        }
+        p += len;
+    }
+    return type;
+}
+
+static inline int
+word_contains_q(const char *word, int wlen,
+                const query_t *q)
+{
+    if (q->len > wlen)
+        return 0;
+
+    const char *end = word + wlen - q->len;
+
+    if (q->len == 1)
+    {
+        for (const char *p = word; p <= end; ++p)
+            if (*p == q->first)
+                return 1;
+        return 0;
+    }
+
+    for (const char *p = word; p <= end; ++p)
+    {
+        if (*p == q->first &&
+            memcmp(p + 1, q->s + 1, q->len - 1) == 0)
+            return 1;
+    }
+    return 0;
+}
+
+typedef struct
+{
+    uint32_t results_idx; // index in results buffer
+    uint16_t score;       // lower is better
+    uint16_t type;        // 0=kanji,1=reading,2+=gloss lang index
+
+} SearchResultMeta;
+
+static inline void
+sort_scores(SearchResultMeta *a, int n)
+{
+    for (int i = 1; i < n; ++i)
+    {
+        SearchResultMeta key = a[i];
+        int j = i - 1;
+
+        /* menor score = mejor */
+        while (j >= 0 && a[j].score > key.score)
+        {
+            a[j + 1] = a[j];
+            --j;
+        }
+        a[j + 1] = key;
+    }
+}
 
 struct SearchContext
 {
+    bool is_gloss_active[KOTOBA_LANG_COUNT]; // 28 bytes
+    uint8_t _pad0[4];                        // pad to 32 bytes (8-byte aligned)
+    query_t query;
+    kotoba_dict *dict;
     InvertedIndex *kanji_idx;
     InvertedIndex *reading_idx;
-    InvertedIndex *gloss_idxs;
-    bool is_gloss_active[KOTOBA_LANG_COUNT];
-    PostingRef *results;
-    uint32_t result_count;
-    SearchIdxScore *scores;
-    kotoba_dict *dict;
+    InvertedIndex **gloss_idxs;
+    PostingRef *results_buffer;
+    uint32_t *results_doc_ids;
+    SearchResultMeta *results;
+    uint32_t results_left;
+    uint32_t results_processed;
+    uint32_t page_size;
+    uint32_t last_page;
 };
+
+#define DEFAULT_PAGE_SIZE 10
+
+void init_search_context(struct SearchContext *ctx,
+                         bool *glosses_active,
+                         kotoba_dict *dict,
+                         uint32_t page_size)
+{
+    memset(ctx, 0, sizeof(struct SearchContext));
+    ctx->dict = dict;
+    ctx->page_size = page_size > 0 ? page_size : DEFAULT_PAGE_SIZE;
+    ctx->results_left = 0;
+    ctx->results_processed = 0;
+
+    if (glosses_active)
+    {
+        for (int i = 0; i < KOTOBA_LANG_COUNT; ++i)
+        {
+            ctx->is_gloss_active[i] = glosses_active[i];
+        }
+    }
+
+    ctx->kanji_idx = malloc(sizeof(InvertedIndex));
+    ctx->reading_idx = malloc(sizeof(InvertedIndex));
+    ctx->gloss_idxs = calloc(KOTOBA_LANG_COUNT, sizeof(InvertedIndex *));
+    if (!ctx->kanji_idx || !ctx->reading_idx || !ctx->gloss_idxs) {
+        fprintf(stderr, "Memory allocation failed in init_search_context\n");
+        exit(1);
+    }
+
+    if (index_load("kanjis.idx", ctx->kanji_idx) != 0) {
+        fprintf(stderr, "Failed to load kanjis.idx\n");
+        exit(1);
+    }
+    if (index_load("readings.idx", ctx->reading_idx) != 0) {
+        fprintf(stderr, "Failed to load readings.idx\n");
+        exit(1);
+    }
+
+    // Only allocate and load gloss indexes for active languages
+    for (int i = 0; i < KOTOBA_LANG_COUNT; ++i)
+    {
+        if (ctx->is_gloss_active[i])
+        {
+            ctx->gloss_idxs[i] = malloc(sizeof(InvertedIndex));
+            if (!ctx->gloss_idxs[i]) {
+                fprintf(stderr, "Memory allocation failed for gloss_idxs[%d]\n", i);
+                exit(1);
+            }
+            char fname[64];
+            // You may want to use a mapping for filenames instead of this switch
+            switch (i) {
+                case KOTOBA_LANG_EN: strcpy(fname, "gloss_en.idx"); break;
+                case KOTOBA_LANG_ES: strcpy(fname, "gloss_es.idx"); break;
+                // Add more cases as needed for other languages
+                default: snprintf(fname, sizeof(fname), "gloss_%d.idx", i); break;
+            }
+            if (index_load(fname, ctx->gloss_idxs[i]) != 0) {
+                fprintf(stderr, "Failed to load %s\n", fname);
+                free(ctx->gloss_idxs[i]);
+                ctx->gloss_idxs[i] = NULL;
+            }
+        }
+        else
+        {
+            ctx->gloss_idxs[i] = NULL;
+        }
+    }
+
+    ctx->results_doc_ids = malloc(sizeof(uint32_t) * SEARCH_MAX_RESULTS);
+    ctx->results = malloc(sizeof(SearchResultMeta) * SEARCH_MAX_RESULTS);
+    ctx->results_buffer = malloc(sizeof(PostingRef) * SEARCH_MAX_RESULTS);
+
+    if (!ctx->results_doc_ids || !ctx->results || !ctx->results_buffer) {
+        fprintf(stderr, "Memory allocation failed for results buffers\n");
+        exit(1);
+    }
+}
 
 void free_search_context(struct SearchContext *ctx)
 {
     if (ctx->kanji_idx)
     {
         index_unload(ctx->kanji_idx);
-        free(ctx->kanji_idx);
     }
     if (ctx->reading_idx)
     {
         index_unload(ctx->reading_idx);
-        free(ctx->reading_idx);
     }
-    if (ctx->gloss_idxs)
+    for (int i = 0; i < KOTOBA_LANG_COUNT; ++i)
     {
-        // debug
-        for (size_t i = 0; i < KOTOBA_LANG_COUNT; ++i)
+        if (ctx->gloss_idxs[i])
         {
-            if (ctx->gloss_idxs[i].hdr)
-            {
-                index_unload(&ctx->gloss_idxs[i]);
-            }
-        }
-        free(ctx->gloss_idxs);
-    }
-}
-
-void init_search_context(struct SearchContext *ctx, kotoba_dict *dict)
-{
-    ctx->kanji_idx = NULL;
-    ctx->reading_idx = NULL;
-    ctx->gloss_idxs = NULL;
-    ctx->result_count = 0;
-    ctx->results = malloc(SEARCH_MAX_RESULTS * sizeof(PostingRef));
-    ctx->dict = dict;
-    ctx->scores = malloc(SEARCH_MAX_RESULTS * sizeof(struct SearchIdxScore));
-
-    ctx->kanji_idx = malloc(sizeof(InvertedIndex));
-    if (ctx->kanji_idx && index_load("kanjis.idx", ctx->kanji_idx) != 0)
-    {
-        free(ctx->kanji_idx);
-        ctx->kanji_idx = NULL;
-    }
-
-    ctx->reading_idx = malloc(sizeof(InvertedIndex));
-    if (ctx->reading_idx && index_load("readings.idx", ctx->reading_idx) != 0)
-    {
-        free(ctx->reading_idx);
-        ctx->reading_idx = NULL;
-    }
-
-    ctx->gloss_idxs = calloc(KOTOBA_LANG_COUNT, sizeof(InvertedIndex));
-    if (ctx->gloss_idxs)
-    {
-        if (ctx->gloss_idxs)
-        {
-            // Only open English gloss index for debugging
-            if (index_load("gloss_en.idx", &ctx->gloss_idxs[KOTOBA_LANG_EN]) != 0)
-            {
-                // If loading fails, set header to NULL for safety
-                ctx->gloss_idxs[KOTOBA_LANG_EN].hdr = NULL;
-                ctx->is_gloss_active[KOTOBA_LANG_EN] = false;
-            }
-            else
-            {
-                ctx->is_gloss_active[KOTOBA_LANG_EN] = true;
-            }
-
-            if (index_load("gloss_es.idx", &ctx->gloss_idxs[KOTOBA_LANG_ES]) != 0)
-            {
-                ctx->gloss_idxs[KOTOBA_LANG_ES].hdr = NULL;
-                ctx->is_gloss_active[KOTOBA_LANG_ES] = false;
-            }
-            else
-            {
-                ctx->is_gloss_active[KOTOBA_LANG_ES] = true;
-            }
-            // All other gloss_idxs remain uninitialized (NULL)
+            index_unload(ctx->gloss_idxs[i]);
+            ctx->gloss_idxs[i] = NULL;
         }
     }
+    free(ctx->results_doc_ids);
+    free(ctx->results);
+    free(ctx->results_buffer);
+
+    for (int i = 0; i < KOTOBA_LANG_COUNT; ++i)
+    {
+        if (ctx->gloss_idxs[i])
+        {
+            free(ctx->gloss_idxs[i]);
+        }
+    }
+    free(ctx->gloss_idxs);
 }
 
 void reset_search_context(struct SearchContext *ctx)
 {
-    ctx->result_count = 0;
+    ctx->results_left = 0;
+    ctx->results_processed = 0;
+    ctx->last_page = 0;
 }
 
-int has_kanji(const char *query)
-{
-    const uint8_t *p = (const uint8_t *)query;
-    while (*p)
-    {
-        size_t len = utf8_char_len(*p);
-        if (len == 3)
-        { // Kanji characters are typically 3 bytes in UTF-8
-            uint32_t codepoint = 0;
-            if (len == 3)
-            {
-                codepoint = ((p[0] & 0x0F) << 12) | ((p[1] & 0x3F) << 6) | (p[2] & 0x3F);
-            }
-            if (codepoint >= 0x4E00 && codepoint <= 0x9FAF)
-            {
-                return 1; // Found a Kanji character
-            }
-        }
-        p += len;
-    }
-    return 0; // No Kanji characters found
-}
-
-// Devuelve 0 si es exacta, MAX_SCORE si no hay substring, o diferencia de longitudes si contiene
-#define MAX_SCORE 1000000
-
-int score_substr(const char *haystack, const char *needle, size_t nlen, size_t hlen)
-{
-    if (!*needle)
-        return 0;
-    if (nlen > hlen)
-        return MAX_SCORE;
-    if (strcmp(haystack, needle) == 0)
-        return 0;
-    const char *pos = strstr(haystack, needle);
-    if (!pos)
-        return MAX_SCORE;
-    return (int)(hlen - nlen);
-}
-
-void query_search(struct SearchContext *ctx, const char *query)
+void query_results(struct SearchContext *ctx, const char *query)
 {
     reset_search_context(ctx);
-
+    query_t q;
+    q.s = query;
+    q.len = (uint8_t)strlen(query);
+    q.first = query[0];
     uint32_t hashes[SEARCH_MAX_QUERY_HASHES];
-    size_t hcount = query_gram_hashes(query, hashes, SEARCH_MAX_QUERY_HASHES);
+    int hcount = query_gram_hashes(query, hashes, SEARCH_MAX_QUERY_HASHES);
     if (hcount == 0)
     {
         fprintf(stderr, "no grams from query\n");
         return;
     }
-
-    size_t total_results = 0;
     char mixed[256];
     mixed_to_hiragana(query, mixed, sizeof(mixed));
+
+    query_t mixed_q;
+    mixed_q.s = mixed;
+    mixed_q.len = (uint8_t)strlen(mixed);
+    mixed_q.first = mixed[0];
     uint32_t mixed_hashes[SEARCH_MAX_QUERY_HASHES];
-    size_t mixed_hcount = query_gram_hashes(mixed, mixed_hashes, SEARCH_MAX_QUERY_HASHES);
-
+    int mixed_hcount = query_gram_hashes(mixed, mixed_hashes, SEARCH_MAX_QUERY_HASHES);
+    InvertedIndex *kanji_idx = ctx->kanji_idx;
+    InvertedIndex *reading_idx = ctx->reading_idx;
+    InvertedIndex **gloss_idxs = ctx->gloss_idxs;
+    kotoba_dict *dict = ctx->dict;
+    PostingRef *results_buffer = ctx->results_buffer;
+    SearchResultMeta *results_meta = ctx->results; 
+    int total_results = 0;
+    int input_type = get_input_type(query);
     // Search Kanji index if query contains Kanji
-    if (has_kanji(query) && ctx->kanji_idx)
+
+    if (input_type & INPUT_TYPE_KANJI && kanji_idx)
     {
-        size_t rcount = index_intersect_postings(
-            ctx->kanji_idx,
+        int rcount = index_intersect_postings(
+            kanji_idx,
             mixed_hashes,
             mixed_hcount,
-            ctx->results + total_results,
-            SEARCH_MAX_RESULTS - total_results);
-        total_results += rcount;
-    }
+            results_buffer,
+            SEARCH_MAX_RESULTS);
 
-    // Search Reading index
-    if (ctx->reading_idx)
-    {
-        size_t rcount = index_intersect_postings(
-            ctx->reading_idx,
-            mixed_hashes,
-            mixed_hcount,
-            ctx->results + total_results,
-            SEARCH_MAX_RESULTS - total_results);
-        total_results += rcount;
-    }
-
-    // Search active Gloss indexes (use plain query, not mixed)
-    for (size_t lang = 0; lang < KOTOBA_LANG_COUNT; ++lang)
-    {
-        if (ctx->is_gloss_active[lang])
+        int discarded = 0;
+        // getting scores
+        for (int i = 0; i < rcount; ++i)
         {
-            InvertedIndex *gloss_idx = &ctx->gloss_idxs[lang];
-            size_t rcount = index_intersect_postings(
-                gloss_idx,
-                hashes,
-                hcount,
-                ctx->results + total_results,
-                SEARCH_MAX_RESULTS - total_results);
-            total_results += rcount;
+            const entry_bin *e = kotoba_entry(dict, results_buffer[i].p->doc_id);
+            int k_elem_id = results_buffer[i].p->meta1;
+            const k_ele_bin *k_ele = kotoba_k_ele(dict, e, k_elem_id);
+            kotoba_str keb = kotoba_keb(dict, k_ele);
+
+            if (mixed_q.len > keb.len)
+            { // if query longer than keb, false positive
+                discarded++;
+                continue;
+            }
+
+            results_meta[i].results_idx = i;
+            results_meta[i].score = (uint16_t)keb.len;
+            results_meta[i].type = 0; // kanji
+        }
+        total_results += rcount - discarded;
+    }
+
+    else if (reading_idx)
+    {
+        printf("parameters: mixed='%s' (%d hashes), space left: %u\n", mixed, mixed_hcount, SEARCH_MAX_RESULTS - total_results);
+        int rcount = index_intersect_postings(
+            reading_idx,
+            mixed_hashes,
+            mixed_hcount,
+            results_buffer + total_results,
+            SEARCH_MAX_RESULTS - total_results);
+        int base = total_results;
+
+        int discarded = 0;
+        // getting scores
+        for (int i = 0; i < rcount; ++i)
+        {
+            const entry_bin *e = kotoba_entry(
+                dict,
+                results_buffer[base + i].p->doc_id);
+            int r_elem_id = results_buffer[base + i].p->meta1;
+            const r_ele_bin *r_ele = kotoba_r_ele(dict, e, r_elem_id);
+            kotoba_str reb = kotoba_reb(dict, r_ele);
+
+            if (mixed_q.len > reb.len)
+            { // if query longer than reb, false positive
+                discarded++;
+                continue;
+            }
+
+            results_meta[base + i].results_idx = base + i;
+            results_meta[base + i].score = (uint16_t)reb.len;
+            results_meta[base + i].type = 1; // reading
+        }
+        total_results += rcount - discarded;
+    }
+
+    /*
+    if (!(input_type &  (INPUT_TYPE_KANJI | INPUT_TYPE_KANA ) )) {
+    // Search gloss indexes
+        for (int lang = 0; lang < KOTOBA_LANG_COUNT; ++lang)
+        {
+            if (ctx->is_gloss_active[lang] && gloss_idxs[lang])
+            {
+                int rcount = index_intersect_postings(
+                    gloss_idxs[lang],
+                    hashes,
+                    hcount,
+                    &results_buffer[total_results],
+                    SEARCH_MAX_RESULTS - total_results);
+                int base = total_results;
+
+                int discarded = 0;
+                // getting scores
+                for (int i = 0; i < rcount; ++i)
+                {
+                    const entry_bin *e = kotoba_entry(
+                        dict,
+                        results_buffer[base + i].p->doc_id);
+                    int s_elem_id = results_buffer[base + i].p->meta1;
+                    int gloss_id = results_buffer[base + i].p->meta2;
+                    const sense_bin *s = kotoba_sense(dict, e, s_elem_id);
+                    kotoba_str gloss = kotoba_gloss(dict, s, gloss_id);
+
+                    if (q.len > gloss.len)
+                    { // if query longer than gloss, false positive
+                        discarded++;
+                        continue;
+                    }
+
+                    results_meta[base + i].results_idx = base + i;
+                    results_meta[base + i].score = (uint16_t)gloss.len;
+                    results_meta[base + i].type = 2; // + lang; // gloss lang index
+                }
+                total_results += rcount - discarded;
+            }
+        } 
+    }
+    */
+
+    printf("mixed query: '%s' (%d hashes)\n", mixed, mixed_hcount);
+    printf("input type: %s%s%s\n",
+           (input_type & INPUT_TYPE_KANJI) ? "KANJI " : "",
+           (input_type & INPUT_TYPE_KANA) ? "KANA " : "",
+           (input_type & INPUT_TYPE_ROMAJI) ? "ROMAJI " : "");
+
+    // end
+    ctx->query = q;
+    ctx->results_left = total_results;
+}
+
+void query_next_page(struct SearchContext *ctx)
+{
+    kotoba_dict *dict = ctx->dict;
+    PostingRef *results_buffer = ctx->results_buffer;
+    SearchResultMeta *results_meta = ctx->results;
+    uint32_t results_left = ctx->results_left;
+    uint32_t page_size = ctx->page_size;
+    uint32_t last_page = ctx->last_page;
+
+    if (results_left == 0)
+    {
+        printf("No more results\n");
+        return;
+    }
+
+    page_size = page_size < results_left ? page_size : results_left;
+
+    SearchResultMeta buffer[page_size];
+    int buffer_meta_pos[page_size];   // 🔥 POSICIÓN REAL EN results_meta
+    int buf_size = 0;
+    int worst_idx = 0;
+
+    query_t q = ctx->query;
+    char mixed[256];
+    mixed_to_hiragana(q.s, mixed, sizeof(mixed));
+    query_t mixed_q = { .s = mixed, .len = (uint8_t)strlen(mixed), .first = mixed[0] };
+
+    for (uint32_t i = 0; i < results_left; ++i)
+    {
+    skip:
+        int score = results_meta[i].score;
+
+        // ✅ comparar contra BUFFER, no results_meta
+        if (buf_size == page_size && score >= buffer[worst_idx].score)
+            continue;
+
+        // ---- filtro de string ----
+        const entry_bin *e = kotoba_entry(
+            dict,
+            results_buffer[results_meta[i].results_idx].p->doc_id
+        );
+
+        int type = results_meta[i].type;
+        int meta1 = results_buffer[results_meta[i].results_idx].p->meta1;
+        int meta2 = results_buffer[results_meta[i].results_idx].p->meta2;
+
+        kotoba_str str;
+        query_t *query;
+        if (type == 0)
+        {
+            const k_ele_bin *k_ele = kotoba_k_ele(dict, e, meta1);
+            str = kotoba_keb(dict, k_ele);
+            query = &mixed_q;
+        }
+        else if (type == 1)
+        {
+            const r_ele_bin *r_ele = kotoba_r_ele(dict, e, meta1);
+            str = kotoba_reb(dict, r_ele);
+            query = &mixed_q;
+        }
+        else
+        {
+            const sense_bin *s = kotoba_sense(dict, e, meta1);
+            str = kotoba_gloss(dict, s, meta2);
+            query = &q;
+        }
+
+        if (!word_contains_q(str.ptr, str.len, query))
+        {
+            if (i < results_left - 1)
+            {
+                SearchResultMeta tmp = results_meta[i];
+                results_meta[i] = results_meta[results_left - 1];
+                results_meta[results_left - 1] = tmp;
+                --results_left;
+                goto skip;
+            }
+            else
+            {
+                --results_left;
+                continue;   // ✅ FIX
+            }
+        }
+
+        // ---- top-K ----
+        if (buf_size < page_size)
+        {
+            buffer[buf_size] = results_meta[i];
+            buffer_meta_pos[buf_size] = i;
+
+            if (buf_size == 0 || score > buffer[worst_idx].score)
+                worst_idx = buf_size;
+
+            ++buf_size;
+        }
+        else
+        {
+            buffer[worst_idx] = results_meta[i];
+            buffer_meta_pos[worst_idx] = i;
+
+            // recompute worst (score más alto)
+            int ws = buffer[0].score;
+            int wi = 0;
+            for (int j = 1; j < buf_size; ++j)
+            {
+                if (buffer[j].score > ws)
+                {
+                    ws = buffer[j].score;
+                    wi = j;
+                }
+            }
+            worst_idx = wi;
         }
     }
 
-    ctx->result_count = total_results;
+    // ---- ordenar página ----
+    sort_scores(buffer, buf_size);
 
+    int offset = last_page * page_size;
+    for (int i = 0; i < buf_size; ++i)
+    {
+        ctx->results_doc_ids[offset + i] =
+            results_buffer[buffer[i].results_idx].p->doc_id;
+    }
 
+    // ---- borrar procesados (EN ORDEN INVERSO) ----
+    for (int i = buf_size - 1; i >= 0; --i)
+    {
+        int idx = buffer_meta_pos[i];
+        if (idx != results_left - 1)
+        {
+            SearchResultMeta tmp = results_meta[idx];
+            results_meta[idx] = results_meta[results_left - 1];
+            results_meta[results_left - 1] = tmp;
+        }
+        --results_left;
+    }
+
+    ctx->results_left = results_left;
+    ctx->results_processed += buf_size;
+    ctx->last_page += 1;
 }
+
 
 void print_entry(const kotoba_dict *d, uint32_t i)
 {
@@ -907,7 +928,7 @@ void write_all_tsv(const kotoba_dict *d)
 
     // Open all gloss language files at once
     char tsv_dir[64] = "./tsv/";
-    for (size_t i = 0; i < KOTOBA_LANG_COUNT; ++i)
+    for (int i = 0; i < KOTOBA_LANG_COUNT; ++i)
     {
         char path[256];
         snprintf(path, sizeof(path), "%s%s", tsv_dir, lang_fnames[i]);
@@ -1012,19 +1033,19 @@ int main(int argc, char **argv)
             rc = index_build_from_pairs(out, texts, ids, ids2, NULL, n);
         free_pairs(texts, ids, ids2, ids3, n);
         if (read_fourth_col)
-        return rc == 0 ? 0 : 1;
+            return rc == 0 ? 0 : 1;
     }
- 
+
     /* ---------- search ---------- */
     else if (strcmp(argv[1], "search") == 0)
     {
-        if (argc != 4)
+        if (argc != 3)
         {
-            fprintf(stderr, "search <idx> <query> \n");
+            fprintf(stderr, "search <query> \n");
             return 1;
         }
 
-        const char *query_file = argv[3];
+        const char *query_file = argv[2];
 
         char *query = read_utf8_file(query_file);
         if (!query)
@@ -1033,51 +1054,83 @@ int main(int argc, char **argv)
             return 1;
         }
 
-        print_grams(query);
-
-        InvertedIndex idx;
-        const char *invdx_path = argv[2];
-        if (index_load(invdx_path, &idx) != 0)
-        {
-            fprintf(stderr, "failed to load index: %s\n", invdx_path);
-            return 1;
-        }
- 
-        uint32_t hashes[128];
-        size_t hcount = query_gram_hashes(query, hashes, 128);
-        if (hcount == 0)
-        {
-            fprintf(stderr, "no grams from query\n");
-            index_unload(&idx);
-            return 1;
-        }
-
-
-
-        PostingRef  results[1024];
-        size_t rcount = index_intersect_postings(
-            &idx,
-            hashes,
-            hcount,
-            results,
-            1024);
-
         kotoba_dict d;
         kotoba_dict_open(&d, dict_path, idx_path);
 
-        printf("Results (%zu):\n", rcount);
-        for (size_t i = 0; i < rcount; ++i)
-        {
-                printf(
-            "doc_id=%u reading_id=%u reading_variant=%u\n",
-            results[i].p->doc_id,
-            results[i].p->meta1,
-            results[i].p->meta2
-        );
-            print_entry(&d, results[i].p->doc_id);
-        }
+        bool languages[KOTOBA_LANG_COUNT] = {0};
+        languages[KOTOBA_LANG_EN] = true;
+        languages[KOTOBA_LANG_ES] = true;
 
-        index_unload(&idx);
+        int page_size = 10;
+        struct SearchContext ctx;
+        init_search_context(&ctx, languages, &d, page_size);
+
+        query_results(&ctx, query);
+        
+        query_next_page(&ctx);
+        query_next_page(&ctx);
+        printf("Results:\n");
+        for (uint32_t i = 0; i < ctx.results_processed; ++i)
+        {
+            print_entry(&d, ctx.results_doc_ids[i]);
+        }
+        
+
+        return 0;
+    }
+    else if (strcmp(argv[1], "test") == 0)
+    {
+        kotoba_dict d;
+        kotoba_dict_open(&d, dict_path, idx_path);
+
+            // Test reading inverted index for "taberu"
+            InvertedIndex reading_idx;
+            if (index_load("readings.idx", &reading_idx) != 0) {
+                fprintf(stderr, "Failed to load readings.idx\n");
+                return 1;
+            }
+
+            if (argc != 3)
+            {
+                fprintf(stderr, "test <query_file>\n");
+                return 1;
+            }
+            const char *query_file = argv[2];
+
+            char *query = read_utf8_file(query_file);
+            if (!query)
+            {
+                fprintf(stderr, "failed read query file\n");
+                return 1;
+            }            
+
+            char mixed[256];
+            mixed_to_hiragana(query, mixed, sizeof(mixed));
+            printf("Mixed hiragana: %s\n", mixed);
+
+
+            uint32_t hashes[SEARCH_MAX_QUERY_HASHES];
+            int hcount = query_gram_hashes(mixed, hashes, SEARCH_MAX_QUERY_HASHES);
+
+            PostingRef results_buffer[SEARCH_MAX_RESULTS];
+            int rcount = index_intersect_postings(
+                &reading_idx,
+                hashes,
+                hcount,
+                results_buffer,
+                SEARCH_MAX_RESULTS);
+
+            printf("Results for %s in readings.idx: %d\n", query, rcount);
+            for (int i = 0; i < rcount; ++i) {
+                const entry_bin *e = kotoba_entry(&d, results_buffer[i].p->doc_id);
+                int r_elem_id = results_buffer[i].p->meta1;
+                const r_ele_bin *r_ele = kotoba_r_ele(&d, e, r_elem_id);
+                kotoba_str reb = kotoba_reb(&d, r_ele);
+                printf("Entry %u, reading[%d]: %.*s\n", results_buffer[i].p->doc_id, r_elem_id, reb.len, reb.ptr);
+            }
+
+            index_unload(&reading_idx);
+
         return 0;
     }
 

@@ -144,155 +144,193 @@ static uint32_t hiragana_vowel(uint32_t cp)
 /* Mixed input → hiragana normalized */
 /* ============================================================================ */
 
-static void mixed_to_hiragana(const char *input, char *output, size_t out_size)
+#include <stdint.h>
+#include <string.h>
+#include <ctype.h>
+
+/* ============================================================
+ * UTF-8 helpers
+ * ============================================================ */
+
+static inline void emit_utf8(uint32_t cp, char **out, size_t *left)
+{
+    if (cp < 0x80 && *left >= 1)
+    {
+        *(*out)++ = (char)cp;
+        (*left)--;
+    }
+    else if (cp < 0x800 && *left >= 2)
+    {
+        *(*out)++ = 0xC0 | (cp >> 6);
+        *(*out)++ = 0x80 | (cp & 0x3F);
+        (*left) -= 2;
+    }
+    else if (*left >= 3)
+    {
+        *(*out)++ = 0xE0 | (cp >> 12);
+        *(*out)++ = 0x80 | ((cp >> 6) & 0x3F);
+        *(*out)++ = 0x80 | (cp & 0x3F);
+        (*left) -= 3;
+    }
+}
+
+/* ============================================================
+ * Character helpers
+ * ============================================================ */
+
+static inline int is_vowel(char c)
+{
+    c = (char)tolower((unsigned char)c);
+    return c == 'a' || c == 'i' || c == 'u' || c == 'e' || c == 'o';
+}
+
+static inline int is_consonant(char c)
+{
+    c = (char)tolower((unsigned char)c);
+    return (c >= 'a' && c <= 'z') && !is_vowel(c);
+}
+
+/* ============================================================
+ * Romaji table (length is explicit, no strlen)
+ * ============================================================ */
+
+typedef struct {
+    const char *roma;
+    uint8_t len;
+    uint32_t hira[2];
+    uint8_t hira_len;
+} RomaMap;
+
+/* ORDER MATTERS: longest first */
+static const RomaMap romaji_table[] = {
+    /* yōon */
+    {"kya",3,{0x304D,0x3083},2}, {"kyu",3,{0x304D,0x3085},2}, {"kyo",3,{0x304D,0x3087},2},
+    {"sha",3,{0x3057,0x3083},2}, {"shu",3,{0x3057,0x3085},2}, {"sho",3,{0x3057,0x3087},2},
+    {"cha",3,{0x3061,0x3083},2}, {"chu",3,{0x3061,0x3085},2}, {"cho",3,{0x3061,0x3087},2},
+    {"nya",3,{0x306B,0x3083},2}, {"nyu",3,{0x306B,0x3085},2}, {"nyo",3,{0x306B,0x3087},2},
+    {"hya",3,{0x3072,0x3083},2}, {"hyu",3,{0x3072,0x3085},2}, {"hyo",3,{0x3072,0x3087},2},
+    {"mya",3,{0x307F,0x3083},2}, {"myu",3,{0x307F,0x3085},2}, {"myo",3,{0x307F,0x3087},2},
+    {"rya",3,{0x308A,0x3083},2}, {"ryu",3,{0x308A,0x3085},2}, {"ryo",3,{0x308A,0x3087},2},
+    {"gya",3,{0x304E,0x3083},2}, {"gyu",3,{0x304E,0x3085},2}, {"gyo",3,{0x304E,0x3087},2},
+    {"bya",3,{0x3073,0x3083},2}, {"byu",3,{0x3073,0x3085},2}, {"byo",3,{0x3073,0x3087},2},
+    {"pya",3,{0x3074,0x3083},2}, {"pyu",3,{0x3074,0x3085},2}, {"pyo",3,{0x3074,0x3087},2},
+
+    /* specials */
+    {"shi",3,{0x3057},1},
+    {"chi",3,{0x3061},1},
+    {"tsu",3,{0x3064},1},
+
+    /* k */
+    {"ka",2,{0x304B},1},{"ki",2,{0x304D},1},{"ku",2,{0x304F},1},{"ke",2,{0x3051},1},{"ko",2,{0x3053},1},
+    /* s */
+    {"sa",2,{0x3055},1},{"su",2,{0x3059},1},{"se",2,{0x305B},1},{"so",2,{0x305D},1},
+    /* t */
+    {"ta",2,{0x305F},1},{"te",2,{0x3066},1},{"to",2,{0x3068},1},
+    /* n */
+    {"na",2,{0x306A},1},{"ni",2,{0x306B},1},{"nu",2,{0x306C},1},{"ne",2,{0x306D},1},{"no",2,{0x306E},1},
+    /* h */
+    {"ha",2,{0x306F},1},{"hi",2,{0x3072},1},{"fu",2,{0x3075},1},{"he",2,{0x3078},1},{"ho",2,{0x307B},1},
+    /* m */
+    {"ma",2,{0x307E},1},{"mi",2,{0x307F},1},{"mu",2,{0x3080},1},{"me",2,{0x3081},1},{"mo",2,{0x3082},1},
+    /* y */
+    {"ya",2,{0x3084},1},{"yu",2,{0x3086},1},{"yo",2,{0x3088},1},
+    /* r */
+    {"ra",2,{0x3089},1},{"ri",2,{0x308A},1},{"ru",2,{0x308B},1},{"re",2,{0x308C},1},{"ro",2,{0x308D},1},
+    /* w */
+    {"wa",2,{0x308F},1},{"wo",2,{0x3092},1},
+    /* g */
+    {"ga",2,{0x304C},1},{"gi",2,{0x304E},1},{"gu",2,{0x3050},1},{"ge",2,{0x3052},1},{"go",2,{0x3054},1},
+    /* z */
+    {"za",2,{0x3056},1},{"ji",2,{0x3058},1},{"zu",2,{0x305A},1},{"ze",2,{0x305C},1},{"zo",2,{0x305E},1},
+    /* d */
+    {"da",2,{0x3060},1},{"de",2,{0x3067},1},{"do",2,{0x3069},1},
+    /* b */
+    {"ba",2,{0x3070},1},{"bi",2,{0x3073},1},{"bu",2,{0x3076},1},{"be",2,{0x3079},1},{"bo",2,{0x307C},1},
+    /* p */
+    {"pa",2,{0x3071},1},{"pi",2,{0x3074},1},{"pu",2,{0x3077},1},{"pe",2,{0x307A},1},{"po",2,{0x307D},1},
+    /* n */
+    {"n",1,{0x3093},1},
+    /* vowels */
+    {"a",1,{0x3042},1},{"i",1,{0x3044},1},{"u",1,{0x3046},1},{"e",1,{0x3048},1},{"o",1,{0x304A},1},
+};
+
+/* ============================================================
+ * Romaji matcher
+ * ============================================================ */
+
+static int match_romaji(const char *s, uint32_t *out, int *out_len)
+{
+    for (size_t i = 0; i < sizeof(romaji_table)/sizeof(romaji_table[0]); i++)
+    {
+        const RomaMap *r = &romaji_table[i];
+        if (strncasecmp(s, r->roma, r->len) == 0)
+        {
+            for (int j = 0; j < r->hira_len; j++)
+                out[j] = r->hira[j];
+            *out_len = r->hira_len;
+            return r->len;
+        }
+    }
+    return 0;
+}
+
+/* ============================================================
+ * Main conversion
+ * ============================================================ */
+
+void mixed_to_hiragana(const char *input, char *output, size_t out_size)
 {
     const char *s = input;
     char *out = output;
     size_t left = out_size - 1;
 
-    uint32_t cp;
-    uint32_t last_hira = 0;
-
     while (*s && left > 0)
     {
-        const char *next = utf8_decode(s, &cp);
-
-        /* Kanji blocks */
-        int is_kanji =
-            (cp >= 0x4E00 && cp <= 0x9FFF) ||
-            (cp >= 0x3400 && cp <= 0x4DBF) ||
-            (cp >= 0x20000 && cp <= 0x2CEAF) ||
-            (cp >= 0xF900 && cp <= 0xFAFF) ||
-            (cp >= 0x2F800 && cp <= 0x2FA1F);
-
-        if (is_kanji)
+        /* ASCII romaji path */
+        if (isalpha((unsigned char)s[0]))
         {
-            size_t len = next - s;
-            if (len > left)
-                len = left;
-            memcpy(out, s, len);
-            out += len;
-            left -= len;
-            last_hira = 0;
-        }
-        else if (cp == 0x30FC) /* prolongation mark */
-        {
-            uint32_t v = hiragana_vowel(last_hira);
-            if (v && left >= 3)
+            /* sokuon */
+            if (is_consonant(s[0]) && s[0] == s[1] && s[0] != 'n')
             {
-                *out++ = 0xE0 | (v >> 12);
-                *out++ = 0x80 | ((v >> 6) & 0x3F);
-                *out++ = 0x80 | (v & 0x3F);
-                left -= 3;
-                last_hira = v;
+                emit_utf8(0x3063, &out, &left); /* っ */
+                s++;
+                continue;
             }
-        }
-        else
-        {
-            uint32_t hira = normalize_kana(cp);
 
-            /* ASCII romaji (very minimal) */
-            if ((cp >= 'A' && cp <= 'Z') || (cp >= 'a' && cp <= 'z'))
+            /* n → ん */
+            if (tolower((unsigned char)s[0]) == 'n')
             {
-                switch (tolower((int)cp))
+                if (s[1] == '\'' ||
+                    (!is_vowel(s[1]) && tolower((unsigned char)s[1]) != 'y'))
                 {
-                case 'a':
-                    hira = 0x3042;
-                    break;
-                case 'i':
-                    hira = 0x3044;
-                    break;
-                case 'u':
-                    hira = 0x3046;
-                    break;
-                case 'e':
-                    hira = 0x3048;
-                    break;
-                case 'o':
-                    hira = 0x304A;
-                    break;
-                default:
-                    goto skip;
+                    emit_utf8(0x3093, &out, &left); /* ん */
+                    s += (s[1] == '\'') ? 2 : 1;
+                    continue;
                 }
             }
 
-            if (hira < 0x80 && left >= 1)
+            /* normal romaji */
+            uint32_t buf[2];
+            int hira_len = 0;
+            int consumed = match_romaji(s, buf, &hira_len);
+            if (consumed > 0)
             {
-                *out++ = (char)hira;
-                left--;
+                for (int i = 0; i < hira_len; i++)
+                    emit_utf8(buf[i], &out, &left);
+                s += consumed;
+                continue;
             }
-            else if (hira < 0x800 && left >= 2)
-            {
-                *out++ = 0xC0 | (hira >> 6);
-                *out++ = 0x80 | (hira & 0x3F);
-                left -= 2;
-            }
-            else if (left >= 3)
-            {
-                *out++ = 0xE0 | (hira >> 12);
-                *out++ = 0x80 | ((hira >> 6) & 0x3F);
-                *out++ = 0x80 | (hira & 0x3F);
-                left -= 3;
-            }
-
-            last_hira = hira;
         }
 
-    skip:
-        s = next;
+        /* fallback: copy byte */
+        *out++ = *s++;
+        left--;
     }
 
     *out = '\0';
 }
 
 
-/*
 
-enum kana_input_type
-{
-    KANA_TYPE_KANA = 0,
-    KANA_TYPE_NON_KANA = 1,
-    KANA_TYPE_ERROR = 2
-};
-
-static int handle_search_input(const char *input, char *string_output, size_t out_size, int *codes_output, int *n_codes)
-{
-    if (!input || !string_output || !codes_output || !n_codes || input[0] == '\0')
-        return KANA_TYPE_ERROR;
-
-    int only_kana = 1;
-    const char *s = input;
-    uint32_t cp;
-
-    // Detect if input is only kana (hiragana, katakana, prolongation mark, halfwidth katakana)
-    while (*s)
-    {
-        const char *next = utf8_decode(s, &cp);
-
-        if (!((cp >= 0x3041 && cp <= 0x3096) || // Hiragana
-              (cp >= 0x30A1 && cp <= 0x30FA) || // Katakana
-              (cp == 0x30FC) ||                 // Prolongation mark
-              (cp >= 0xFF66 && cp <= 0xFF9D)))  // Halfwidth katakana
-        {
-            only_kana = 0;
-            break;
-        }
-
-        s = next;
-    }
-
-    if (only_kana)
-    {
-        *n_codes = kana_utf8_to_codes(input, codes_output);
-        return KANA_TYPE_KANA;
-    }
-    else
-    {
-        mixed_to_hiragana(input, string_output, out_size);
-        return KANA_TYPE_NON_KANA;
-    }
-}
-
-*/
 
 #endif /* KOTOBA_KANA_H */

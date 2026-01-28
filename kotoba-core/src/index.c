@@ -468,7 +468,7 @@ size_t index_intersect_postings(
     size_t out_cap
 )
 {
-    if (!idx || !hashes || hcount == 0 || !out || out_cap == 0)
+    if (!idx || !hashes || hcount == 0 || !out || out_cap <= 0 )
         return 0;
 
     const Term *terms[128];
