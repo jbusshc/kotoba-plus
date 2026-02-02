@@ -41,8 +41,8 @@ void srs_prompt(void)
     printf("  add <id>        add entry to SRS\n");
     printf("  study           study due cards\n");
     printf("  day <n>         advance n days\n");
-    printf("  save            save profile\n");
-    printf("  load            load profile\n");
+    //printf("  save            save profile\n");
+    //printf("  load            load profile\n");
     printf("  to-review      list entries in SRS with days left\n");
     printf("  due            list entries due today or overdue\n");
     printf("  quit\n");
