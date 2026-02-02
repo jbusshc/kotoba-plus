@@ -270,3 +270,78 @@ bool srs_load(srs_profile *p, const char *path, uint32_t dict_size)
 
     return true;
 }
+
+bool srs_remove(srs_profile *p, uint32_t entry_id)
+{
+    if (!p || entry_id >= p->dict_size)
+        return false;
+
+    /* ¿existe? */
+    if (!srs_contains(p, entry_id))
+        return false;
+
+    /* ─────────────────────────────────────────────
+     *  Buscar item
+     * ───────────────────────────────────────────── */
+
+    uint32_t idx = UINT32_MAX;
+    for (uint32_t i = 0; i < p->count; ++i) {
+        if (p->items[i].entry_id == entry_id) {
+            idx = i;
+            break;
+        }
+    }
+
+    if (idx == UINT32_MAX)
+        return false; /* inconsistencia interna */
+
+    /* ─────────────────────────────────────────────
+     *  Eliminar de heap
+     * ───────────────────────────────────────────── */
+
+    for (uint32_t i = 0; i < p->heap_size; ++i) {
+        if (p->heap[i] == idx) {
+
+            /* swap con el último */
+            p->heap[i] = p->heap[p->heap_size - 1];
+            p->heap_size--;
+
+            /* restaurar heap (up y down por seguridad) */
+            heap_sift_down(p, i);
+            heap_sift_up(p, i);
+            break;
+        }
+    }
+
+    /* ─────────────────────────────────────────────
+     *  Compactar items[]
+     * ───────────────────────────────────────────── */
+
+    uint32_t last = p->count - 1;
+
+    if (idx != last) {
+        /* mover último item al hueco */
+        p->items[idx] = p->items[last];
+
+        /* actualizar heap: índices que apuntaban a last → idx */
+        for (uint32_t i = 0; i < p->heap_size; ++i) {
+            if (p->heap[i] == last) {
+                p->heap[i] = idx;
+                heap_sift_down(p, i);
+                heap_sift_up(p, i);
+                break;
+            }
+        }
+    }
+
+    p->count--;
+
+    /* ─────────────────────────────────────────────
+     *  Limpiar bitmap
+     * ───────────────────────────────────────────── */
+
+    p->bitmap[entry_id >> 3] &= ~(1u << (entry_id & 7));
+
+    return true;
+}
+

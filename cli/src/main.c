@@ -14,6 +14,7 @@
 #include "../../kotoba-core/include/index.h"
 #include "../../kotoba-core/include/index_search.h"
 #include "../../kotoba-core/include/srs.h"
+#include "../../kotoba-core/include/srs_sync.h"
 
 #include "../../cli/include/build.h"
 
@@ -183,27 +184,42 @@ int main(int argc, char **argv)
     else if (strcmp(argv[1], "srs") == 0)
     {
         srs_profile srs;
+        srs_sync sync;
 
         kotoba_dict d;
         kotoba_dict_open(&d, dict_path, idx_path);
         const uint32_t DICT_SIZE = d.entry_count;
 
-        if (!srs_init(&srs, DICT_SIZE))
+        /* ───────────── sync init ───────────── */
+
+        if (!srs_sync_open(&sync,
+                        "events.dat",
+                        "snapshot.dat",
+                        1,              /* device_id */
+                        DICT_SIZE))
         {
-            fprintf(stderr, "failed to init srs\n");
+            fprintf(stderr, "failed to init sync\n");
+            return 1;
+        }
+
+        /* reconstruir estado desde snapshot + eventos */
+        if (!srs_sync_rebuild(&sync, &srs, DICT_SIZE))
+        {
+            fprintf(stderr, "failed to rebuild srs\n");
             return 1;
         }
 
         char cmd[64];
         srs_prompt();
 
+        uint64_t now = srs_now(); /* tiempo lógico */
+
         while (1)
         {
-            uint64_t now = srs_now(); /* tiempo lógico inicial */
-            printf("\n[now=%llu] - ", (unsigned long long)now);
-            printf("\n");
+            printf("\n[now=%llu] ", (unsigned long long)now);
             srs_print_time(now);
             printf(" > ");
+
             if (scanf("%63s", cmd) != 1)
                 break;
 
@@ -219,7 +235,7 @@ int main(int argc, char **argv)
                     continue;
                 }
 
-                if (srs_add(&srs, id, now))
+                if (srs_sync_add(&sync, &srs, id, now))
                     printf("added entry %u\n", id);
                 else
                     printf("already in SRS\n");
@@ -236,7 +252,8 @@ int main(int argc, char **argv)
 
                     printf("\nEntry ID: %u\n", r.item->entry_id);
                     printf("State: %s\n",
-                        r.item->state == SRS_LEARNING ? "LEARNING" : "REVIEW");
+                        r.item->state == SRS_LEARNING ?
+                        "LEARNING" : "REVIEW");
                     printf("Interval: %u days\n", r.item->interval);
                     printf("Ease: %.2f\n", r.item->ease);
 
@@ -253,9 +270,14 @@ int main(int argc, char **argv)
                     default: quality = SRS_AGAIN; break;
                     }
 
-                    srs_answer(r.item, quality, now);
+                    /* ⚠️ ahora pasa por sync */
+                    srs_sync_review(&sync,
+                                    &srs,
+                                    r.item->entry_id,
+                                    quality,
+                                    now);
 
-                    /* ← REINSERCIÓN CORRECTA */
+                    /* reinsertar en heap */
                     srs_requeue(&srs, r.index);
                 }
             }
@@ -299,7 +321,9 @@ int main(int argc, char **argv)
                     if (due > now)
                     {
                         uint64_t seconds_left = due - now;
-                        uint32_t days_left = (seconds_left + 86399) / 86400;
+                        uint32_t days_left =
+                            (seconds_left + 86399) / 86400;
+
                         printf("entry %u: %u days left\n",
                             srs.items[i].entry_id,
                             days_left);
@@ -307,19 +331,15 @@ int main(int argc, char **argv)
                 }
             }
 
-            /* ───────────── save/load ───────────── */
-            else if (strcmp(cmd, "save") == 0)
-            {
-                srs_save(&srs, "profile.dat");
-                printf("saved\n");
-            }
-            else if (strcmp(cmd, "load") == 0)
+            /* ───────────── rebuild (debug) ───────────── */
+            else if (strcmp(cmd, "rebuild") == 0)
             {
                 srs_free(&srs);
-                srs_load(&srs, "profile.dat", DICT_SIZE);
-                printf("loaded\n");
+                srs_sync_rebuild(&sync, &srs, DICT_SIZE);
+                printf("rebuilt from events\n");
             }
 
+            /* ───────────── quit ───────────── */
             else if (strcmp(cmd, "quit") == 0)
                 break;
 
@@ -331,8 +351,10 @@ int main(int argc, char **argv)
         }
 
         srs_free(&srs);
+        srs_sync_close(&sync);
         return 0;
     }
+
 
     else if (strcmp(argv[1], "test") == 0)
     {
