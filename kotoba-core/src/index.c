@@ -2,7 +2,6 @@
 #define _POSIX_C_SOURCE 200809L
 #include "index.h"
 
-
 #ifndef _WIN32
 #include <sys/mman.h>
 #include <sys/stat.h>
@@ -60,7 +59,6 @@ static void *append_bytes(void *buf, size_t *cap, size_t *len, const void *data,
     return buf;
 }
 
-
 /* ---------- builder ---------- */
 
 typedef struct
@@ -85,11 +83,17 @@ static int cmp_pair(const void *a, const void *b)
     return 0;
 }
 
-
 #define META_NONE UINT8_MAX
 
 /* build index: texts[i] corresponds to doc_ids[i], optional meta1/meta2 arrays */
-int index_build_from_pairs(const char *out_path, const char **texts, const uint32_t *doc_ids, const uint8_t *meta1, const uint8_t *meta2, size_t count)
+int index_build_from_pairs(
+    const char *out_path,
+    const char **texts,
+    const uint32_t *doc_ids,
+    const uint8_t *meta1,
+    const uint8_t *meta2,
+    size_t count,
+    GramMode gram_mode)
 {
     Pair *pairs = NULL;
     size_t pcap = 0, pcount = 0;
@@ -97,7 +101,12 @@ int index_build_from_pairs(const char *out_path, const char **texts, const uint3
     /* generator callback that appends Pair(hash, doc_id, meta1, meta2)
        ud is pointer to a small struct with the three values for the current text.
     */
-    struct GramUD { uint32_t doc; uint8_t m1; uint8_t m2; };
+    struct GramUD
+    {
+        uint32_t doc;
+        uint8_t m1;
+        uint8_t m2;
+    };
     void capture_cb(const uint8_t *p, size_t len, void *ud)
     {
         struct GramUD *g = (struct GramUD *)ud;
@@ -129,7 +138,28 @@ int index_build_from_pairs(const char *out_path, const char **texts, const uint3
         ud.doc = doc_ids ? doc_ids[i] : 0;
         ud.m1 = meta1 ? meta1[i] : META_NONE;
         ud.m2 = meta2 ? meta2[i] : META_NONE;
-        utf8_grams_cb(txt, capture_cb, &ud);
+        size_t len = utf8_strlen(txt);
+        int n;
+
+        if (gram_mode == GRAM_JP)
+        {
+            // siempre generar unigrams y bigrams
+            utf8_ngrams_cb(txt, 1, capture_cb, &ud); // unigrams
+            utf8_ngrams_cb(txt, 2, capture_cb, &ud); // bigrams
+        }
+        else if (gram_mode == GRAM_GLOSS_AUTO)
+        {
+            if (len == 1)
+                utf8_ngrams_cb(txt, 1, capture_cb, &ud);
+            else if (len == 2)
+                utf8_ngrams_cb(txt, 2, capture_cb, &ud);
+            else
+                utf8_ngrams_cb(txt, 3, capture_cb, &ud);
+        }
+        else
+        {
+            utf8_ngrams_cb(txt, gram_mode, capture_cb, &ud);
+        }
     }
 
     if (pcount == 0)
@@ -216,7 +246,6 @@ int index_build_from_pairs(const char *out_path, const char **texts, const uint3
     return 0;
 }
 
-/* ---------- mmap loader ---------- */
 /* ---------- mmap loader cross-platform ---------- */
 
 #ifdef _WIN32
@@ -360,104 +389,55 @@ size_t index_term_postings(const InvertedIndex *idx, const Term *t, Posting *out
     return n;
 }
 
- 
-/* intersect postings of multiple gram hashes
-   - hashes: array de hashes de grams
-   - hcount: cantidad de hashes
-   - out: buffer de salida (doc_ids)
-   - out_cap: capacidad del buffer
-   Devuelve cantidad de resultados escritos en out
-*/
-size_t index_intersect_hashes(
-    const InvertedIndex *idx,
-    const uint32_t *hashes,
-    size_t hcount,
-    uint32_t *out,
-    size_t out_cap
-)
+/* Helper struct and callback for query_gram_hashes_mode */
+
+static void query_gram_hash_cb(const uint8_t *p, size_t l, void *u)
 {
-    if (!idx || !hashes || hcount == 0 || !out || out_cap == 0)
+    struct QGramUD *q = (struct QGramUD *)u;
+    if (q->count < q->max)
+        q->out[q->count++] = fnv1a(p, l);
+}
+
+size_t query_gram_hashes_mode(
+    const char *q,
+    GramMode mode,
+    uint32_t *out_hashes,
+    size_t max)
+{
+    if (!q || !out_hashes || max == 0)
         return 0;
 
-    const Term *terms[128];
-    if (hcount > 128)
-        return 0;
+    size_t len = utf8_strlen(q);
+    int n = 0;
 
-    /* lookup all terms */
-    for (size_t i = 0; i < hcount; ++i)
+    struct QGramUD ud = {
+        .out = out_hashes,
+        .max = max,
+        .count = 0};
+
+    if (mode == GRAM_GLOSS_AUTO)
     {
-        terms[i] = index_find_term(idx, hashes[i]);
-        if (!terms[i])
-            return 0; /* algún gram no existe → intersección vacía */
+        if (len == 1)
+            n = 1;
+        else if (len == 2)
+            n = 2;
+        else
+            n = 3;
+
+        utf8_ngrams_cb(q, n, query_gram_hash_cb, &ud);
+    }
+    else if (mode == GRAM_JP)
+    {
+        /* Generate both unigrams and bigrams */
+        utf8_ngrams_cb(q, 1, query_gram_hash_cb, &ud); // unigrams
+        utf8_ngrams_cb(q, 2, query_gram_hash_cb, &ud); // bigrams
+    }
+    else
+    {
+        utf8_ngrams_cb(q, mode, query_gram_hash_cb, &ud);
     }
 
-    /* find smallest postings list */
-    size_t min_i = 0;
-    for (size_t i = 1; i < hcount; ++i)
-    {
-        if (terms[i]->postings_count < terms[min_i]->postings_count)
-            min_i = i;
-    }
-
-    const Term *base = terms[min_i];
-    const Posting *base_post = idx->postings + base->postings_offset;
-
-    size_t written = 0;
-    uint32_t last_written_doc = 0xFFFFFFFFu;
-
-    /* iterate base postings */
-    for (size_t bi = 0; bi < base->postings_count; ++bi)
-    {
-        uint32_t doc = base_post[bi].doc_id;
-        if (doc == last_written_doc)
-            continue; /* avoid duplicates in output */
-
-        int ok = 1;
-
-        /* check presence in all other postings (binary search by doc only) */
-        for (size_t ti = 0; ti < hcount; ++ti)
-        {
-            if (ti == min_i)
-                continue;
-
-            const Term *t = terms[ti];
-            const Posting *p = idx->postings + t->postings_offset;
-
-            /* binary search by doc id inside postings (they are sorted by doc,meta) */
-            uint32_t lo = 0, hi = t->postings_count;
-            while (lo < hi)
-            {
-                uint32_t mid = (lo + hi) >> 1;
-                uint32_t v = p[mid].doc_id;
-
-                if (v == doc)
-                {
-                    lo = mid;
-                    break;
-                }
-                if (v < doc)
-                    lo = mid + 1;
-                else
-                    hi = mid;
-            }
-
-            if (lo >= t->postings_count || p[lo].doc_id != doc)
-            {
-                ok = 0;
-                break;
-            }
-        }
-
-        if (ok)
-        {
-            if (written >= out_cap)
-                break;
-            out[written++] = doc;
-            last_written_doc = doc;
-        }
-    }
-
-    return written;
+    return ud.count;
 }
 
 size_t index_intersect_postings(
@@ -465,10 +445,9 @@ size_t index_intersect_postings(
     const uint32_t *hashes,
     size_t hcount,
     PostingRef *out,
-    size_t out_cap
-)
+    size_t out_cap)
 {
-    if (!idx || !hashes || hcount == 0 || !out || out_cap <= 0 )
+    if (!idx || !hashes || hcount == 0 || !out || out_cap <= 0)
         return 0;
 
     const Term *terms[128];
@@ -547,7 +526,7 @@ size_t index_intersect_postings(
             if (written >= out_cap)
                 break;
 
-            out[written++].p = bp;   /* 🔑 aquí está la magia */
+            out[written++].p = bp; /* 🔑 aquí está la magia */
             last_written_doc = doc;
         }
     }
@@ -555,3 +534,56 @@ size_t index_intersect_postings(
     return written;
 }
 
+
+size_t utf8_strlen(const char *s)
+{
+    size_t len = 0;
+    const uint8_t *p = (const uint8_t *)s;
+    while (*p)
+    {
+        p += utf8_char_len(*p);
+        len++;
+    }
+    return len;
+}
+
+void utf8_ngrams_cb(const char *s, int n, gram_cb cb, void *ud)
+{
+    if (n <= 0)
+        return;
+
+    const uint8_t *p = (const uint8_t *)s;
+    const uint8_t *win[4];
+    size_t win_len[4];
+    int w = 0;
+
+    while (*p)
+    {
+        size_t len = utf8_char_len(*p);
+        win[w] = p;
+        win_len[w] = len;
+        w++;
+
+        if (w == n)
+        {
+            uint8_t buf[16];
+            size_t off = 0;
+            for (int i = 0; i < n; ++i)
+            {
+                memcpy(buf + off, win[i], win_len[i]);
+                off += win_len[i];
+            }
+            cb(buf, off, ud);
+
+            /* slide window */
+            for (int i = 1; i < n; ++i)
+            {
+                win[i - 1] = win[i];
+                win_len[i - 1] = win_len[i];
+            }
+            w--;
+        }
+
+        p += len;
+    }
+}

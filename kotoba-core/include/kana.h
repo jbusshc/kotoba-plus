@@ -275,61 +275,128 @@ static int match_romaji(const char *s, uint32_t *out, int *out_len)
 }
 
 /* ============================================================
+ * Streaming romaji → hiragana converter
+ * ============================================================ */
+
+typedef struct {
+    char carry[4];   /* max romaji lookahead */
+    uint8_t carry_len;
+} KanaStream;
+
+static inline void kana_stream_init(KanaStream *ks)
+{
+    ks->carry_len = 0;
+}
+
+static inline void kana_stream_feed(
+    KanaStream *ks,
+    char c,
+    char **out,
+    size_t *left)
+{
+    if (*left == 0)
+        return;
+
+    /* append to carry */
+    if (ks->carry_len < sizeof(ks->carry))
+        ks->carry[ks->carry_len++] = c;
+    else
+        ks->carry[0] = c, ks->carry_len = 1;
+
+    /* try longest match */
+    uint32_t hira[2];
+    int hira_len = 0;
+
+    for (int len = ks->carry_len; len > 0; --len)
+    {
+        int consumed = match_romaji(ks->carry, hira, &hira_len);
+        if (consumed == len)
+        {
+            for (int i = 0; i < hira_len; i++)
+                emit_utf8(hira[i], out, left);
+
+            /* shift carry */
+            memmove(ks->carry, ks->carry + len, ks->carry_len - len);
+            ks->carry_len -= len;
+            return;
+        }
+    }
+
+    /* special case: double consonant → sokuon */
+    if (ks->carry_len >= 2 &&
+        ks->carry[0] == ks->carry[1] &&
+        is_consonant(ks->carry[0]) &&
+        ks->carry[0] != 'n')
+    {
+        emit_utf8(0x3063, out, left); /* っ */
+        ks->carry_len = 1;
+        ks->carry[0] = c;
+    }
+}
+
+static inline void kana_stream_flush(
+    KanaStream *ks,
+    char **out,
+    size_t *left)
+{
+    for (uint8_t i = 0; i < ks->carry_len && *left; i++)
+        *(*out)++ = ks->carry[i], (*left)--;
+
+    ks->carry_len = 0;
+}
+
+
+
+/* ============================================================
  * Main conversion
  * ============================================================ */
 
 void mixed_to_hiragana(const char *input, char *output, size_t out_size)
 {
+    KanaStream ks;
+    kana_stream_init(&ks);
+
     const char *s = input;
     char *out = output;
     size_t left = out_size - 1;
 
-    while (*s && left > 0)
+    while (*s && left)
     {
-        /* ASCII romaji path */
-        if (isalpha((unsigned char)s[0]))
+        unsigned char c = (unsigned char)*s;
+
+        /* romaji separator */
+        if (c == '\'')
         {
-            /* sokuon */
-            if (is_consonant(s[0]) && s[0] == s[1] && s[0] != 'n')
+            /* special case: trailing 'n' */
+            if (ks.carry_len == 1 && ks.carry[0] == 'n')
             {
-                emit_utf8(0x3063, &out, &left); /* っ */
-                s++;
-                continue;
+                emit_utf8(0x3093, &out, &left); /* ん */
+                ks.carry_len = 0;
             }
-
-            /* n → ん */
-            if (tolower((unsigned char)s[0]) == 'n')
-            {
-                if (s[1] == '\'' ||
-                    (!is_vowel(s[1]) && tolower((unsigned char)s[1]) != 'y'))
-                {
-                    emit_utf8(0x3093, &out, &left); /* ん */
-                    s += (s[1] == '\'') ? 2 : 1;
-                    continue;
-                }
-            }
-
-            /* normal romaji */
-            uint32_t buf[2];
-            int hira_len = 0;
-            int consumed = match_romaji(s, buf, &hira_len);
-            if (consumed > 0)
-            {
-                for (int i = 0; i < hira_len; i++)
-                    emit_utf8(buf[i], &out, &left);
-                s += consumed;
-                continue;
-            }
+            s++;
+            continue;
         }
 
-        /* fallback: copy byte */
-        *out++ = *s++;
-        left--;
+
+        /* ASCII romaji */
+        if (isalpha(c))
+        {
+            kana_stream_feed(&ks, (char)tolower(c), &out, &left);
+            s++;
+            continue;
+        }
+
+        /* UTF-8 kana path */
+        uint32_t cp;
+        const char *next = utf8_decode(s, &cp);
+        cp = normalize_kana(cp);
+        emit_utf8(cp, &out, &left);
+        s = next;
     }
 
+    kana_stream_flush(&ks, &out, &left);
     *out = '\0';
 }
-
 
 
 
