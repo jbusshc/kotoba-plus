@@ -1,18 +1,18 @@
 #ifndef SRS_H
 #define SRS_H
 
-#include <stdio.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <time.h>
+#include <stdio.h>
 
 #include "kotoba.h"
 
 /* ─────────────────────────────────────────────────────────────
- *  Time model (logical seconds)
+ *  Time model (unix seconds)
  * ───────────────────────────────────────────────────────────── */
 
-#define SRS_DAY 86400u
+#define SRS_DAY 86400ULL   /* seconds in a day */
 
 /* ─────────────────────────────────────────────────────────────
  *  Review quality
@@ -40,7 +40,8 @@ typedef enum {
 
 typedef struct {
     uint32_t entry_id;
-    uint32_t due;        /* logical time (minutes) */
+
+    uint64_t due;        /* unix timestamp (seconds) */
 
     uint16_t interval;  /* days (review only) */
     uint16_t reps;
@@ -92,26 +93,26 @@ static inline bool srs_contains(const srs_profile *p, uint32_t entry_id)
     return (p->bitmap[entry_id >> 3] >> (entry_id & 7)) & 1;
 }
 
-KOTOBA_API bool srs_add(srs_profile *p, uint32_t entry_id, uint32_t now);
+KOTOBA_API bool srs_add(srs_profile *p, uint32_t entry_id, uint64_t now);
 KOTOBA_API bool srs_remove(srs_profile *p, uint32_t entry_id);
 
-KOTOBA_API srs_item *srs_peek_due(srs_profile *p, uint32_t now);
-KOTOBA_API bool srs_pop_due_review(srs_profile *p, uint32_t now, srs_review *out);
+KOTOBA_API srs_item *srs_peek_due(srs_profile *p, uint64_t now);
+KOTOBA_API bool srs_pop_due_review(srs_profile *p, srs_review *out);
 KOTOBA_API void srs_requeue(srs_profile *p, uint32_t index);
 
-KOTOBA_API void srs_answer(srs_item *item, srs_quality q, uint32_t now);
+KOTOBA_API void srs_answer(srs_item *item, srs_quality q, uint64_t now);
 
+/* ─────────────────────────────────────────────────────────────
+ *  Time helpers (portable)
+ * ───────────────────────────────────────────────────────────── */
 
-
-static uint64_t srs_now(void)
+static inline uint64_t srs_now(void)
 {
     time_t t = time(NULL);
-    if (t < 0)
-        return 0;
-    return (uint64_t)t;
+    return (t < 0) ? 0 : (uint64_t)t;
 }
 
-static void print_time(uint64_t t)
+static inline void srs_print_time(uint64_t t)
 {
     time_t tt = (time_t)t;
     struct tm *tm = localtime(&tt);
@@ -125,6 +126,5 @@ static void print_time(uint64_t t)
            tm->tm_min,
            tm->tm_sec);
 }
-
 
 #endif /* SRS_H */

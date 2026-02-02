@@ -183,7 +183,6 @@ int main(int argc, char **argv)
     else if (strcmp(argv[1], "srs") == 0)
     {
         srs_profile srs;
-        uint64_t now = srs_now(); /* tiempo lógico inicial */
 
         kotoba_dict d;
         kotoba_dict_open(&d, dict_path, idx_path);
@@ -200,8 +199,11 @@ int main(int argc, char **argv)
 
         while (1)
         {
-            printf("\n[now=%llu] > ", (unsigned long long)now);
-
+            uint64_t now = srs_now(); /* tiempo lógico inicial */
+            printf("\n[now=%llu] - ", (unsigned long long)now);
+            printf("\n");
+            srs_print_time(now);
+            printf(" > ");
             if (scanf("%63s", cmd) != 1)
                 break;
 
@@ -230,7 +232,7 @@ int main(int argc, char **argv)
 
                 while (srs_peek_due(&srs, now))
                 {
-                    srs_pop_due_review(&srs,now, &r);
+                    srs_pop_due_review(&srs, &r);
 
                     printf("\nEntry ID: %u\n", r.item->entry_id);
                     printf("State: %s\n",
@@ -284,6 +286,23 @@ int main(int argc, char **argv)
                     {
                         printf("entry %u due now\n",
                             srs.items[i].entry_id);
+                    }
+                }
+            }
+
+            /* ───────────── to-review ───────────── */
+            else if (strcmp(cmd, "to-review") == 0)
+            {
+                for (uint32_t i = 0; i < srs.count; ++i)
+                {
+                    uint64_t due = srs.items[i].due;
+                    if (due > now)
+                    {
+                        uint64_t seconds_left = due - now;
+                        uint32_t days_left = (seconds_left + 86399) / 86400;
+                        printf("entry %u: %u days left\n",
+                            srs.items[i].entry_id,
+                            days_left);
                     }
                 }
             }
