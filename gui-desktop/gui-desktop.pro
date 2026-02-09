@@ -4,10 +4,19 @@ CONFIG += c++17
 
 SOURCES += \
     main.cpp \
-    mainwindow.cpp
+    mainwindow.cpp \
+    app_context.cpp \
+    search_presenter.cpp \
+    search_service.cpp \
+    search_result_model.cpp
+
 
 HEADERS += \
-    mainwindow.h
+    mainwindow.h \
+    app_context.h \
+    search_presenter.h \
+    search_service.h \
+    search_result_model.h
 
 FORMS += \
     mainwindow.ui

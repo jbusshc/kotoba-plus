@@ -63,7 +63,7 @@ struct SearchContext
     uint32_t results_processed;
     uint32_t page_size;
     uint32_t last_page;
-};
+};  
 
 KOTOBA_API void init_search_context(struct SearchContext *ctx,
                                     bool *glosses_active,

@@ -1,46 +1,36 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
 
-#include <QStandardItem>
 #include <QToolButton>
+#include <QStandardItem>
 
-static constexpr int SEARCH_DEBOUNCE_MS = 200;
+static constexpr int SEARCH_DEBOUNCE_MS = 0;
 
-MainWindow::MainWindow(QWidget *parent)
+MainWindow::MainWindow(KotobaAppContext *ctx, QWidget *parent)
     : QMainWindow(parent),
-    ui(new Ui::MainWindow),
-    searchResultModel(new QStandardItemModel(this)),
-    searchTimer(new QTimer(this))
+      ui(new Ui::MainWindow),
+      searchTimer(new QTimer(this))
 {
-    ui->setupUi(this); // 🔴 ESTO FALTABA
+    ui->setupUi(this);
 
-    // Modelo de resultados
+    // ===== MVP =====
+    auto *searchService = new KotobaSearchService(ctx);
+    presenter = new SearchPresenter(searchService, this);
+
+    searchResultModel = new SearchResultModel(presenter, this);
+
     ui->searchResultList->setModel(searchResultModel);
     ui->searchResultList->setWordWrap(true);
     ui->searchResultList->setUniformItemSizes(false);
 
-    // Timer debounce
+    // ===== Debounce =====
     searchTimer->setSingleShot(true);
     connect(searchTimer, &QTimer::timeout, this, [this]() {
-        searchResultModel->clear();
-
-        QString text = ui->lineEditSearch->text().trimmed();
-        if (text.isEmpty())
-            return;
-
-        // RESULTADOS DUMMY (para verificar UI)
-        for (int i = 0; i < 5; ++i) {
-            QStandardItem *item = new QStandardItem(
-                QString("Resultado %1\nSignificado de \"%2\"")
-                    .arg(i + 1)
-                    .arg(text)
-                );
-            item->setEditable(false);
-            searchResultModel->appendRow(item);
-        }
+        presenter->onSearchTextChanged(
+            ui->lineEditSearch->text().trimmed());
     });
 
-    // Conexiones UI
+    // ===== UI signals =====
     connect(ui->lineEditSearch, &QLineEdit::textChanged,
             this, &MainWindow::onSearchTextChanged);
 
@@ -50,21 +40,23 @@ MainWindow::MainWindow(QWidget *parent)
     connect(ui->btnBack, &QToolButton::clicked,
             this, &MainWindow::onBackButtonClicked);
 
-    // Navegación tabs
-    connect(ui->toolBtnDiccionario, &QToolButton::clicked, this, [this]() {
-        ui->stackedWidget->setCurrentIndex(0);
-    });
-
-    connect(ui->toolBtnSRS, &QToolButton::clicked, this, [this]() {
-        ui->stackedWidget->setCurrentIndex(2);
-    });
-
     ui->stackedWidget->setCurrentIndex(0);
 }
 
+
 MainWindow::~MainWindow()
 {
+    delete presenter;
     delete ui;
+}
+
+
+void MainWindow::showEntry(uint32_t entryId)
+{
+    Q_UNUSED(entryId);
+
+    // más adelante aquí cargas la entrada real
+    ui->stackedWidget->setCurrentIndex(1);
 }
 
 void MainWindow::onSearchTextChanged()
@@ -77,8 +69,7 @@ void MainWindow::onSearchResultClicked(const QModelIndex &index)
     if (!index.isValid())
         return;
 
-    // Por ahora solo navega
-    ui->stackedWidget->setCurrentIndex(1);
+    presenter->onResultClicked(index.row());
 }
 
 void MainWindow::onBackButtonClicked()
