@@ -521,6 +521,10 @@ int main(int argc, char **argv)
         run_test(&ctx, "ji", "じ");
         run_test(&ctx, "dji", "ぢ");
 
+        run_test(&ctx, "zu", "ず");
+        run_test(&ctx, "かれ", "かれ");
+        run_test(&ctx, "kare", "かれ");
+
         printf("\n🎉 All tests passed.\n");
         return 0;
     }

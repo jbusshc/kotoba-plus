@@ -148,9 +148,9 @@ extern "C"
         return (c >= 'a' && c <= 'z') && !is_vowel(c);
     }
 
-/* ============================================================
- * Romaji table (length is explicit, no strlen)
- * ============================================================ */
+    /* ============================================================
+     * Romaji table (length is explicit, no strlen)
+     * ============================================================ */
 
 #define ALPHABET 26
 #define MAX_NODES 512
@@ -413,11 +413,20 @@ extern "C"
         trie_insert(ctx, "nyu", 0x30CB, 0x30E5, 2);
         trie_insert(ctx, "nyo", 0x30CB, 0x30E7, 2);
 
+        /* ===== Z ===== */
+        trie_insert(ctx, "za", 0x30B6, 0, 1);
+        trie_insert(ctx, "zi", 0x30B8, 0, 1);
+        trie_insert(ctx, "zu", 0x30BA, 0, 1);
+        trie_insert(ctx, "ze", 0x30BC, 0, 1);
+        trie_insert(ctx, "zo", 0x30BE, 0, 1);
+
+        trie_insert(ctx, "zya", 0x30B8, 0x30E3, 2);
+        trie_insert(ctx, "zyu", 0x30B8, 0x30E5, 2);
+        trie_insert(ctx, "zyo", 0x30B8, 0x30E7, 2);
+
         /* ===== Special ===== */
         trie_insert(ctx, "-", 0x30FC, 0, 1);
         trie_insert(ctx, "dzu", 0x30C5, 0, 1);
-        
-        
     }
 
     /* ============================================================
