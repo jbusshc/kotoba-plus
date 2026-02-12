@@ -199,76 +199,19 @@ static inline uint32_t vowel_to_hiragana(int vowel)
 {
     switch (vowel)
     {
-    case 'a': return 0x3042; // あ
-    case 'i': return 0x3044; // い
-    case 'u': return 0x3046; // う
-    case 'e': return 0x3048; // え
-    case 'o': return 0x304A; // お
-    default: return 0;
+    case 'a':
+        return 0x3042; // あ
+    case 'i':
+        return 0x3044; // い
+    case 'u':
+        return 0x3046; // う
+    case 'e':
+        return 0x3048; // え
+    case 'o':
+        return 0x304A; // お
+    default:
+        return 0;
     }
-}
-
-static void generate_variant_input(const char *input, char *output, int out_size)
-{
-    if (!input || !output || out_size == 0)
-        return;
-
-    const uint8_t *p = (const uint8_t *)input;
-    char *out = output;
-    char *out_end = output + out_size - 1;
-
-    uint32_t prev_cp = 0;
-
-    while (*p && out < out_end)
-    {
-        int len = utf8_char_len(*p);
-
-        if (len == 3)
-        {
-            uint32_t cp =
-                ((p[0] & 0x0F) << 12) |
-                ((p[1] & 0x3F) << 6) |
-                (p[2] & 0x3F);
-
-            // If long vowel mark ー
-            if (cp == 0x30FC || cp == 0x30FC - 0x60) // in case already converted
-            {
-                if (prev_cp)
-                {
-                    int vowel = hiragana_vowel(prev_cp);
-                    uint32_t replacement = vowel_to_hiragana(vowel);
-
-                    if (replacement && out + 3 < out_end)
-                    {
-                        // encode replacement
-                        *out++ = 0xE3 | ((replacement >> 12) & 0x0F);
-                        *out++ = 0x80 | ((replacement >> 6) & 0x3F);
-                        *out++ = 0x80 | (replacement & 0x3F);
-                    }
-                }
-
-                p += len;
-                continue;
-            }
-
-            // normal copy
-            for (int i = 0; i < len && out < out_end; ++i)
-                *out++ = p[i];
-
-            prev_cp = cp;
-        }
-        else
-        {
-            for (int i = 0; i < len && out < out_end; ++i)
-                *out++ = p[i];
-
-            prev_cp = 0;
-        }
-
-        p += len;
-    }
-
-    *out = '\0';
 }
 
 
@@ -353,6 +296,64 @@ void query_results(struct SearchContext *ctx, const char *query)
                 write++;
             }
             total_results = write;
+        }
+
+        char variant_input[256];
+        vowel_prolongation_mark(query, variant_input, sizeof(variant_input));
+        if (strcmp(variant_input, mixed) != 0)
+        {
+            query_t variant_q;
+            variant_q.s = variant_input;
+            variant_q.len = (uint8_t)strlen(variant_input);
+            variant_q.first = variant_input[0];
+
+            uint32_t variant_hashes[SEARCH_MAX_QUERY_HASHES];
+            int variant_hcount = query_gram_hashes_mode(variant_input, GRAM_JP, variant_hashes, SEARCH_MAX_QUERY_HASHES);
+
+            int base = total_results;
+            int out_cap = SEARCH_MAX_RESULTS - base;
+            if (out_cap > 0)
+            {
+                int rcount = index_intersect_postings(
+                    jp_invx,
+                    variant_hashes,
+                    variant_hcount,
+                    results_buffer + base,
+                    out_cap);
+
+                int write = base;
+                for (int i = 0; i < rcount; ++i)
+                {
+                    PostingRef *pr = &results_buffer[base + i];
+                    const entry_bin *e = kotoba_entry(dict, pr->p->doc_id);
+                    kotoba_str str;
+                    int elem_id = pr->p->meta1;
+                    int type = pr->p->meta2;
+
+                    if (type == TYPE_KANJI)
+                    {
+                        const k_ele_bin *k_ele = kotoba_k_ele(dict, e, elem_id);
+                        str = kotoba_keb(dict, k_ele);
+                    }
+                    else
+                    {
+                        const r_ele_bin *r_ele = kotoba_r_ele(dict, e, elem_id);
+                        str = kotoba_reb(dict, r_ele);
+                    }
+
+                    if (variant_q.len > str.len)
+                        continue;
+
+                    if (write != base + i)
+                        results_buffer[write] = *pr;
+
+                    results_meta[write].results_idx = write;
+                    results_meta[write].score = (uint16_t)str.len;
+                    results_meta[write].type = (type == TYPE_KANJI) ? 0 : 1;
+                    write++;
+                }
+                total_results = write;
+            }
         }
     }
 

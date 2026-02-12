@@ -525,6 +525,13 @@ int main(int argc, char **argv)
         run_test(&ctx, "かれ", "かれ");
         run_test(&ctx, "kare", "かれ");
 
+
+        char* test = "かれえ";
+        char variant[256];
+        vowel_prolongation_mark(test, variant, sizeof(variant));
+        printf("Original: %s\n", test);
+        printf("Variant: %s\n", variant);
+
         printf("\n🎉 All tests passed.\n");
         return 0;
     }

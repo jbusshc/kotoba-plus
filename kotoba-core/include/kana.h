@@ -429,11 +429,14 @@ extern "C"
         trie_insert(ctx, "dzu", 0x30C5, 0, 1);
     }
 
+
     /* ============================================================
      * Main conversion
      * ============================================================ */
 
     KOTOBA_API void mixed_to_hiragana(const TrieContext *ctx, const char *input, char *output, size_t out_size);
+
+    KOTOBA_API void vowel_prolongation_mark(const char *input, char *output, size_t out_size);
 
 #ifdef __cplusplus
 }
