@@ -41,8 +41,8 @@ void srs_prompt(void)
     printf("  add <id>        add entry to SRS\n");
     printf("  study           study due cards\n");
     printf("  day <n>         advance n days\n");
-    //printf("  save            save profile\n");
-    //printf("  load            load profile\n");
+    // printf("  save            save profile\n");
+    // printf("  load            load profile\n");
     printf("  to-review      list entries in SRS with days left\n");
     printf("  due            list entries due today or overdue\n");
     printf("  quit\n");
@@ -61,7 +61,8 @@ int main(int argc, char **argv)
         fprintf(stderr,
                 "Usage:  build-invx <tsv> out.invx\n"
                 "        search <index.invx> <query>\n"
-                "        srs\n");
+                "        srs\n"
+                "        build-tsv\n");
         return 1;
     }
 
@@ -71,8 +72,8 @@ int main(int argc, char **argv)
         if (argc != 5)
         {
             fprintf(stderr,
-                    "build <tsv> jp out.idx\n"
-                    "build <tsv> gloss out.idx\n");
+                    "build-invx <tsv> jp out.invx\n"
+                    "build-invx <tsv> gloss out.invx\n");
             return 1;
         }
 
@@ -193,10 +194,10 @@ int main(int argc, char **argv)
         /* ───────────── sync init ───────────── */
 
         if (!srs_sync_open(&sync,
-                        "events.dat",
-                        "snapshot.dat",
-                        1,              /* device_id */
-                        DICT_SIZE))
+                           "events.dat",
+                           "snapshot.dat",
+                           1, /* device_id */
+                           DICT_SIZE))
         {
             fprintf(stderr, "failed to init sync\n");
             return 1;
@@ -252,8 +253,7 @@ int main(int argc, char **argv)
 
                     printf("\nEntry ID: %u\n", r.item->entry_id);
                     printf("State: %s\n",
-                        r.item->state == SRS_LEARNING ?
-                        "LEARNING" : "REVIEW");
+                           r.item->state == SRS_LEARNING ? "LEARNING" : "REVIEW");
                     printf("Interval: %u days\n", r.item->interval);
                     printf("Ease: %.2f\n", r.item->ease);
 
@@ -264,10 +264,18 @@ int main(int argc, char **argv)
                     srs_quality quality;
                     switch (q)
                     {
-                    case 3: quality = SRS_HARD; break;
-                    case 4: quality = SRS_GOOD; break;
-                    case 5: quality = SRS_EASY; break;
-                    default: quality = SRS_AGAIN; break;
+                    case 3:
+                        quality = SRS_HARD;
+                        break;
+                    case 4:
+                        quality = SRS_GOOD;
+                        break;
+                    case 5:
+                        quality = SRS_EASY;
+                        break;
+                    default:
+                        quality = SRS_AGAIN;
+                        break;
                     }
 
                     /* ⚠️ ahora pasa por sync */
@@ -307,7 +315,7 @@ int main(int argc, char **argv)
                     if (srs.items[i].due <= now)
                     {
                         printf("entry %u due now\n",
-                            srs.items[i].entry_id);
+                               srs.items[i].entry_id);
                     }
                 }
             }
@@ -325,8 +333,8 @@ int main(int argc, char **argv)
                             (seconds_left + 86399) / 86400;
 
                         printf("entry %u: %u days left\n",
-                            srs.items[i].entry_id,
-                            days_left);
+                               srs.items[i].entry_id,
+                               days_left);
                     }
                 }
             }
@@ -354,59 +362,166 @@ int main(int argc, char **argv)
         srs_sync_close(&sync);
         return 0;
     }
-
-
-    else if (strcmp(argv[1], "test") == 0)
-    {
-
-        const char *query_file = argv[2];
-
-        char *query = read_utf8_file(query_file);
-        if (!query)
-        {
-            fprintf(stderr, "failed read query file\n");
-            return 1;
-        }
+    else if (strcmp(argv[1], "build-tsv") == 0)
+    { // generate all tsv
 
         kotoba_dict d;
         kotoba_dict_open(&d, dict_path, idx_path);
+        TrieContext ctx;
+        build_trie(&ctx);
 
-        bool languages[KOTOBA_LANG_COUNT] = {0};
-        languages[KOTOBA_LANG_EN] = true;
-        languages[KOTOBA_LANG_ES] = true;
+        const char *jp_out = "tsv/jp.tsv";
+        char **glosses_out;
+        glosses_out = malloc(sizeof(char *) * KOTOBA_LANG_COUNT);
+        const char *lang_names[] = {
+            "en", "fr", "de", "ru", "es", "pt", "it", "nl", "hu", "sv",
+            "cs", "pl", "ro", "he", "ar", "tr", "th", "vi", "id", "ms",
+            "ko", "zh", "zh_cn", "zh_tw", "fa", "eo", "slv", "unk"};
+        for (int i = 0; i < KOTOBA_LANG_COUNT - 1; ++i)
+        {
+            glosses_out[i] = malloc(64);
+            snprintf(glosses_out[i], 64, "tsv/gloss_%s.tsv", lang_names[i]);
+        }
 
-        int page_size = 10;
-        struct SearchContext ctx;
-        init_search_context(&ctx, languages, &d, page_size);
+        FILE *jp_fp = fopen(jp_out, "w");
+        FILE *gloss_fps[KOTOBA_LANG_COUNT - 1];
+        for (int i = 0; i < KOTOBA_LANG_COUNT - 1; ++i)
+        {
+            gloss_fps[i] = fopen(glosses_out[i], "w");
+        }
 
-        // warm-up test query
-        clock_t warm_start = clock();
-        warm_up(&ctx);
-        clock_t warm_end = clock();
-        double warm_elapsed = (double)(warm_end - warm_start) / CLOCKS_PER_SEC;
-        printf("Warm-up executed in %.2f milliseconds\n", warm_elapsed * 1000);
-        // measure time
-        clock_t start_time = clock();
-        query_results(&ctx, query);
-        clock_t end_time = clock();
-        double elapsed_time = (double)(end_time - start_time) / CLOCKS_PER_SEC;
-        printf("Query executed in %.2f milliseconds\n", elapsed_time * 1000);
+        for (uint32_t i = 0; i < d.entry_count; ++i)
+        {
+            const entry_bin *e = kotoba_entry(&d, i);
+            char str[64][1024];
+            int str_count = 0;
 
-        clock_t page_start = clock();
-        query_next_page(&ctx);
-        clock_t page_end = clock();
-        double page_elapsed = (double)(page_end - page_start) / CLOCKS_PER_SEC;
-        printf("Page retrieval executed in %.2f milliseconds\n", page_elapsed * 1000);
+            if (e->k_elements_count > 0)
+            {
+                const k_ele_bin *k_ele = kotoba_k_ele(&d, e, 0);
+                for (int j = 0; j < e->k_elements_count; ++j)
+                {
+                    kotoba_str keb = kotoba_keb(&d, &k_ele[j]);
+                    fprintf(jp_fp, "%u\t%.*s\t%u\t%u\n", i, (int)keb.len, keb.ptr, j, TYPE_KANJI);
+                }
+            }
+            if (e->r_elements_count > 0)
+            {
+                const r_ele_bin *r_ele = kotoba_r_ele(&d, e, 0);
+                for (int j = 0; j < e->r_elements_count; ++j)
+                {
+                    kotoba_str reb = kotoba_reb(&d, &r_ele[j]);
+                    char reb_str[256];
+                    strncpy(reb_str, reb.ptr, reb.len);
+                    reb_str[reb.len] = '\0';
+                    char normalized[256];
+                    mixed_to_hiragana(&ctx, reb_str, normalized, sizeof(normalized));
 
-        printf("Results: %u\n", ctx.results_left);
+                    memcpy(str[str_count++], normalized, sizeof(normalized));
+                }
 
-        // test romaji to kana
-        const char *romaji = "kon'nichiwa, sekai! watashi wa AI desu.";
-        char kana[256] = {0};
+                for (int j = 0; j < str_count; ++j)
+                {
+                    bool is_duplicate = false;
+                    for (int k = 0; k < j; ++k)
+                    {
+                        if (strcmp(str[k], str[j]) == 0)
+                        {
+                            is_duplicate = true;
+                            break;
+                        }
+                    }
+                    if (!is_duplicate)
+                    {
+                        fprintf(jp_fp, "%u\t%s\t%u\t%u\n", i, str[j], j, TYPE_READING);
+                    }
+                }
+            }
+            for (int s = 0; s < e->senses_count; ++s)
+            {
+                const sense_bin *sense = kotoba_sense(&d, e, s);
+                for (int g = 0; g < sense->gloss_count; ++g)
+                {
+                    kotoba_str gloss = kotoba_gloss(&d, sense, g);
+                    for (int lang = 0; lang < KOTOBA_LANG_COUNT - 1; ++lang)
+                    {
+                        if (sense->lang == lang)
+                        {
+                            fprintf(gloss_fps[lang], "%u\t%.*s\t%u\t%u\n", i, (int)gloss.len, gloss.ptr, s, g);
+                        }
+                    }
+                }
+            }
+        }
 
-        mixed_to_hiragana(romaji, kana, sizeof(kana));
-        printf("Romaji: %s\nKana: %s\n", romaji, kana);
+        printf("TSV files generated successfully.\n");
+        fclose(jp_fp);
+        for (int i = 0; i < KOTOBA_LANG_COUNT - 1; ++i)
+        {
+            fclose(gloss_fps[i]);
+        }
 
+        return 0;
+    }
+    else if (strcmp(argv[1], "test") == 0)
+    {
+
+        // test new kana.h
+        void run_test(const TrieContext *ctx, const char *input, const char *expected)
+        {
+            char buffer[512];
+
+            mixed_to_hiragana(ctx, input, buffer, sizeof(buffer));
+
+            if (strcmp(buffer, expected) == 0)
+            {
+                printf("✅ PASS: %-20s → %s\n", input, buffer);
+            }
+            else
+            {
+                printf("❌ FAIL: %-20s\n", input);
+                printf("   got:      %s\n", buffer);
+                printf("   expected: %s\n", expected);
+                exit(1);
+            }
+        }
+
+        TrieContext ctx;
+        build_trie(&ctx);
+
+        run_test(&ctx, "ka", "か");
+        run_test(&ctx, "shi", "し");
+        run_test(&ctx, "si", "し");
+        run_test(&ctx, "tsu", "つ");
+        run_test(&ctx, "dji", "ぢ");
+        run_test(&ctx, "dzu", "づ");
+
+        /* Youon */
+        run_test(&ctx, "kyo", "きょ");
+        run_test(&ctx, "ryu", "りゅ");
+        run_test(&ctx, "myu", "みゅ");
+
+        /* Vocal larga */
+        run_test(&ctx, "kyuu", "きゅう");
+        run_test(&ctx, "toukyou", "とうきょう");
+
+        /* Sokuon */
+        run_test(&ctx, "kitte", "きって");
+        run_test(&ctx, "gakkou", "がっこう");
+
+        /* N */
+        run_test(&ctx, "kan", "かん");
+        run_test(&ctx, "shin'you", "しんよう");
+        run_test(&ctx, "tenno", "てんの");
+
+        /* Katakana */
+        run_test(&ctx, "カレー", "かれー");
+        run_test(&ctx, "スーパー", "すーぱー");
+
+        run_test(&ctx, "ji", "じ");
+        run_test(&ctx, "dji", "ぢ");
+
+        printf("\n🎉 All tests passed.\n");
         return 0;
     }
 

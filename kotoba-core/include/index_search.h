@@ -50,6 +50,7 @@ sort_scores(SearchResultMeta *a, int n);
 
 struct SearchContext
 {
+    TrieContext trie_ctx;
     bool is_gloss_active[KOTOBA_LANG_COUNT]; // 28 bytes
     uint8_t _pad0[4];                        // pad to 32 bytes (8-byte aligned)
     query_t query;

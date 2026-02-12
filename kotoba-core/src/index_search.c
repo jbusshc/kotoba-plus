@@ -85,6 +85,8 @@ void init_search_context(struct SearchContext *ctx,
     ctx->results_left = 0;
     ctx->results_processed = 0;
 
+    build_trie(&ctx->trie_ctx);
+
     if (glosses_active)
     {
         for (int i = 0; i < KOTOBA_LANG_COUNT; ++i)
@@ -193,6 +195,83 @@ void reset_search_context(struct SearchContext *ctx)
     ctx->last_page = 0;
 }
 
+static inline uint32_t vowel_to_hiragana(int vowel)
+{
+    switch (vowel)
+    {
+    case 'a': return 0x3042; // あ
+    case 'i': return 0x3044; // い
+    case 'u': return 0x3046; // う
+    case 'e': return 0x3048; // え
+    case 'o': return 0x304A; // お
+    default: return 0;
+    }
+}
+
+static void generate_variant_input(const char *input, char *output, int out_size)
+{
+    if (!input || !output || out_size == 0)
+        return;
+
+    const uint8_t *p = (const uint8_t *)input;
+    char *out = output;
+    char *out_end = output + out_size - 1;
+
+    uint32_t prev_cp = 0;
+
+    while (*p && out < out_end)
+    {
+        int len = utf8_char_len(*p);
+
+        if (len == 3)
+        {
+            uint32_t cp =
+                ((p[0] & 0x0F) << 12) |
+                ((p[1] & 0x3F) << 6) |
+                (p[2] & 0x3F);
+
+            // If long vowel mark ー
+            if (cp == 0x30FC || cp == 0x30FC - 0x60) // in case already converted
+            {
+                if (prev_cp)
+                {
+                    int vowel = hiragana_vowel(prev_cp);
+                    uint32_t replacement = vowel_to_hiragana(vowel);
+
+                    if (replacement && out + 3 < out_end)
+                    {
+                        // encode replacement
+                        *out++ = 0xE3 | ((replacement >> 12) & 0x0F);
+                        *out++ = 0x80 | ((replacement >> 6) & 0x3F);
+                        *out++ = 0x80 | (replacement & 0x3F);
+                    }
+                }
+
+                p += len;
+                continue;
+            }
+
+            // normal copy
+            for (int i = 0; i < len && out < out_end; ++i)
+                *out++ = p[i];
+
+            prev_cp = cp;
+        }
+        else
+        {
+            for (int i = 0; i < len && out < out_end; ++i)
+                *out++ = p[i];
+
+            prev_cp = 0;
+        }
+
+        p += len;
+    }
+
+    *out = '\0';
+}
+
+
 void query_results(struct SearchContext *ctx, const char *query)
 {
     reset_search_context(ctx);
@@ -207,8 +286,9 @@ void query_results(struct SearchContext *ctx, const char *query)
         fprintf(stderr, "no grams from query\n");
         return;
     }
+    TrieContext *trie_ctx = &ctx->trie_ctx;
     char mixed[256];
-    mixed_to_hiragana(query, mixed, sizeof(mixed));
+    mixed_to_hiragana(trie_ctx, query, mixed, sizeof(mixed));
 
     query_t mixed_q;
     mixed_q.s = mixed;
@@ -363,8 +443,11 @@ void query_next_page(struct SearchContext *ctx)
     int worst_idx = 0;
 
     query_t q = ctx->query;
+
+    TrieContext *trie_ctx = &ctx->trie_ctx;
+
     char mixed[256];
-    mixed_to_hiragana(q.s, mixed, sizeof(mixed));
+    mixed_to_hiragana(trie_ctx, q.s, mixed, sizeof(mixed));
     query_t mixed_q = {.s = mixed, .len = (uint8_t)strlen(mixed), .first = mixed[0]};
 
     for (uint32_t i = 0; i < results_left; ++i)
