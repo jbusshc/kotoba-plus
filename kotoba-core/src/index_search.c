@@ -85,6 +85,8 @@ void init_search_context(struct SearchContext *ctx,
     ctx->results_left = 0;
     ctx->results_processed = 0;
 
+
+
     ctx->trie_ctx = malloc(sizeof(TrieContext));
     if (!ctx->trie_ctx)
     {
@@ -163,12 +165,19 @@ void init_search_context(struct SearchContext *ctx,
     }
 
     ctx->results_doc_ids = malloc(sizeof(uint32_t) * SEARCH_MAX_RESULTS);
-    ctx->results = malloc(sizeof(SearchResultMeta) * SEARCH_MAX_RESULTS);
     ctx->results_buffer = malloc(sizeof(PostingRef) * SEARCH_MAX_RESULTS);
 
-    if (!ctx->results_doc_ids || !ctx->results || !ctx->results_buffer)
+    if (!ctx->results_doc_ids || !ctx->results_buffer)
     {
         fprintf(stderr, "Memory allocation failed for results buffers\n");
+        exit(1);
+    }
+    ctx->results.results_idx = malloc(sizeof(uint32_t) * SEARCH_MAX_RESULTS);
+    ctx->results.score = malloc(sizeof(uint8_t) * SEARCH_MAX_RESULTS);
+    ctx->results.type = malloc(sizeof(uint8_t) * SEARCH_MAX_RESULTS);
+    if (!ctx->results.results_idx || !ctx->results.score || !ctx->results.type)
+    {
+        fprintf(stderr, "Memory allocation failed for SearchResultMeta arrays\n");
         exit(1);
     }
 }
@@ -189,7 +198,9 @@ void free_search_context(struct SearchContext *ctx)
         }
     }
     free(ctx->results_doc_ids);
-    free(ctx->results);
+    free (ctx->results.results_idx);
+    free (ctx->results.score);
+    free (ctx->results.type);
     free(ctx->results_buffer);
 
     for (int i = 0; i < KOTOBA_LANG_COUNT; ++i)
@@ -294,9 +305,9 @@ static int search_jp_query(
         if (write != base + i)
             results_buffer[write] = *pr;
 
-        results_meta[write].results_idx = write;
-        results_meta[write].score = (uint16_t)str.len;
-        results_meta[write].type = (type == TYPE_KANJI) ? 0 : 1;
+        ctx->results.results_idx[write] = write;
+        ctx->results.score[write] = (uint16_t)str.len;
+        ctx->results.type[write] = (type == TYPE_KANJI) ? 0 : 1;
 
         write++;
     }
@@ -320,7 +331,6 @@ void query_results(struct SearchContext *ctx, const char *query)
         SEARCH_MAX_QUERY_HASHES);
 
     PostingRef *results_buffer = ctx->results_buffer;
-    SearchResultMeta *results_meta = ctx->results;
     kotoba_dict *dict = ctx->dict;
 
     int total_results = 0;
@@ -340,7 +350,7 @@ void query_results(struct SearchContext *ctx, const char *query)
             ctx,
             ctx->mixed_query,
             results_buffer,
-            results_meta,
+            &ctx->results,
             total_results,
             SEARCH_MAX_RESULTS);
 
@@ -354,7 +364,7 @@ void query_results(struct SearchContext *ctx, const char *query)
                     ctx,
                     ctx->variant_query,
                     results_buffer,
-                    results_meta,
+                    &ctx->results,
                     total_results,
                     SEARCH_MAX_RESULTS);
             }
@@ -408,9 +418,9 @@ void query_results(struct SearchContext *ctx, const char *query)
                 if (write != base + i)
                     results_buffer[write] = *pr;
 
-                results_meta[write].results_idx = write;
-                results_meta[write].score = (uint16_t)gloss.len;
-                results_meta[write].type = 2; // gloss
+                ctx->results.results_idx[write] = write;
+                ctx->results.score[write] = (uint16_t)gloss.len;
+                ctx->results.type[write] = 2; // gloss
 
                 write++;
             }
@@ -457,7 +467,6 @@ void query_next_page(struct SearchContext *ctx)
 
     kotoba_dict *dict = ctx->dict;
     PostingRef *results_buffer = ctx->results_buffer;
-    SearchResultMeta *results_meta = ctx->results;
 
     uint32_t page_size = ctx->page_size;
     uint32_t last_page = ctx->last_page;
@@ -487,18 +496,21 @@ void query_next_page(struct SearchContext *ctx)
     // 1️⃣ TOP-K con hard_filter solo si compite
     // =========================================================
 
-    SearchResultMeta topk[page_size];
+    uint8_t topk_scores[page_size];
+    uint8_t topk_types[page_size];
     uint32_t topk_indices[page_size];
     uint32_t topk_size = 0;
+    uint8_t *score = ctx->results.score;
+    uint8_t *type = ctx->results.type;
+    uint32_t *results_idx = ctx->results.results_idx;
 
     for (uint32_t i = 0; i < ctx->results_left; i++)
     {
-        SearchResultMeta *meta = &results_meta[i];
-        int score = meta->score;
+        uint8_t score = ctx->results.score[i];
 
         // --- 1️⃣ score pruning ---
         if (topk_size == page_size &&
-            score >= topk[topk_size - 1].score)
+            score >= topk_scores[topk_size - 1])
         {
             continue;
         }
@@ -506,11 +518,11 @@ void query_next_page(struct SearchContext *ctx)
         // --- 2️⃣ construir string SOLO si compite ---
         const entry_bin *e =
             kotoba_entry(dict,
-                         results_buffer[meta->results_idx].p->doc_id);
+                         results_buffer[results_idx[i]].p->doc_id);
 
-        int type = meta->type;
-        int meta1 = results_buffer[meta->results_idx].p->meta1;
-        int meta2 = results_buffer[meta->results_idx].p->meta2;
+        int type = ctx->results.type[i];
+        int meta1 = results_buffer[results_idx[i]].p->meta1;
+        int meta2 = results_buffer[results_idx[i]].p->meta2;
 
         kotoba_str str;
         query_t *query;
@@ -536,7 +548,7 @@ void query_next_page(struct SearchContext *ctx)
 
         // --- 3️⃣ hard_filter SOLO si compite ---
         if (!hard_filter(ctx, &str, query, &variant_q, type, using_variant)) {
-            printf("Filtered out: doc_id=%u, type=%d, str=%.*s\n", results_buffer[meta->results_idx].p->doc_id, type, str.len, str.ptr);
+            printf("Filtered out: doc_id=%u, type=%d, str=%.*s\n", results_buffer[results_idx[i]].p->doc_id, type, str.len, str.ptr);
             continue;
         }
 
@@ -545,14 +557,16 @@ void query_next_page(struct SearchContext *ctx)
         {
             int pos = topk_size;
 
-            while (pos > 0 && topk[pos - 1].score > score)
+            while (pos > 0 && topk_scores[pos - 1] > score)
             {
-                topk[pos] = topk[pos - 1];
+                topk_scores[pos] = topk_scores[pos - 1];
+                topk_types[pos] = topk_types[pos - 1];
                 topk_indices[pos] = topk_indices[pos - 1];
                 pos--;
             }
 
-            topk[pos] = *meta;
+            topk_scores[pos] = score;
+            topk_types[pos] = ctx->results.type[i];
             topk_indices[pos] = i;
             topk_size++;
         }
@@ -560,14 +574,16 @@ void query_next_page(struct SearchContext *ctx)
         {
             int pos = topk_size - 1;
 
-            while (pos > 0 && topk[pos - 1].score > score)
+            while (pos > 0 && topk_scores[pos - 1] > score)
             {
-                topk[pos] = topk[pos - 1];
+                topk_scores[pos] = topk_scores[pos - 1];
+                topk_types[pos] = topk_types[pos - 1];
                 topk_indices[pos] = topk_indices[pos - 1];
                 pos--;
             }
 
-            topk[pos] = *meta;
+            topk_scores[pos] = score;
+            topk_types[pos] = ctx->results.type[i];
             topk_indices[pos] = i;
         }
     }
@@ -584,7 +600,7 @@ void query_next_page(struct SearchContext *ctx)
     for (uint32_t i = 0; i < topk_size; i++)
     {
         ctx->results_doc_ids[offset + i] =
-            results_buffer[topk[i].results_idx].p->doc_id;
+            results_buffer[topk_indices[i]].p->doc_id;
     }
 
     // =========================================================
@@ -597,8 +613,11 @@ void query_next_page(struct SearchContext *ctx)
 
         if (idx < ctx->results_left)
         {
-            if (idx != ctx->results_left - 1)
-                results_meta[idx] = results_meta[ctx->results_left - 1];
+            if (idx != ctx->results_left - 1) {
+                ctx->results.results_idx[idx] = ctx->results.results_idx[ctx->results_left - 1];
+                ctx->results.score[idx] = ctx->results.score[ctx->results_left - 1];
+                ctx->results.type[idx] = ctx->results.type[ctx->results_left - 1];
+            }
 
             ctx->results_left--;
         }

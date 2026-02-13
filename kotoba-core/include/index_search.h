@@ -37,11 +37,11 @@ KOTOBA_API int
 word_contains_q(const char *word, int wlen,
                 const query_t *q);
 
-typedef struct
+typedef struct // SoA for better cache locality when sorting
 {
-    uint32_t results_idx; // index in results buffer
-    uint16_t score;       // lower is better
-    uint16_t type;        // 0=kanji,1=reading,2+=gloss lang index
+    uint32_t* results_idx; // index in results buffer
+    uint8_t* score;       // lower is better
+    uint8_t* type;        // 0=kanji,1=reading,2+=gloss lang index
 
 } SearchResultMeta;
 
@@ -65,7 +65,7 @@ struct SearchContext
     InvertedIndex **gloss_invxs;
     PostingRef *results_buffer;
     uint32_t *results_doc_ids;
-    SearchResultMeta *results;
+    SearchResultMeta results;
     uint32_t results_left;
     uint32_t results_processed;
     uint32_t page_size;
