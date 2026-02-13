@@ -161,8 +161,7 @@ int main(int argc, char **argv)
         struct SearchContext ctx;
         init_search_context(&ctx, languages, &d, page_size);
 
-        // warm-up
-        // warm_up_minimal(&ctx);
+
 
         // measure time
         clock_t start_time = clock();
@@ -170,6 +169,9 @@ int main(int argc, char **argv)
         clock_t end_time = clock();
         double elapsed_time = (double)(end_time - start_time) / CLOCKS_PER_SEC;
         printf("Query executed in %.2f milliseconds\n", elapsed_time * 1000);
+
+        printf("results processed: %u\n", ctx.results_processed);
+        printf("results left: %u\n", ctx.results_left);
         query_next_page(&ctx);
 
         printf("Results:\n");
@@ -466,73 +468,36 @@ int main(int argc, char **argv)
     else if (strcmp(argv[1], "test") == 0)
     {
 
-        // test new kana.h
-        void run_test(const TrieContext *ctx, const char *input, const char *expected)
-        {
-            char buffer[512];
+        kotoba_dict d;
+        bool languages[KOTOBA_LANG_COUNT] = {0};
+        languages[KOTOBA_LANG_EN] = true;
+        languages[KOTOBA_LANG_ES] = true;
+        kotoba_dict_open(&d, dict_path, idx_path);
 
-            mixed_to_hiragana(ctx, input, buffer, sizeof(buffer));
+        struct SearchContext ctx;
+        init_search_context(&ctx, languages, &d, 20);
 
-            if (strcmp(buffer, expected) == 0)
-            {
-                printf("✅ PASS: %-20s → %s\n", input, buffer);
-            }
-            else
-            {
-                printf("❌ FAIL: %-20s\n", input);
-                printf("   got:      %s\n", buffer);
-                printf("   expected: %s\n", expected);
-                exit(1);
-            }
-        }
-
-        TrieContext ctx;
-        build_trie(&ctx);
-
-        run_test(&ctx, "ka", "か");
-        run_test(&ctx, "shi", "し");
-        run_test(&ctx, "si", "し");
-        run_test(&ctx, "tsu", "つ");
-        run_test(&ctx, "dji", "ぢ");
-        run_test(&ctx, "dzu", "づ");
-
-        /* Youon */
-        run_test(&ctx, "kyo", "きょ");
-        run_test(&ctx, "ryu", "りゅ");
-        run_test(&ctx, "myu", "みゅ");
-
-        /* Vocal larga */
-        run_test(&ctx, "kyuu", "きゅう");
-        run_test(&ctx, "toukyou", "とうきょう");
-
-        /* Sokuon */
-        run_test(&ctx, "kitte", "きって");
-        run_test(&ctx, "gakkou", "がっこう");
-
-        /* N */
-        run_test(&ctx, "kan", "かん");
-        run_test(&ctx, "shin'you", "しんよう");
-        run_test(&ctx, "tenno", "てんの");
-
-        /* Katakana */
-        run_test(&ctx, "カレー", "かれー");
-        run_test(&ctx, "スーパー", "すーぱー");
-
-        run_test(&ctx, "ji", "じ");
-        run_test(&ctx, "dji", "ぢ");
-
-        run_test(&ctx, "zu", "ず");
-        run_test(&ctx, "かれ", "かれ");
-        run_test(&ctx, "kare", "かれ");
-
-
-        char* test = "かれえ";
+        char* test_str = "konpyuuta";
+        
+        char mixed[256];
+        mixed_to_hiragana(ctx.trie_ctx, test_str, mixed, sizeof(mixed));
         char variant[256];
-        vowel_prolongation_mark(test, variant, sizeof(variant));
-        printf("Original: %s\n", test);
+        vowel_prolongation_mark( mixed, variant, sizeof(variant));
+
+        printf("Original: %s\n", test_str);
         printf("Variant: %s\n", variant);
 
-        printf("\n🎉 All tests passed.\n");
+        uint32_t hashes[256];
+        int hcount = query_gram_hashes_mode(variant, GRAM_JP, hashes, 256);
+        printf("Hashes for variant:\n");
+        for (int i = 0; i < hcount; ++i)
+        {
+            printf("  %u\n", hashes[i]);
+        } 
+        int rc = index_intersect_postings(ctx.jp_invx, hashes, hcount, ctx.results_buffer, ctx.page_size);
+        printf("Search returned %d results\n", rc);
+        
+
         return 0;
     }
 

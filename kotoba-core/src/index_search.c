@@ -1,6 +1,6 @@
 #include "../include/index_search.h"
 
-#define SEARCH_MAX_RESULTS 20000
+#define SEARCH_MAX_RESULTS 100
 #define SEARCH_MAX_QUERY_HASHES 128
 #define DEFAULT_PAGE_SIZE 16
 
@@ -85,7 +85,21 @@ void init_search_context(struct SearchContext *ctx,
     ctx->results_left = 0;
     ctx->results_processed = 0;
 
-    build_trie(&ctx->trie_ctx);
+    ctx->trie_ctx = malloc(sizeof(TrieContext));
+    if (!ctx->trie_ctx)
+    {
+        fprintf(stderr, "Memory allocation failed for TrieContext\n");
+        exit(1);
+    }
+    ctx->queries_buffer = malloc(QUERY_BUFFER_SIZE);
+    if (!ctx->queries_buffer)
+    {
+        fprintf(stderr, "Memory allocation failed for queries_buffer\n");
+        exit(1);
+    }
+    ctx->mixed_query = ctx->queries_buffer;                   // reuse buffer
+    ctx->variant_query = ctx->queries_buffer + MAX_QUERY_LEN; // reuse buffer
+    build_trie(ctx->trie_ctx);
 
     if (glosses_active)
     {
@@ -214,263 +228,268 @@ static inline uint32_t vowel_to_hiragana(int vowel)
     }
 }
 
+static int search_jp_query(
+    struct SearchContext *ctx,
+    const char *query_str,
+    PostingRef *results_buffer,
+    SearchResultMeta *results_meta,
+    int base,
+    int max_results)
+{
+    if (!ctx->jp_invx)
+        return base;
+
+    query_t q;
+    q.s = query_str;
+    q.len = (uint8_t)strlen(query_str);
+    q.first = query_str[0];
+
+    uint32_t hashes[SEARCH_MAX_QUERY_HASHES];
+    int hcount = query_gram_hashes_mode(query_str, GRAM_JP, hashes, SEARCH_MAX_QUERY_HASHES);
+    if (hcount == 0)
+        return base;
+
+    int out_cap = max_results - base;
+    if (out_cap <= 0)
+        return base;
+
+    int rcount = index_intersect_postings(
+        ctx->jp_invx,
+        hashes,
+        hcount,
+        results_buffer + base,
+        out_cap);
+
+    kotoba_dict *dict = ctx->dict;
+
+    int write = base;
+
+    for (int i = 0; i < rcount; ++i)
+    {
+        PostingRef *pr = &results_buffer[base + i];
+
+        const entry_bin *e = kotoba_entry(dict, pr->p->doc_id);
+
+        kotoba_str str;
+        int elem_id = pr->p->meta1;
+        int type = pr->p->meta2;
+
+        if (type == TYPE_KANJI)
+        {
+            const k_ele_bin *k_ele = kotoba_k_ele(dict, e, elem_id);
+            str = kotoba_keb(dict, k_ele);
+        }
+        else
+        {
+            const r_ele_bin *r_ele = kotoba_r_ele(dict, e, elem_id);
+            str = kotoba_reb(dict, r_ele);
+        }
+
+        // ✅ CORRECTO: usamos la longitud de ESTA query
+        if (q.len > str.len)
+        {
+            continue;
+        }
+
+        if (write != base + i)
+            results_buffer[write] = *pr;
+
+        results_meta[write].results_idx = write;
+        results_meta[write].score = (uint16_t)str.len;
+        results_meta[write].type = (type == TYPE_KANJI) ? 0 : 1;
+
+        write++;
+    }
+    return write;
+}
 
 void query_results(struct SearchContext *ctx, const char *query)
 {
     reset_search_context(ctx);
+
     query_t q;
     q.s = query;
     q.len = (uint8_t)strlen(query);
     q.first = query[0];
-    uint32_t hashes[SEARCH_MAX_QUERY_HASHES];
-    int hcount = query_gram_hashes_mode(query, GRAM_GLOSS_AUTO, hashes, SEARCH_MAX_QUERY_HASHES);
-    if (hcount == 0)
-    {
-        fprintf(stderr, "no grams from query\n");
-        return;
-    }
-    TrieContext *trie_ctx = &ctx->trie_ctx;
-    char mixed[256];
-    mixed_to_hiragana(trie_ctx, query, mixed, sizeof(mixed));
 
-    query_t mixed_q;
-    mixed_q.s = mixed;
-    mixed_q.len = (uint8_t)strlen(mixed);
-    mixed_q.first = mixed[0];
-    uint32_t mixed_hashes[SEARCH_MAX_QUERY_HASHES];
-    int mixed_hcount = query_gram_hashes_mode(mixed, GRAM_JP, mixed_hashes, SEARCH_MAX_QUERY_HASHES);
-    InvertedIndex *jp_invx = ctx->jp_invx;
-    InvertedIndex **gloss_invxs = ctx->gloss_invxs;
-    kotoba_dict *dict = ctx->dict;
+    uint32_t gloss_hashes[SEARCH_MAX_QUERY_HASHES];
+    int gloss_hcount = query_gram_hashes_mode(
+        query,
+        GRAM_GLOSS_AUTO,
+        gloss_hashes,
+        SEARCH_MAX_QUERY_HASHES);
+
     PostingRef *results_buffer = ctx->results_buffer;
     SearchResultMeta *results_meta = ctx->results;
-    int total_results = 0;
-    // Search Kanji index if query contains Kanji
+    kotoba_dict *dict = ctx->dict;
 
-    if (jp_invx)
+    int total_results = 0;
+
+    int input_type = get_input_type(query);
+
+    // =========================================================
+    // GLOSS SEARCH 
+    // =========================================================
+
+    if (gloss_hcount > 0 && (input_type & INPUT_TYPE_ROMAJI))
     {
-        int base = total_results;
-        int out_cap = SEARCH_MAX_RESULTS - base;
-        if (out_cap > 0)
+        for (int lang = 0; lang < KOTOBA_LANG_COUNT; ++lang)
         {
+            if (!ctx->is_gloss_active[lang])
+                continue;
+
+            InvertedIndex *gloss_idx = ctx->gloss_invxs[lang];
+            if (!gloss_idx)
+                continue;
+
+            int base = total_results;
+            int out_cap = SEARCH_MAX_RESULTS - base;
+
+            if (out_cap <= 0)
+                break;
+
             int rcount = index_intersect_postings(
-                jp_invx,
-                mixed_hashes,
-                mixed_hcount,
+                gloss_idx,
+                gloss_hashes,
+                gloss_hcount,
                 results_buffer + base,
                 out_cap);
 
             int write = base;
+
             for (int i = 0; i < rcount; ++i)
             {
                 PostingRef *pr = &results_buffer[base + i];
-
                 const entry_bin *e = kotoba_entry(dict, pr->p->doc_id);
-                kotoba_str str;
-                int elem_id = pr->p->meta1;
-                int type = pr->p->meta2;
-                if (type == TYPE_KANJI)
-                {
-                    const k_ele_bin *k_ele = kotoba_k_ele(dict, e, elem_id);
-                    str = kotoba_keb(dict, k_ele);
-                }
-                else
-                {
-                    const r_ele_bin *r_ele = kotoba_r_ele(dict, e, elem_id);
-                    str = kotoba_reb(dict, r_ele);
-                }
 
-                if (mixed_q.len > str.len)
+                int sense_id = pr->p->meta1;
+                int gloss_id = pr->p->meta2;
+
+                const sense_bin *s = kotoba_sense(dict, e, sense_id);
+                kotoba_str gloss = kotoba_gloss(dict, s, gloss_id);
+
+                if (q.len > gloss.len)
                     continue;
 
                 if (write != base + i)
                     results_buffer[write] = *pr;
 
                 results_meta[write].results_idx = write;
-                results_meta[write].score = (uint16_t)str.len;
-                if (type == TYPE_KANJI)
-                    results_meta[write].type = 0; // kanji
-                else
-                    results_meta[write].type = 1; // reading
+                results_meta[write].score = (uint16_t)gloss.len;
+                results_meta[write].type = 2; // gloss
 
                 write++;
             }
+
             total_results = write;
-        }
 
-        char variant_input[256];
-        vowel_prolongation_mark(query, variant_input, sizeof(variant_input));
-        if (strcmp(variant_input, mixed) != 0)
-        {
-            query_t variant_q;
-            variant_q.s = variant_input;
-            variant_q.len = (uint8_t)strlen(variant_input);
-            variant_q.first = variant_input[0];
-
-            uint32_t variant_hashes[SEARCH_MAX_QUERY_HASHES];
-            int variant_hcount = query_gram_hashes_mode(variant_input, GRAM_JP, variant_hashes, SEARCH_MAX_QUERY_HASHES);
-
-            int base = total_results;
-            int out_cap = SEARCH_MAX_RESULTS - base;
-            if (out_cap > 0)
-            {
-                int rcount = index_intersect_postings(
-                    jp_invx,
-                    variant_hashes,
-                    variant_hcount,
-                    results_buffer + base,
-                    out_cap);
-
-                int write = base;
-                for (int i = 0; i < rcount; ++i)
-                {
-                    PostingRef *pr = &results_buffer[base + i];
-                    const entry_bin *e = kotoba_entry(dict, pr->p->doc_id);
-                    kotoba_str str;
-                    int elem_id = pr->p->meta1;
-                    int type = pr->p->meta2;
-
-                    if (type == TYPE_KANJI)
-                    {
-                        const k_ele_bin *k_ele = kotoba_k_ele(dict, e, elem_id);
-                        str = kotoba_keb(dict, k_ele);
-                    }
-                    else
-                    {
-                        const r_ele_bin *r_ele = kotoba_r_ele(dict, e, elem_id);
-                        str = kotoba_reb(dict, r_ele);
-                    }
-
-                    if (variant_q.len > str.len)
-                        continue;
-
-                    if (write != base + i)
-                        results_buffer[write] = *pr;
-
-                    results_meta[write].results_idx = write;
-                    results_meta[write].score = (uint16_t)str.len;
-                    results_meta[write].type = (type == TYPE_KANJI) ? 0 : 1;
-                    write++;
-                }
-                total_results = write;
-            }
+            if (total_results >= SEARCH_MAX_RESULTS)
+                break;
         }
     }
 
-    if (total_results < SEARCH_MAX_RESULTS)
+    // =========================================================
+    // JP SEARCH (SIEMPRE INTENTAR, independiente de gloss)
+    // =========================================================
+
+    if (ctx->jp_invx && total_results < SEARCH_MAX_RESULTS)
     {
-        // Search gloss indexes
-        for (int lang = 0; lang < KOTOBA_LANG_COUNT; ++lang)
+        mixed_to_hiragana(ctx->trie_ctx, query, ctx->mixed_query, MAX_QUERY_LEN);
+
+        // 1️⃣ Búsqueda base normalizada
+        total_results = search_jp_query(
+            ctx,
+            ctx->mixed_query,
+            results_buffer,
+            results_meta,
+            total_results,
+            SEARCH_MAX_RESULTS);
+
+        // 2️⃣ Variante con vowel prolongation mark (ー)
+        if (total_results < SEARCH_MAX_RESULTS)
         {
-            if (ctx->is_gloss_active[lang])
+            vowel_prolongation_mark(ctx->mixed_query, ctx->variant_query, MAX_QUERY_LEN);
+            if (strcmp(ctx->variant_query, ctx->mixed_query) != 0)
             {
-                InvertedIndex *gloss_idx = ctx->gloss_invxs[lang];
-                if (gloss_idx)
-                {
-
-                    int base = total_results;
-                    int out_cap = SEARCH_MAX_RESULTS - total_results;
-
-                    if (out_cap <= 0)
-                        break;
-
-                    int rcount = index_intersect_postings(
-                        gloss_idx,
-                        hashes,
-                        hcount,
-                        results_buffer + base,
-                        out_cap);
-
-                    int write = base;
-
-                    for (int i = 0; i < rcount; ++i)
-                    {
-                        PostingRef *pr = &results_buffer[base + i];
-                        const entry_bin *e = kotoba_entry(dict, pr->p->doc_id);
-
-                        int sense_id = pr->p->meta1;
-                        int gloss_id = pr->p->meta2;
-
-                        const sense_bin *s = kotoba_sense(dict, e, sense_id);
-
-                        kotoba_str gloss = kotoba_gloss(dict, s, gloss_id);
-
-                        if (q.len > gloss.len)
-                        {
-                            continue;
-                        }
-
-                        if (write != base + i)
-                            results_buffer[write] = *pr;
-
-                        results_meta[write].results_idx = write;
-                        results_meta[write].score = (uint16_t)gloss.len;
-                        results_meta[write].type = 2; // gloss
-
-                        write++;
-                    }
-
-                    total_results = write;
-                }
+                total_results = search_jp_query(
+                    ctx,
+                    ctx->variant_query,
+                    results_buffer,
+                    results_meta,
+                    total_results,
+                    SEARCH_MAX_RESULTS);
             }
         }
     }
-    // end
+
+    // =========================================================
+    // FINALIZACIÓN
+    // =========================================================
+
     ctx->query = q;
     ctx->results_left = total_results;
     ctx->last_page = 0;
     ctx->results_processed = 0;
 }
+
 void query_next_page(struct SearchContext *ctx)
 {
-    kotoba_dict *dict = ctx->dict;
-    PostingRef *results_buffer = ctx->results_buffer;
-    SearchResultMeta *results_meta = ctx->results;
-    uint32_t results_left = ctx->results_left;
-    uint32_t page_size = ctx->page_size;
-    uint32_t last_page = ctx->last_page;
-
-    if (results_left == 0)
+    if (ctx->results_left == 0)
     {
-        printf("No more results\n");
         return;
     }
 
-    page_size = page_size < results_left ? page_size : results_left;
+    kotoba_dict *dict = ctx->dict;
+    PostingRef *results_buffer = ctx->results_buffer;
+    SearchResultMeta *results_meta = ctx->results;
 
-    SearchResultMeta buffer[page_size];
-    int buffer_meta_pos[page_size]; // 🔥 POSICIÓN REAL EN results_meta
-    int buf_size = 0;
-    int worst_idx = 0;
+    uint32_t original_results_left = ctx->results_left;
+    uint32_t page_size = ctx->page_size;
+    uint32_t last_page = ctx->last_page;
 
+    if (page_size > original_results_left)
+        page_size = original_results_left;
+
+    // ---------- queries ----------
     query_t q = ctx->query;
 
-    TrieContext *trie_ctx = &ctx->trie_ctx;
+    query_t mixed_q = {
+        .s = ctx->mixed_query,
+        .len = (uint8_t)strlen(ctx->mixed_query),
+        .first = ctx->mixed_query[0]};
 
-    char mixed[256];
-    mixed_to_hiragana(trie_ctx, q.s, mixed, sizeof(mixed));
-    query_t mixed_q = {.s = mixed, .len = (uint8_t)strlen(mixed), .first = mixed[0]};
+    query_t variant_q = {
+        .s = ctx->variant_query,
+        .len = (uint8_t)strlen(ctx->variant_query),
+        .first = ctx->variant_query[0]};
 
-    for (uint32_t i = 0; i < results_left; ++i)
+    int using_variant = strcmp(ctx->variant_query, ctx->mixed_query) != 0;
+
+    // ---------- top-K buffer (ordenado ascendente por score) ----------
+    SearchResultMeta buffer[page_size];
+    int buffer_meta_pos[page_size];
+    int buf_size = 0;
+
+    // =========================================================
+    // 1️⃣ FILTRAR + TOP-K (ordenado)
+    // =========================================================
+
+    for (uint32_t i = 0; i < original_results_left; ++i)
     {
-    skip:
-        int score = results_meta[i].score;
+        SearchResultMeta *meta = &results_meta[i];
+        int score = meta->score;
 
-        // ✅ comparar contra BUFFER, no results_meta
-        if (buf_size == page_size && score >= buffer[worst_idx].score)
-            continue;
+        const entry_bin *e =
+            kotoba_entry(dict,
+                         results_buffer[meta->results_idx].p->doc_id);
 
-        // ---- filtro de string ----
-        const entry_bin *e = kotoba_entry(
-            dict,
-            results_buffer[results_meta[i].results_idx].p->doc_id);
-
-        int type = results_meta[i].type;
-        int meta1 = results_buffer[results_meta[i].results_idx].p->meta1;
-        int meta2 = results_buffer[results_meta[i].results_idx].p->meta2;
+        int type = meta->type;
+        int meta1 = results_buffer[meta->results_idx].p->meta1;
+        int meta2 = results_buffer[meta->results_idx].p->meta2;
 
         kotoba_str str;
         query_t *query;
+
         if (type == 0)
         {
             const k_ele_bin *k_ele = kotoba_k_ele(dict, e, meta1);
@@ -490,86 +509,98 @@ void query_next_page(struct SearchContext *ctx)
             query = &q;
         }
 
-        if (!word_contains_q(str.ptr, str.len, query))
+        /*
+        int contains = word_contains_q(str.ptr, str.len, query);
+
+        if (!contains && using_variant && (type == 0 || type == 1))
+            contains = word_contains_q(str.ptr, str.len, &variant_q);
+
+        if (!contains)
+            continue;
+        */
+
+        // ---------- top-K ordenado ----------
+        if (buf_size == 0)
         {
-            if (i < results_left - 1)
-            {
-                SearchResultMeta tmp = results_meta[i];
-                results_meta[i] = results_meta[results_left - 1];
-                results_meta[results_left - 1] = tmp;
-                --results_left;
-                goto skip;
-            }
-            else
-            {
-                --results_left;
-                continue; // ✅ FIX
-            }
+            buffer[0] = *meta;
+            buffer_meta_pos[0] = i;
+            buf_size = 1;
         }
-
-        // ---- top-K ----
-        if (buf_size < page_size)
+        else if (buf_size < page_size)
         {
-            buffer[buf_size] = results_meta[i];
-            buffer_meta_pos[buf_size] = i;
+            int pos = buf_size;
 
-            if (buf_size == 0 || score > buffer[worst_idx].score)
-                worst_idx = buf_size;
-
-            ++buf_size;
-        }
-        else
-        {
-            buffer[worst_idx] = results_meta[i];
-            buffer_meta_pos[worst_idx] = i;
-
-            // recompute worst (score más alto)
-            int ws = buffer[0].score;
-            int wi = 0;
-            for (int j = 1; j < buf_size; ++j)
+            while (pos > 0 && buffer[pos - 1].score > score)
             {
-                if (buffer[j].score > ws)
-                {
-                    ws = buffer[j].score;
-                    wi = j;
-                }
+                buffer[pos] = buffer[pos - 1];
+                buffer_meta_pos[pos] = buffer_meta_pos[pos - 1];
+                pos--;
             }
-            worst_idx = wi;
+
+            buffer[pos] = *meta;
+            buffer_meta_pos[pos] = i;
+            buf_size++;
+        }
+        else if (score < buffer[buf_size - 1].score)
+        {
+            int pos = buf_size - 1;
+
+            while (pos > 0 && buffer[pos - 1].score > score)
+            {
+                buffer[pos] = buffer[pos - 1];
+                buffer_meta_pos[pos] = buffer_meta_pos[pos - 1];
+                pos--;
+            }
+
+            buffer[pos] = *meta;
+            buffer_meta_pos[pos] = i;
         }
     }
 
-    // ---- ordenar página ----
-    sort_scores(buffer, buf_size);
+    if (buf_size == 0)
+    {
+        ctx->results_left = 0;
+        return;
+    }
 
-    int offset = last_page * page_size;
+    // =========================================================
+    // 2️⃣ YA ESTÁ ORDENADO → escribir página
+    // =========================================================
+
+    int offset = last_page * ctx->page_size;
+
     for (int i = 0; i < buf_size; ++i)
     {
         ctx->results_doc_ids[offset + i] =
             results_buffer[buffer[i].results_idx].p->doc_id;
     }
 
-    // ---- borrar procesados (EN ORDEN INVERSO) ----
+    // =========================================================
+    // 3️⃣ ELIMINAR SOLO LOS SELECCIONADOS
+    // =========================================================
+
     for (int i = buf_size - 1; i >= 0; --i)
     {
         int idx = buffer_meta_pos[i];
-        if (idx != results_left - 1)
+
+        if (idx != ctx->results_left - 1)
         {
             SearchResultMeta tmp = results_meta[idx];
-            results_meta[idx] = results_meta[results_left - 1];
-            results_meta[results_left - 1] = tmp;
+            results_meta[idx] = results_meta[ctx->results_left - 1];
+            results_meta[ctx->results_left - 1] = tmp;
         }
-        --results_left;
+
+        ctx->results_left--;
     }
 
-    ctx->results_left = results_left;
     ctx->results_processed += buf_size;
-    ctx->last_page += 1;
+    ctx->last_page++;
 }
 
 void warm_up(struct SearchContext *ctx)
 {
 
-    size_t pages = 4; // 16 KB
+    size_t pages = 128; // 16 KB
     for (size_t off = 0; off < pages * 4096; off += 4096)
     {
         if (off < ctx->jp_invx->mapped_size)
@@ -585,67 +616,4 @@ void warm_up(struct SearchContext *ctx)
         }
     }
 
-    /* Use ctx buffers for warm-up queries */
-    static const char *warm_queries_jp[] = {
-        // JP (kanji / kana)
-        "の",
-        "に",
-        "を",
-        "は",
-        "が",
-        "する",
-        "ある",
-        "う",
-        "る",
-        "く",
-        "す",
-        "つ",
-        "ぬ",
-        "む",
-        "ぶ",
-        "ぷ",
-        "ぐ", // all u terminations
-        "人",
-    };
-    static const char *warm_queries_en[] = {
-        // Gloss (EN)
-        "the", "of ", "and", "to ", "in "};
-
-    const size_t jp_nq = sizeof(warm_queries_jp) / sizeof(warm_queries_jp[0]);
-    const size_t en_nq = sizeof(warm_queries_en) / sizeof(warm_queries_en[0]);
-
-    uint32_t *hashes = ctx->results_doc_ids;          // Reuse ctx->results_doc_ids as a buffer
-    PostingRef *results_buffer = ctx->results_buffer; // Use ctx->results_buffer
-    int test_size = 32;
-
-    for (size_t i = 0; i < jp_nq; ++i)
-    {
-        const char *q = warm_queries_jp[i];
-        int hcount = query_gram_hashes_mode(q, GRAM_JP, hashes, SEARCH_MAX_QUERY_HASHES);
-        index_intersect_postings(
-            ctx->jp_invx,
-            hashes,
-            hcount,
-            results_buffer,
-            test_size);
-    }
-
-    for (size_t i = 0; i < en_nq; ++i)
-    {
-        const char *q = warm_queries_en[i];
-        int hcount = query_gram_hashes_mode(q, GRAM_GLOSS_AUTO, hashes, SEARCH_MAX_QUERY_HASHES);
-        for (int lang = 0; lang < KOTOBA_LANG_COUNT; ++lang)
-        {
-            InvertedIndex *g = ctx->gloss_invxs[lang];
-            if (g)
-            {
-                index_intersect_postings(
-                    g,
-                    hashes,
-                    hcount,
-                    results_buffer,
-                    test_size);
-            }
-        }
-    }
 }

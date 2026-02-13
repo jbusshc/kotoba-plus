@@ -22,6 +22,13 @@ struct ResultRow {
     QString gloss;      // glosa ya en idioma elegido
 };
 
+struct EntryDetails
+{
+    QString mainWord;
+    QString readings;
+    QVector<QString> senses;
+};
+
 
 class KotobaSearchService;
 
@@ -48,12 +55,16 @@ signals:
 public:
     // Acceso de solo lectura para el modelo
     const QVector<ResultRow>& results() const;
+    
+    // Para mostrar detalles de una entrada
+    EntryDetails buildEntryDetails(uint32_t docId) const;
+
 
 private:
     KotobaSearchService *service;
 
     QVector<ResultRow> currentResults;
-
+    int lastCachedResultIndex = 0; // para saber desde dónde cargar más resultados
     kotoba_dict *dict; // acceso directo para lookup de glosas
 
 private:

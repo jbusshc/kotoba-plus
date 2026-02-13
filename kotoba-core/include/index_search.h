@@ -48,12 +48,18 @@ typedef struct
 KOTOBA_API void
 sort_scores(SearchResultMeta *a, int n);
 
+#define MAX_QUERY_LEN 256
+#define QUERY_BUFFER_SIZE (MAX_QUERY_LEN * 2) // para normalizaciones (hiragana, vowel prolongation mark, etc)
+
 struct SearchContext
 {
-    TrieContext trie_ctx;
     bool is_gloss_active[KOTOBA_LANG_COUNT]; // 28 bytes
     uint8_t _pad0[4];                        // pad to 32 bytes (8-byte aligned)
     query_t query;
+    TrieContext* trie_ctx;
+    char *queries_buffer;
+    char *mixed_query;
+    char *variant_query;
     kotoba_dict *dict;
     InvertedIndex *jp_invx;
     InvertedIndex **gloss_invxs;
@@ -81,3 +87,10 @@ KOTOBA_API void query_next_page(struct SearchContext *ctx);
 
 KOTOBA_API
 void warm_up(struct SearchContext *ctx);
+
+
+/*
+TO DO:
+CHECK duplicates
+
+*/

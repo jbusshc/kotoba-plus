@@ -7,7 +7,8 @@ SearchPresenter::SearchPresenter(KotobaSearchService *service,
                                  QObject *parent)
     : QObject(parent),
       service(service),
-      dict(&service->appContext()->dictionary)
+      dict(&service->appContext()->dictionary), 
+      lastCachedResultIndex(0)
 {
 }
 
@@ -16,17 +17,25 @@ SearchPresenter::SearchPresenter(KotobaSearchService *service,
 // ------------------------------------------------------------
 void SearchPresenter::onSearchTextChanged(const QString &text)
 {
-    if (text.isEmpty())
+    if (text.isEmpty()) {
+        // Si el texto está vacío, limpiamos resultados y avisamos
+        currentResults.clear();
+        lastCachedResultIndex = 0;
+        emit resultsReset();
         return;
+    }
 
     // 1. Limpiar estado actual
     currentResults.clear();
+    lastCachedResultIndex = 0; // reset paginación
 
     // 2. Ejecutar nueva búsqueda en el servicio
     service->query(text.toStdString());
 
+
     // 3. Llenar resultados iniciales
     appendNewResults();
+
 
     // 4. Avisar a la vista/modelo que todo cambió
     emit resultsReset();
@@ -55,8 +64,6 @@ void SearchPresenter::onNeedMoreResults()
 
     int oldCount = currentResults.size();
 
-    // 1. Pedir más resultados al core
-    service->queryNextPage();
 
     // 2. Agregar los nuevos resultados al cache
     appendNewResults();
@@ -86,18 +93,20 @@ void SearchPresenter::appendNewResults()
 
     if (service->searchCtx()->results_left == 0)
         return;
-
-    const int newpageId = service->searchCtx()->results_processed;
-    service->queryNextPage(); // Asegura que el servicio tenga resultados listos (si es que hay más)
-
     const SearchContext *searchCtx = service->searchCtx();
     const uint32_t *docIds = searchCtx->results_doc_ids;
 
     const int toAppend = std::min(searchCtx->results_left, searchCtx->page_size);
+    printf("PRESENTER: appendNewResults called, current cached results: %d, results left in service: %d\n", lastCachedResultIndex, service->searchCtx()->results_left);
+    const int newpageResultIndex = lastCachedResultIndex;
+    service->queryNextPage(); // Asegura que el servicio tenga resultados listos (si es que hay más)
+
+
+    printf("PRESENTER: appending %d new results starting from index %d\n", toAppend, newpageResultIndex);
 
     for (int i = 0; i < toAppend; ++i)
     {
-        uint32_t docId = docIds[newpageId + i];
+        uint32_t docId = docIds[newpageResultIndex + i];
 
         ResultRow row;
         row.doc_id = docId;
@@ -139,4 +148,78 @@ void SearchPresenter::appendNewResults()
 
         currentResults.push_back(std::move(row));
     }
+    lastCachedResultIndex += toAppend;
+}
+
+EntryDetails SearchPresenter::buildEntryDetails(uint32_t docId) const
+{
+    EntryDetails details;
+
+    const entry_bin *entry = kotoba_dict_get_entry(dict, docId);
+    if (!entry)
+        return details;
+
+    // ======================
+    // MAIN WORD
+    // ======================
+    if (entry->k_elements_count > 0)
+    {
+        const k_ele_bin *k_ele = kotoba_k_ele(dict, entry, 0);
+        kotoba_str keb = kotoba_keb(dict, k_ele);
+        details.mainWord = QString::fromUtf8(keb.ptr, keb.len);
+    }
+    else if (entry->r_elements_count > 0)
+    {
+        const r_ele_bin *r_ele = kotoba_r_ele(dict, entry, 0);
+        kotoba_str reb = kotoba_reb(dict, r_ele);
+        details.mainWord = QString::fromUtf8(reb.ptr, reb.len);
+    }
+
+    // ======================
+    // READINGS
+    // ======================
+    QString readings;
+
+    for (uint32_t i = 0; i < entry->r_elements_count; ++i)
+    {
+        const r_ele_bin *r_ele = kotoba_r_ele(dict, entry, i);
+        kotoba_str reb = kotoba_reb(dict, r_ele);
+
+        readings += QString::fromUtf8(reb.ptr, reb.len);
+
+        if (i < entry->r_elements_count - 1)
+            readings += " ・ ";
+    }
+
+    details.readings = readings;
+
+    // ======================
+    // SENSES
+    // ======================
+
+    bool *langs = service->appContext()->languages;
+
+    for (uint32_t s = 0; s < entry->senses_count; ++s)
+    {
+
+        const sense_bin *sense = kotoba_sense(dict, entry, s);
+
+        if (!langs[sense->lang])
+            continue;
+
+        QString senseText;
+
+        for (uint32_t g = 0; g < sense->gloss_count; ++g)
+        {
+            kotoba_str gloss = kotoba_gloss(dict, sense, g);
+            senseText += QString::fromUtf8(gloss.ptr, gloss.len);
+
+            if (g < sense->gloss_count - 1)
+                senseText += "; ";
+        }
+
+        details.senses.push_back(senseText);
+    }
+
+    return details;
 }

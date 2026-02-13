@@ -40,6 +40,10 @@ MainWindow::MainWindow(KotobaAppContext *ctx, QWidget *parent)
     connect(ui->btnBack, &QToolButton::clicked,
             this, &MainWindow::onBackButtonClicked);
 
+    connect(presenter, &SearchPresenter::entrySelected,
+            this, &MainWindow::showEntry);
+
+
     ui->stackedWidget->setCurrentIndex(0);
 }
 
@@ -53,10 +57,16 @@ MainWindow::~MainWindow()
 
 void MainWindow::showEntry(uint32_t entryId)
 {
-    Q_UNUSED(entryId);
+    auto details = presenter->buildEntryDetails(entryId);
 
-    // más adelante aquí cargas la entrada real
-    ui->stackedWidget->setCurrentIndex(1);
+    ui->labelMainWord->setText(details.mainWord);
+    ui->labelReadings->setText(details.readings);
+
+    ui->listSenses->clear();
+    for (const auto &sense : details.senses)
+        ui->listSenses->addItem(sense);
+
+    ui->stackedWidget->setCurrentWidget(ui->pageDetails);
 }
 
 void MainWindow::onSearchTextChanged()
