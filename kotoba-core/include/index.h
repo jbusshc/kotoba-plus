@@ -68,9 +68,10 @@ typedef enum {
        len >= 3 → trigram
     */
     GRAM_GLOSS_AUTO = 0,
-    GRAM_JP = 4
-} GramMode;
 
+    /* Japanese: always store unigrams + bigrams + trigrams */
+    GRAM_JP_ALL = 4
+} GramMode;
 
 
 /* =========================

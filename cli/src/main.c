@@ -93,7 +93,7 @@ int main(int argc, char **argv)
         if (strcmp(mode, "jp") == 0)
         {
             /* kanji + reading unified */
-            gram_mode = GRAM_JP;    /* unigrams + bigrams */
+            gram_mode = GRAM_JP_ALL;    /* unigrams + bigrams */
             read_fourth_col = true; /* meta2 = TYPE_KANJI / TYPE_READING */
         }
         else if (strcmp(mode, "gloss") == 0)
@@ -488,7 +488,7 @@ int main(int argc, char **argv)
         printf("Variant: %s\n", variant);
 
         uint32_t hashes[256];
-        int hcount = query_gram_hashes_mode(variant, GRAM_JP, hashes, 256);
+        int hcount = query_gram_hashes_mode(variant, GRAM_JP_ALL, hashes, 256);
         printf("Hashes for variant:\n");
         for (int i = 0; i < hcount; ++i)
         {

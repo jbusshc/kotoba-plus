@@ -31,4 +31,5 @@ xml-parser\assets
 !CMakeLists.txt
 assets/
 tsv/
-*invx
+*.invx
+*.ignore

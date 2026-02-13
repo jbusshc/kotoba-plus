@@ -438,6 +438,7 @@ extern "C"
 
     KOTOBA_API void vowel_prolongation_mark(const char *input, char *output, size_t out_size);
 
+
 #ifdef __cplusplus
 }
 #endif

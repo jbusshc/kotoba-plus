@@ -70,5 +70,10 @@
         "cjson.h": "c",
         "ctype.h": "c"
     },
-    "cmake.sourceDirectory": "C:/Users/Jorge/Desktop/Proyectos/kotobaplus/kotoba-core"
+    "cmake.sourceDirectory": "C:/Users/Jorge/Desktop/Proyectos/kotobaplus/kotoba-core",
+    "files.watcherExclude": {
+        "**/.git/objects/**": true,
+        "**/node_modules/**": true,
+        "**/build/**": true
+    }
 }

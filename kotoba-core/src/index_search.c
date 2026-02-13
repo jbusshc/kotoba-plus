@@ -1,6 +1,6 @@
 #include "../include/index_search.h"
 
-#define SEARCH_MAX_RESULTS 100
+#define SEARCH_MAX_RESULTS 500  
 #define SEARCH_MAX_QUERY_HASHES 128
 #define DEFAULT_PAGE_SIZE 16
 
@@ -245,7 +245,7 @@ static int search_jp_query(
     q.first = query_str[0];
 
     uint32_t hashes[SEARCH_MAX_QUERY_HASHES];
-    int hcount = query_gram_hashes_mode(query_str, GRAM_JP, hashes, SEARCH_MAX_QUERY_HASHES);
+    int hcount = query_gram_hashes_mode(query_str, GRAM_JP_ALL, hashes, SEARCH_MAX_QUERY_HASHES);
     if (hcount == 0)
         return base;
 
@@ -328,7 +328,7 @@ void query_results(struct SearchContext *ctx, const char *query)
     int input_type = get_input_type(query);
 
     // =========================================================
-    // GLOSS SEARCH 
+    // GLOSS SEARCH
     // =========================================================
 
     if (gloss_hcount > 0 && (input_type & INPUT_TYPE_ROMAJI))
@@ -432,6 +432,54 @@ void query_results(struct SearchContext *ctx, const char *query)
     ctx->results_processed = 0;
 }
 
+int filtering(char *normalized_str_buff, kotoba_str *str, query_t *query, int using_variant, int type, query_t *variant_q)
+{
+
+    if (type == 0 || type == 1)
+    {
+        int normalized_len = 0;
+        const uint8_t *p = (const uint8_t *)str->ptr;
+        while (normalized_len < str->len)
+        {
+            int len = utf8_char_len(*p);
+            uint32_t codepoint = 0;
+
+            if (len == 3)
+            {
+                codepoint = ((p[0] & 0x0F) << 12) | ((p[1] & 0x3F) << 6) | (p[2] & 0x3F);
+
+                // Katakana to Hiragana conversion
+                if (codepoint >= 0x30A0 && codepoint <= 0x30FF)
+                {
+                    codepoint -= 0x60;
+                }
+            }
+
+            // Write codepoint back as UTF-8
+            if (len == 3)
+            {
+                normalized_str_buff[normalized_len++] = (char)(0xE0 | (codepoint >> 12));
+                normalized_str_buff[normalized_len++] = (char)(0x80 | ((codepoint >> 6) & 0x3F));
+                normalized_str_buff[normalized_len++] = (char)(0x80 | (codepoint & 0x3F));
+            }
+            else
+            {
+                for (int i = 0; i < len; ++i)
+                    normalized_str_buff[normalized_len++] = p[i];
+            }
+
+            p += len;
+        }
+    }
+
+    int contains = word_contains_q(normalized_str_buff, str->len, query);
+
+    if (!contains && (type == 0 || type == 1) && using_variant)
+        contains = word_contains_q(normalized_str_buff, str->len, variant_q);
+
+    return contains;
+}
+
 void query_next_page(struct SearchContext *ctx)
 {
     if (ctx->results_left == 0)
@@ -470,12 +518,15 @@ void query_next_page(struct SearchContext *ctx)
     int buffer_meta_pos[page_size];
     int buf_size = 0;
 
+    char normalized_str_buff[MAX_QUERY_LEN];
+
     // =========================================================
     // 1️⃣ FILTRAR + TOP-K (ordenado)
     // =========================================================
 
     for (uint32_t i = 0; i < original_results_left; ++i)
     {
+    loop_start:
         SearchResultMeta *meta = &results_meta[i];
         int score = meta->score;
 
@@ -522,12 +573,38 @@ void query_next_page(struct SearchContext *ctx)
         // ---------- top-K ordenado ----------
         if (buf_size == 0)
         {
+            if (!filtering(normalized_str_buff, &str, query, using_variant, type, &variant_q))
+            {
+                // delete this result and continue with the next one
+                if (i != ctx->results_left - 1)
+                {
+                    SearchResultMeta tmp = results_meta[i];
+                    results_meta[i] = results_meta[ctx->results_left - 1];
+                    results_meta[ctx->results_left - 1] = tmp;
+                }
+                ctx->results_left--;
+                printf("Filtered out result %.*s (score %u)\n", str.len, str.ptr, score);
+                goto loop_start;
+            }
             buffer[0] = *meta;
             buffer_meta_pos[0] = i;
             buf_size = 1;
         }
         else if (buf_size < page_size)
         {
+            if (!filtering(normalized_str_buff, &str, query, using_variant, type, &variant_q))
+            {
+                // delete this result and continue with the next one
+                if (i != ctx->results_left - 1)
+                {
+                    SearchResultMeta tmp = results_meta[i];
+                    results_meta[i] = results_meta[ctx->results_left - 1];
+                    results_meta[ctx->results_left - 1] = tmp;
+                }
+                ctx->results_left--;
+                printf("Filtered out result %.*s\n", str.len, str.ptr);
+                goto loop_start;
+            }
             int pos = buf_size;
 
             while (pos > 0 && buffer[pos - 1].score > score)
@@ -543,6 +620,19 @@ void query_next_page(struct SearchContext *ctx)
         }
         else if (score < buffer[buf_size - 1].score)
         {
+            if (!filtering(normalized_str_buff, &str, query, using_variant, type, &variant_q))
+            {
+                // delete this result and continue with the next one
+                if (i != ctx->results_left - 1)
+                {
+                    SearchResultMeta tmp = results_meta[i];
+                    results_meta[i] = results_meta[ctx->results_left - 1];
+                    results_meta[ctx->results_left - 1] = tmp;
+                }
+                ctx->results_left--;
+                printf("Filtered out result %.*s\n", str.len, str.ptr);
+                goto loop_start;
+            }
             int pos = buf_size - 1;
 
             while (pos > 0 && buffer[pos - 1].score > score)
@@ -615,5 +705,4 @@ void warm_up(struct SearchContext *ctx)
             }
         }
     }
-
 }
