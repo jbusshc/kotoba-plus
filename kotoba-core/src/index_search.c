@@ -504,7 +504,8 @@ void query_next_page(struct SearchContext *ctx)
     uint8_t *type = ctx->results.type;
     uint32_t *results_idx = ctx->results.results_idx;
 
-    for (uint32_t i = 0; i < ctx->results_left; i++)
+    uint32_t i = 0;
+    while (i < ctx->results_left)
     {
         uint8_t score = ctx->results.score[i];
 
@@ -512,6 +513,7 @@ void query_next_page(struct SearchContext *ctx)
         if (topk_size == page_size &&
             score >= topk_scores[topk_size - 1])
         {
+            i++;
             continue;
         }
 
@@ -548,9 +550,20 @@ void query_next_page(struct SearchContext *ctx)
 
         // --- 3️⃣ hard_filter SOLO si compite ---
         if (!hard_filter(ctx, &str, query, &variant_q, type, using_variant)) {
-            printf("Filtered out: doc_id=%u, type=%d, str=%.*s\n", results_buffer[results_idx[i]].p->doc_id, type, str.len, str.ptr);
-            continue;
+
+            // remover inmediatamente
+            uint32_t last = ctx->results_left - 1;
+
+            if (i != last) {
+                ctx->results.results_idx[i] = ctx->results.results_idx[last];
+                ctx->results.score[i] = ctx->results.score[last];
+                ctx->results.type[i] = ctx->results.type[last];
+            }
+
+            ctx->results_left--;
+            continue; // IMPORTANTÍSIMO: no i++
         }
+
 
         // --- 4️⃣ insertar ordenado (insertion sort K pequeño) ---
         if (topk_size < page_size)
@@ -586,6 +599,7 @@ void query_next_page(struct SearchContext *ctx)
             topk_types[pos] = ctx->results.type[i];
             topk_indices[pos] = i;
         }
+        i++;
     }
 
     if (topk_size == 0)
