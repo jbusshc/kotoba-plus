@@ -1,6 +1,6 @@
 #include "../include/index_search.h"
 
-#define SEARCH_MAX_RESULTS 500  
+#define SEARCH_MAX_RESULTS 1000
 #define SEARCH_MAX_QUERY_HASHES 128
 #define DEFAULT_PAGE_SIZE 16
 
@@ -328,10 +328,44 @@ void query_results(struct SearchContext *ctx, const char *query)
     int input_type = get_input_type(query);
 
     // =========================================================
+    // JP SEARCH (SIEMPRE INTENTAR, independiente de gloss)
+    // =========================================================
+
+    if (ctx->jp_invx)
+    {
+        mixed_to_hiragana(ctx->trie_ctx, query, ctx->mixed_query, MAX_QUERY_LEN);
+
+        // 1️⃣ Búsqueda base normalizada
+        total_results = search_jp_query(
+            ctx,
+            ctx->mixed_query,
+            results_buffer,
+            results_meta,
+            total_results,
+            SEARCH_MAX_RESULTS);
+
+        // 2️⃣ Variante con vowel prolongation mark (ー)
+        if (total_results < SEARCH_MAX_RESULTS)
+        {
+            vowel_prolongation_mark(ctx->mixed_query, ctx->variant_query, MAX_QUERY_LEN);
+            if (strcmp(ctx->variant_query, ctx->mixed_query) != 0)
+            {
+                total_results = search_jp_query(
+                    ctx,
+                    ctx->variant_query,
+                    results_buffer,
+                    results_meta,
+                    total_results,
+                    SEARCH_MAX_RESULTS);
+            }
+        }
+    }
+
+    // =========================================================
     // GLOSS SEARCH
     // =========================================================
 
-    if (gloss_hcount > 0 && (input_type & INPUT_TYPE_ROMAJI))
+    if (gloss_hcount > 0 && (input_type & INPUT_TYPE_ROMAJI) && total_results < SEARCH_MAX_RESULTS)
     {
         for (int lang = 0; lang < KOTOBA_LANG_COUNT; ++lang)
         {
@@ -389,40 +423,6 @@ void query_results(struct SearchContext *ctx, const char *query)
     }
 
     // =========================================================
-    // JP SEARCH (SIEMPRE INTENTAR, independiente de gloss)
-    // =========================================================
-
-    if (ctx->jp_invx && total_results < SEARCH_MAX_RESULTS)
-    {
-        mixed_to_hiragana(ctx->trie_ctx, query, ctx->mixed_query, MAX_QUERY_LEN);
-
-        // 1️⃣ Búsqueda base normalizada
-        total_results = search_jp_query(
-            ctx,
-            ctx->mixed_query,
-            results_buffer,
-            results_meta,
-            total_results,
-            SEARCH_MAX_RESULTS);
-
-        // 2️⃣ Variante con vowel prolongation mark (ー)
-        if (total_results < SEARCH_MAX_RESULTS)
-        {
-            vowel_prolongation_mark(ctx->mixed_query, ctx->variant_query, MAX_QUERY_LEN);
-            if (strcmp(ctx->variant_query, ctx->mixed_query) != 0)
-            {
-                total_results = search_jp_query(
-                    ctx,
-                    ctx->variant_query,
-                    results_buffer,
-                    results_meta,
-                    total_results,
-                    SEARCH_MAX_RESULTS);
-            }
-        }
-    }
-
-    // =========================================================
     // FINALIZACIÓN
     // =========================================================
 
@@ -432,73 +432,43 @@ void query_results(struct SearchContext *ctx, const char *query)
     ctx->results_processed = 0;
 }
 
-int filtering(char *normalized_str_buff, kotoba_str *str, query_t *query, int using_variant, int type, query_t *variant_q)
+inline static int hard_filter(struct SearchContext *ctx, const kotoba_str *str, const query_t *query, const query_t *variant_query, int type, int using_variant)
 {
-
-    if (type == 0 || type == 1)
+    char normalized_str_buff[MAX_QUERY_LEN];
+    if (type == 0 || type == 1) // normalize
     {
-        int normalized_len = 0;
-        const uint8_t *p = (const uint8_t *)str->ptr;
-        while (normalized_len < str->len)
-        {
-            int len = utf8_char_len(*p);
-            uint32_t codepoint = 0;
-
-            if (len == 3)
-            {
-                codepoint = ((p[0] & 0x0F) << 12) | ((p[1] & 0x3F) << 6) | (p[2] & 0x3F);
-
-                // Katakana to Hiragana conversion
-                if (codepoint >= 0x30A0 && codepoint <= 0x30FF)
-                {
-                    codepoint -= 0x60;
-                }
-            }
-
-            // Write codepoint back as UTF-8
-            if (len == 3)
-            {
-                normalized_str_buff[normalized_len++] = (char)(0xE0 | (codepoint >> 12));
-                normalized_str_buff[normalized_len++] = (char)(0x80 | ((codepoint >> 6) & 0x3F));
-                normalized_str_buff[normalized_len++] = (char)(0x80 | (codepoint & 0x3F));
-            }
-            else
-            {
-                for (int i = 0; i < len; ++i)
-                    normalized_str_buff[normalized_len++] = p[i];
-            }
-
-            p += len;
-        }
+        memcpy(normalized_str_buff, str->ptr, str->len);
+        normalized_str_buff[str->len] = '\0';
+        mixed_to_hiragana(ctx->trie_ctx, normalized_str_buff, normalized_str_buff, MAX_QUERY_LEN);
+        return word_contains_q(normalized_str_buff, str->len, query) ||
+               (using_variant && word_contains_q(normalized_str_buff, str->len, variant_query));
     }
-
-    int contains = word_contains_q(normalized_str_buff, str->len, query);
-
-    if (!contains && (type == 0 || type == 1) && using_variant)
-        contains = word_contains_q(normalized_str_buff, str->len, variant_q);
-
-    return contains;
+    else
+    { // gloss no normalization no variant
+        return word_contains_q(str->ptr, str->len, query);
+    }
 }
+
 
 void query_next_page(struct SearchContext *ctx)
 {
     if (ctx->results_left == 0)
-    {
         return;
-    }
 
     kotoba_dict *dict = ctx->dict;
     PostingRef *results_buffer = ctx->results_buffer;
     SearchResultMeta *results_meta = ctx->results;
 
-    uint32_t original_results_left = ctx->results_left;
     uint32_t page_size = ctx->page_size;
     uint32_t last_page = ctx->last_page;
 
-    if (page_size > original_results_left)
-        page_size = original_results_left;
+    if (page_size > ctx->results_left)
+        page_size = ctx->results_left;
 
-    // ---------- queries ----------
+    // ===============================
+    // Build queries
+    // ===============================
+
     query_t q = ctx->query;
 
     query_t mixed_q = {
@@ -513,23 +483,27 @@ void query_next_page(struct SearchContext *ctx)
 
     int using_variant = strcmp(ctx->variant_query, ctx->mixed_query) != 0;
 
-    // ---------- top-K buffer (ordenado ascendente por score) ----------
-    SearchResultMeta buffer[page_size];
-    int buffer_meta_pos[page_size];
-    int buf_size = 0;
-
-    char normalized_str_buff[MAX_QUERY_LEN];
-
     // =========================================================
-    // 1️⃣ FILTRAR + TOP-K (ordenado)
+    // 1️⃣ TOP-K con hard_filter solo si compite
     // =========================================================
 
-    for (uint32_t i = 0; i < original_results_left; ++i)
+    SearchResultMeta topk[page_size];
+    uint32_t topk_indices[page_size];
+    uint32_t topk_size = 0;
+
+    for (uint32_t i = 0; i < ctx->results_left; i++)
     {
-    loop_start:
         SearchResultMeta *meta = &results_meta[i];
         int score = meta->score;
 
+        // --- 1️⃣ score pruning ---
+        if (topk_size == page_size &&
+            score >= topk[topk_size - 1].score)
+        {
+            continue;
+        }
+
+        // --- 2️⃣ construir string SOLO si compite ---
         const entry_bin *e =
             kotoba_entry(dict,
                          results_buffer[meta->results_idx].p->doc_id);
@@ -560,132 +534,80 @@ void query_next_page(struct SearchContext *ctx)
             query = &q;
         }
 
-        /*
-        int contains = word_contains_q(str.ptr, str.len, query);
-
-        if (!contains && using_variant && (type == 0 || type == 1))
-            contains = word_contains_q(str.ptr, str.len, &variant_q);
-
-        if (!contains)
+        // --- 3️⃣ hard_filter SOLO si compite ---
+        if (!hard_filter(ctx, &str, query, &variant_q, type, using_variant)) {
+            printf("Filtered out: doc_id=%u, type=%d, str=%.*s\n", results_buffer[meta->results_idx].p->doc_id, type, str.len, str.ptr);
             continue;
-        */
-
-        // ---------- top-K ordenado ----------
-        if (buf_size == 0)
-        {
-            if (!filtering(normalized_str_buff, &str, query, using_variant, type, &variant_q))
-            {
-                // delete this result and continue with the next one
-                if (i != ctx->results_left - 1)
-                {
-                    SearchResultMeta tmp = results_meta[i];
-                    results_meta[i] = results_meta[ctx->results_left - 1];
-                    results_meta[ctx->results_left - 1] = tmp;
-                }
-                ctx->results_left--;
-                printf("Filtered out result %.*s (score %u)\n", str.len, str.ptr, score);
-                goto loop_start;
-            }
-            buffer[0] = *meta;
-            buffer_meta_pos[0] = i;
-            buf_size = 1;
         }
-        else if (buf_size < page_size)
-        {
-            if (!filtering(normalized_str_buff, &str, query, using_variant, type, &variant_q))
-            {
-                // delete this result and continue with the next one
-                if (i != ctx->results_left - 1)
-                {
-                    SearchResultMeta tmp = results_meta[i];
-                    results_meta[i] = results_meta[ctx->results_left - 1];
-                    results_meta[ctx->results_left - 1] = tmp;
-                }
-                ctx->results_left--;
-                printf("Filtered out result %.*s\n", str.len, str.ptr);
-                goto loop_start;
-            }
-            int pos = buf_size;
 
-            while (pos > 0 && buffer[pos - 1].score > score)
+        // --- 4️⃣ insertar ordenado (insertion sort K pequeño) ---
+        if (topk_size < page_size)
+        {
+            int pos = topk_size;
+
+            while (pos > 0 && topk[pos - 1].score > score)
             {
-                buffer[pos] = buffer[pos - 1];
-                buffer_meta_pos[pos] = buffer_meta_pos[pos - 1];
+                topk[pos] = topk[pos - 1];
+                topk_indices[pos] = topk_indices[pos - 1];
                 pos--;
             }
 
-            buffer[pos] = *meta;
-            buffer_meta_pos[pos] = i;
-            buf_size++;
+            topk[pos] = *meta;
+            topk_indices[pos] = i;
+            topk_size++;
         }
-        else if (score < buffer[buf_size - 1].score)
+        else
         {
-            if (!filtering(normalized_str_buff, &str, query, using_variant, type, &variant_q))
-            {
-                // delete this result and continue with the next one
-                if (i != ctx->results_left - 1)
-                {
-                    SearchResultMeta tmp = results_meta[i];
-                    results_meta[i] = results_meta[ctx->results_left - 1];
-                    results_meta[ctx->results_left - 1] = tmp;
-                }
-                ctx->results_left--;
-                printf("Filtered out result %.*s\n", str.len, str.ptr);
-                goto loop_start;
-            }
-            int pos = buf_size - 1;
+            int pos = topk_size - 1;
 
-            while (pos > 0 && buffer[pos - 1].score > score)
+            while (pos > 0 && topk[pos - 1].score > score)
             {
-                buffer[pos] = buffer[pos - 1];
-                buffer_meta_pos[pos] = buffer_meta_pos[pos - 1];
+                topk[pos] = topk[pos - 1];
+                topk_indices[pos] = topk_indices[pos - 1];
                 pos--;
             }
 
-            buffer[pos] = *meta;
-            buffer_meta_pos[pos] = i;
+            topk[pos] = *meta;
+            topk_indices[pos] = i;
         }
     }
 
-    if (buf_size == 0)
-    {
-        ctx->results_left = 0;
+    if (topk_size == 0)
         return;
-    }
 
     // =========================================================
-    // 2️⃣ YA ESTÁ ORDENADO → escribir página
+    // 2️⃣ ESCRIBIR RESULTADOS
     // =========================================================
 
-    int offset = last_page * ctx->page_size;
+    uint32_t offset = last_page * ctx->page_size;
 
-    for (int i = 0; i < buf_size; ++i)
+    for (uint32_t i = 0; i < topk_size; i++)
     {
         ctx->results_doc_ids[offset + i] =
-            results_buffer[buffer[i].results_idx].p->doc_id;
+            results_buffer[topk[i].results_idx].p->doc_id;
     }
 
     // =========================================================
-    // 3️⃣ ELIMINAR SOLO LOS SELECCIONADOS
+    // 3️⃣ ELIMINAR SELECCIONADOS (seguro)
     // =========================================================
 
-    for (int i = buf_size - 1; i >= 0; --i)
+    for (int k = topk_size - 1; k >= 0; k--)
     {
-        int idx = buffer_meta_pos[i];
+        uint32_t idx = topk_indices[k];
 
-        if (idx != ctx->results_left - 1)
+        if (idx < ctx->results_left)
         {
-            SearchResultMeta tmp = results_meta[idx];
-            results_meta[idx] = results_meta[ctx->results_left - 1];
-            results_meta[ctx->results_left - 1] = tmp;
-        }
+            if (idx != ctx->results_left - 1)
+                results_meta[idx] = results_meta[ctx->results_left - 1];
 
-        ctx->results_left--;
+            ctx->results_left--;
+        }
     }
 
-    ctx->results_processed += buf_size;
+    ctx->results_processed += topk_size;
     ctx->last_page++;
 }
+
 
 void warm_up(struct SearchContext *ctx)
 {
