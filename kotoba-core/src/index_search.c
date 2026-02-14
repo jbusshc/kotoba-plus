@@ -1,6 +1,6 @@
 #include "../include/index_search.h"
 
-#define SEARCH_MAX_RESULTS 1000
+#define SEARCH_MAX_RESULTS 200
 #define SEARCH_MAX_QUERY_HASHES 128
 #define DEFAULT_PAGE_SIZE 16
 
@@ -373,6 +373,7 @@ void query_results(struct SearchContext *ctx, const char *query)
     // GLOSS SEARCH
     // =========================================================
 
+    int old_total_results = total_results;
     if (gloss_hcount > 0 && (input_type & INPUT_TYPE_ROMAJI) && total_results < SEARCH_MAX_RESULTS)
     {
         for (int lang = 0; lang < KOTOBA_LANG_COUNT; ++lang)
@@ -434,6 +435,8 @@ void query_results(struct SearchContext *ctx, const char *query)
     // FINALIZACIÓN
     // =========================================================
 
+    printf("gloss results: %d\n", total_results - old_total_results);
+    printf("total results: %d\n", total_results);
     ctx->query = q;
     ctx->results_left = total_results;
     ctx->last_page = 0;
@@ -442,6 +445,8 @@ void query_results(struct SearchContext *ctx, const char *query)
 
 inline static int hard_filter(struct SearchContext *ctx, const kotoba_str *str, const query_t *query, const query_t *variant_query, int type, int using_variant)
 {
+    return 1; // DESACTIVADO PARA TESTING
+
     char normalized_str_buff[MAX_QUERY_LEN];
     if (type == 0 || type == 1) // normalize
     {

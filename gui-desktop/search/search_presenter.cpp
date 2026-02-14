@@ -37,7 +37,7 @@ void SearchPresenter::onSearchTextChanged(const QString &text)
     appendNewResults();
 
     // 4. Avisar a la vista/modelo que todo cambió
-    emit resultsReset();
+    emit resultsAppended(0, currentResults.size() - 1);
 }
 
 // ------------------------------------------------------------
@@ -90,8 +90,8 @@ const QVector<ResultRow> &SearchPresenter::results() const
 // ------------------------------------------------------------
 void SearchPresenter::appendNewResults()
 {
-    if (service->searchCtx()->results_left == 0)
-        return;
+    if (service->searchCtx()->results_processed <= lastCachedResultIndex)
+        return; // no hay nuevos resultados para agregar
     
     const SearchContext *searchCtx = service->searchCtx(); 
     const uint32_t *docIds = searchCtx->results_doc_ids;
@@ -99,6 +99,7 @@ void SearchPresenter::appendNewResults()
     const int newpageResultIndex = lastCachedResultIndex;
     const int toAppend = std::min((int)searchCtx->results_processed - newpageResultIndex, (int)searchCtx->page_size);
 
+    printf("appendNewResults called. results_left: %d, results_processed: %d, lastCachedResultIndex: %d\n", searchCtx->results_left, searchCtx->results_processed, lastCachedResultIndex);
     for (int i = 0; i < toAppend; ++i)
     {
         uint32_t docId = docIds[newpageResultIndex + i];
