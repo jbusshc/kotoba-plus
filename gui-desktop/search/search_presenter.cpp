@@ -31,11 +31,10 @@ void SearchPresenter::onSearchTextChanged(const QString &text)
 
     // 2. Ejecutar nueva búsqueda en el servicio
     service->query(text.toStdString());
-
+    service->queryNextPage(); // cargar la primera página de resultados
 
     // 3. Llenar resultados iniciales
     appendNewResults();
-
 
     // 4. Avisar a la vista/modelo que todo cambió
     emit resultsReset();
@@ -65,6 +64,7 @@ void SearchPresenter::onNeedMoreResults()
     int oldCount = currentResults.size();
 
 
+    service->queryNextPage(); // cargar la siguiente página de resultados
     // 2. Agregar los nuevos resultados al cache
     appendNewResults();
 
@@ -90,24 +90,18 @@ const QVector<ResultRow> &SearchPresenter::results() const
 // ------------------------------------------------------------
 void SearchPresenter::appendNewResults()
 {
-
     if (service->searchCtx()->results_left == 0)
         return;
-    const SearchContext *searchCtx = service->searchCtx();
+    
+    const SearchContext *searchCtx = service->searchCtx(); 
     const uint32_t *docIds = searchCtx->results_doc_ids;
 
-    const int toAppend = std::min(searchCtx->results_left, searchCtx->page_size);
-    printf("PRESENTER: appendNewResults called, current cached results: %d, results left in service: %d\n", lastCachedResultIndex, service->searchCtx()->results_left);
     const int newpageResultIndex = lastCachedResultIndex;
-    service->queryNextPage(); // Asegura que el servicio tenga resultados listos (si es que hay más)
-
-
-    printf("PRESENTER: appending %d new results starting from index %d\n", toAppend, newpageResultIndex);
+    const int toAppend = std::min((int)searchCtx->results_processed - newpageResultIndex, (int)searchCtx->page_size);
 
     for (int i = 0; i < toAppend; ++i)
     {
         uint32_t docId = docIds[newpageResultIndex + i];
-
         ResultRow row;
         row.doc_id = docId;
 
@@ -147,6 +141,7 @@ void SearchPresenter::appendNewResults()
         }
 
         currentResults.push_back(std::move(row));
+
     }
     lastCachedResultIndex += toAppend;
 }

@@ -85,8 +85,6 @@ void init_search_context(struct SearchContext *ctx,
     ctx->results_left = 0;
     ctx->results_processed = 0;
 
-
-
     ctx->trie_ctx = malloc(sizeof(TrieContext));
     if (!ctx->trie_ctx)
     {
@@ -198,9 +196,9 @@ void free_search_context(struct SearchContext *ctx)
         }
     }
     free(ctx->results_doc_ids);
-    free (ctx->results.results_idx);
-    free (ctx->results.score);
-    free (ctx->results.type);
+    free(ctx->results.results_idx);
+    free(ctx->results.score);
+    free(ctx->results.type);
     free(ctx->results_buffer);
 
     for (int i = 0; i < KOTOBA_LANG_COUNT; ++i)
@@ -459,12 +457,10 @@ inline static int hard_filter(struct SearchContext *ctx, const kotoba_str *str, 
     }
 }
 
-
 void query_next_page(struct SearchContext *ctx)
 {
     if (ctx->results_left == 0)
         return;
-
     kotoba_dict *dict = ctx->dict;
     PostingRef *results_buffer = ctx->results_buffer;
 
@@ -549,12 +545,13 @@ void query_next_page(struct SearchContext *ctx)
         }
 
         // --- 3️⃣ hard_filter SOLO si compite ---
-        if (!hard_filter(ctx, &str, query, &variant_q, type, using_variant)) {
-
+        if (!hard_filter(ctx, &str, query, &variant_q, type, using_variant))
+        {
             // remover inmediatamente
             uint32_t last = ctx->results_left - 1;
 
-            if (i != last) {
+            if (i != last)
+            {
                 ctx->results.results_idx[i] = ctx->results.results_idx[last];
                 ctx->results.score[i] = ctx->results.score[last];
                 ctx->results.type[i] = ctx->results.type[last];
@@ -563,7 +560,6 @@ void query_next_page(struct SearchContext *ctx)
             ctx->results_left--;
             continue; // IMPORTANTÍSIMO: no i++
         }
-
 
         // --- 4️⃣ insertar ordenado (insertion sort K pequeño) ---
         if (topk_size < page_size)
@@ -627,7 +623,8 @@ void query_next_page(struct SearchContext *ctx)
 
         if (idx < ctx->results_left)
         {
-            if (idx != ctx->results_left - 1) {
+            if (idx != ctx->results_left - 1)
+            {
                 ctx->results.results_idx[idx] = ctx->results.results_idx[ctx->results_left - 1];
                 ctx->results.score[idx] = ctx->results.score[ctx->results_left - 1];
                 ctx->results.type[idx] = ctx->results.type[ctx->results_left - 1];
@@ -640,7 +637,6 @@ void query_next_page(struct SearchContext *ctx)
     ctx->results_processed += topk_size;
     ctx->last_page++;
 }
-
 
 void warm_up(struct SearchContext *ctx)
 {
