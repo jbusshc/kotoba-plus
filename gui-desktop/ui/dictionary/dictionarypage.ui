@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>DictionaryPage</class>
+ <widget class="QWidget" name="DictionaryPage">
+  <layout class="QVBoxLayout" name="layoutDictionary">
+   <property name="spacing">
+    <number>8</number>
+   </property>
+   <property name="margin">
+    <number>12</number>
+   </property>
+
+   <item>
+    <widget class="QLineEdit" name="lineEditSearch">
+     <property name="placeholderText">
+      <string>Buscar palabra...</string>
+     </property>
+    </widget>
+   </item>
+
+   <item>
+    <widget class="QListView" name="listResults"/>
+   </item>
+
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

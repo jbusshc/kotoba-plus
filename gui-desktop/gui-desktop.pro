@@ -4,22 +4,30 @@ CONFIG += c++17
 
 SOURCES += \
     main.cpp \
-    mainwindow.cpp \
-    app_context.cpp \
-    search_presenter.cpp \
-    search_service.cpp \
-    search_result_model.cpp
-
+    ui/mainwindow.cpp \
+    ui/dictionary/dictionarypage.cpp \
+    ui/details/detailspage.cpp \
+    ui/srs/srspage.cpp \
+    app/context.cpp \
+    search/presenter.cpp \
+    search/service.cpp \
+    search/result_model.cpp
 
 HEADERS += \
-    mainwindow.h \
-    app_context.h \
-    search_presenter.h \
-    search_service.h \
-    search_result_model.h
+    ui/mainwindow.h \
+    ui/dictionary/dictionarypage.h \
+    ui/details/detailspage.h \
+    ui/srs/srspage.h \
+    app/context.h \
+    search/presenter.h \
+    search/service.h \
+    search/result_model.h
 
 FORMS += \
-    mainwindow.ui
+    ui/mainwindow.ui \
+    ui/dictionary/dictionarypage.ui \
+    ui/details/detailspage.ui 
+    ui/srs/srspage.ui
 
 
 # =========================

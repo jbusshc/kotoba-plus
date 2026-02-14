@@ -2,7 +2,7 @@
 
 #include <QVector>
 #include <string>
-#include "app_context.h"
+#include "../app/context.h"
 
 extern "C" {
 #include "index_search.h"

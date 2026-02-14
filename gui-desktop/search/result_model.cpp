@@ -1,4 +1,4 @@
-#include "search_result_model.h"
+#include "result_model.h"
 
 SearchResultModel::SearchResultModel(SearchPresenter *presenter,
                                      QObject *parent)

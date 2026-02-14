@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>SrsPage</class>
+ <widget class="QWidget" name="SrsPage">
+  <layout class="QVBoxLayout" name="layoutSrs">
+   <property name="spacing">
+    <number>12</number>
+   </property>
+   <property name="margin">
+    <number>16</number>
+   </property>
+
+   <!-- Título -->
+   <item>
+    <widget class="QLabel" name="labelTitle">
+     <property name="text">
+      <string>Modo Repaso</string>
+     </property>
+     <property name="styleSheet">
+      <string>
+font-size: 22px;
+font-weight: bold;
+      </string>
+     </property>
+    </widget>
+   </item>
+
+   <!-- Tarjeta -->
+   <item>
+    <widget class="QFrame" name="cardFrame">
+     <property name="frameShape">
+      <enum>QFrame::StyledPanel</enum>
+     </property>
+     <property name="frameShadow">
+      <enum>QFrame::Raised</enum>
+     </property>
+
+     <layout class="QVBoxLayout" name="cardLayout">
+      <property name="margin">
+       <number>20</number>
+      </property>
+      <property name="spacing">
+       <number>12</number>
+      </property>
+
+      <item>
+       <widget class="QLabel" name="labelWord">
+        <property name="text">
+         <string>Palabra</string>
+        </property>
+        <property name="alignment">
+         <set>Qt::AlignCenter</set>
+        </property>
+        <property name="styleSheet">
+         <string>
+font-size: 28px;
+font-weight: bold;
+         </string>
+        </property>
+       </widget>
+      </item>
+
+      <item>
+       <widget class="QPushButton" name="btnShowAnswer">
+        <property name="text">
+         <string>Mostrar respuesta</string>
+        </property>
+       </widget>
+      </item>
+
+      <item>
+       <widget class="QLabel" name="labelAnswer">
+        <property name="text">
+         <string>Significado aquí</string>
+        </property>
+        <property name="alignment">
+         <set>Qt::AlignCenter</set>
+        </property>
+        <property name="visible">
+         <bool>false</bool>
+        </property>
+       </widget>
+      </item>
+
+     </layout>
+    </widget>
+   </item>
+
+   <!-- Botones de calificación -->
+   <item>
+    <layout class="QHBoxLayout" name="gradeLayout">
+     <item>
+      <widget class="QPushButton" name="btnAgain">
+       <property name="text">
+        <string>Otra vez</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="btnGood">
+       <property name="text">
+        <string>Bien</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="btnEasy">
+       <property name="text">
+        <string>Fácil</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
