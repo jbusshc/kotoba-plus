@@ -6,6 +6,7 @@
 #include "../app/context.h"
 #include "dictionary/dictionarypage.h"
 #include "details/detailspage.h"
+#include "srs/srspage.h"
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
@@ -24,6 +25,8 @@ private:
 
     DictionaryPage *dictionaryPage;
     DetailsPage *detailsPage;
+    SrsPage *srsPage;
+
 };
 
 #endif

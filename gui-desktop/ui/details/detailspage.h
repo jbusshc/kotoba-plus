@@ -2,7 +2,7 @@
 #define DETAILSPAGE_H
 
 #include <QWidget>
-#include "../../search/presenter.h"  // Para EntryDetails
+#include "../../search/search_presenter.h"  // Para EntryDetails
 
 namespace Ui {
 class DetailsPage;

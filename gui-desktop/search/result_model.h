@@ -2,7 +2,7 @@
 
 #include <QAbstractListModel>
 
-#include "presenter.h"
+#include "search_presenter.h"
 
 class SearchResultModel : public QAbstractListModel
 {

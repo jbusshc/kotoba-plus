@@ -5,7 +5,7 @@
 #include <QVector>
 #include <cstdint>
 
-#include "service.h"
+#include "search_service.h"
 
 
 #ifdef __cplusplus

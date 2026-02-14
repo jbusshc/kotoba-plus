@@ -12,9 +12,11 @@ MainWindow::MainWindow(KotobaAppContext *ctx, QWidget *parent)
     // Crear páginas
     dictionaryPage = new DictionaryPage(ctx, this);
     detailsPage    = new DetailsPage(this);
+    srsPage        = new SrsPage(ctx, this);
 
     ui->stackedWidget->addWidget(dictionaryPage);
     ui->stackedWidget->addWidget(detailsPage);
+    ui->stackedWidget->addWidget(srsPage);
 
     ui->stackedWidget->setCurrentWidget(dictionaryPage);
 
@@ -45,6 +47,8 @@ MainWindow::MainWindow(KotobaAppContext *ctx, QWidget *parent)
             this, [=]() {
         ui->stackedWidget->setCurrentWidget(dictionaryPage);
     });
+
+
 }
 
 MainWindow::~MainWindow()

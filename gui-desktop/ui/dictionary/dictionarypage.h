@@ -6,8 +6,8 @@
 #include <QModelIndex>
 
 #include "../../app/context.h"
-#include "../../search/presenter.h"
-#include "../../search/service.h"
+#include "../../search/search_presenter.h"
+#include "../../search/search_service.h"
 #include "../../search/result_model.h"
 
 namespace Ui {

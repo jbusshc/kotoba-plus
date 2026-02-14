@@ -9,9 +9,11 @@ SOURCES += \
     ui/details/detailspage.cpp \
     ui/srs/srspage.cpp \
     app/context.cpp \
-    search/presenter.cpp \
-    search/service.cpp \
-    search/result_model.cpp
+    search/search_presenter.cpp \
+    search/search_service.cpp \
+    search/result_model.cpp \
+    srs/srs_presenter.cpp \
+    srs/srs_service.cpp
 
 HEADERS += \
     ui/mainwindow.h \
@@ -19,9 +21,11 @@ HEADERS += \
     ui/details/detailspage.h \
     ui/srs/srspage.h \
     app/context.h \
-    search/presenter.h \
-    search/service.h \
-    search/result_model.h
+    search/search_presenter.h \
+    search/search_service.h \
+    search/result_model.h \
+    srs/srs_presenter.h \
+    srs/srs_service.h
 
 FORMS += \
     ui/mainwindow.ui \

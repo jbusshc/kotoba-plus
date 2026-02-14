@@ -1,4 +1,4 @@
-#include "service.h"
+#include "search_service.h"
 
 KotobaSearchService::KotobaSearchService(KotobaAppContext *ctx)
     : ctx(ctx), pageSize(20)
