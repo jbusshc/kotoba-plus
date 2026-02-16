@@ -1,5 +1,6 @@
 #include "search_presenter.h"
 
+
 // ------------------------------------------------------------
 // Constructor
 // ------------------------------------------------------------
@@ -87,67 +88,60 @@ const QVector<ResultRow> &SearchPresenter::results() const
 // ------------------------------------------------------------
 void SearchPresenter::appendNewResults()
 {
-    if (service->searchCtx()->page_result_count == 0)
+    const SearchContext *searchCtx = service->searchCtx();
+    if (searchCtx->page_result_count == 0)
         return; // no hay nuevos resultados para agregar
-    
-    const SearchContext *searchCtx = service->searchCtx(); 
+
     const uint32_t *docIds = searchCtx->results_doc_ids;
+    std::unordered_set<uint32_t> seenDocIds;
+    for (const auto &r : currentResults)
+        seenDocIds.insert(r.doc_id);
 
-    const kotoba_dict *dict = &service->appContext()->dictionary;
-    const int toAppend = searchCtx->page_result_count;
-
-    for (int i = 0; i < toAppend; ++i)
+    for (int i = 0; i < searchCtx->page_result_count; ++i)
     {
         uint32_t docId = docIds[i];
+
+        // Saltar duplicados
+        if (!seenDocIds.insert(docId).second)
+            continue;
+
         ResultRow row;
         row.doc_id = docId;
 
-        // dup check: casos extremos,, poco frecuente
-        bool isDuplicate = std::any_of(currentResults.begin(), currentResults.end(),
-                                       [docId](const ResultRow &r) { return r.doc_id == docId; });
-
-        if (isDuplicate)
-            continue;
-
-        // Lookup en el diccionario para llenar headword y gloss
+        // Lookup en el diccionario
         const entry_bin *entry = kotoba_dict_get_entry(dict, docId);
 
-        // if kanji
+        // HEADWORD
         if (entry->k_elements_count > 0)
         {
             const k_ele_bin *k_ele = kotoba_k_ele(dict, entry, 0);
             kotoba_str keb = kotoba_keb(dict, k_ele);
             row.headword = QString::fromUtf8(keb.ptr, keb.len);
         }
-        // else reading
-        else
+        else if (entry->r_elements_count > 0)
         {
             const r_ele_bin *r_ele = kotoba_r_ele(dict, entry, 0);
             kotoba_str reb = kotoba_reb(dict, r_ele);
             row.headword = QString::fromUtf8(reb.ptr, reb.len);
         }
 
-        // gloss
+        // GLOSS
         const sense_bin *sense = kotoba_sense(dict, entry, 0);
         if (sense->gloss_count > 0)
         {
-            QString gloss;
+            QStringList glossParts;
             for (int g = 0; g < sense->gloss_count; ++g)
             {
                 kotoba_str glossPart = kotoba_gloss(dict, sense, g);
-                gloss += QString::fromUtf8(glossPart.ptr, glossPart.len);
-                if (g < sense->gloss_count - 1)
-                {
-                    gloss += "; ";
-                }
+                glossParts.append(QString::fromUtf8(glossPart.ptr, glossPart.len));
             }
-            row.gloss = gloss;
+            row.gloss = glossParts.join("; ");
         }
 
         currentResults.push_back(std::move(row));
-
     }
 }
+
 
 EntryDetails SearchPresenter::buildEntryDetails(uint32_t docId) const
 {
