@@ -169,7 +169,6 @@ int main(int argc, char **argv)
         clock_t end_time = clock();
         double elapsed_time = (double)(end_time - start_time) / CLOCKS_PER_SEC;
         printf("Query executed in %.2f milliseconds\n", elapsed_time * 1000);
-
         printf("results processed: %u\n", ctx.page_result_count);
         printf("results left: %u\n", ctx.results_left);
         query_next_page(&ctx);
@@ -404,7 +403,7 @@ int main(int argc, char **argv)
                 for (int j = 0; j < e->k_elements_count; ++j)
                 {
                     kotoba_str keb = kotoba_keb(&d, &k_ele[j]);
-                    fprintf(jp_fp, "%u\t%.*s\t%u\t%u\n", i, (int)keb.len, keb.ptr, j, TYPE_KANJI);
+                    fprintf(jp_fp, "%u\t%.*s\t%u\t%u\t%u\n", i, (int)keb.len, keb.ptr, j, TYPE_KANJI, keb.len);
                 }
             }
             if (e->r_elements_count > 0)
@@ -435,7 +434,7 @@ int main(int argc, char **argv)
                     }
                     if (!is_duplicate)
                     {
-                        fprintf(jp_fp, "%u\t%s\t%u\t%u\n", i, str[j], j, TYPE_READING);
+                        fprintf(jp_fp, "%u\t%s\t%u\t%u\t%u\n", i, str[j], j, TYPE_READING, strlen(str[j]));
                     }
                 }
             }
@@ -449,7 +448,7 @@ int main(int argc, char **argv)
                     {
                         if (sense->lang == lang)
                         {
-                            fprintf(gloss_fps[lang], "%u\t%.*s\t%u\t%u\n", i, (int)gloss.len, gloss.ptr, s, g);
+                            fprintf(gloss_fps[lang], "%u\t%.*s\t%u\t%u\t%u\n", i, (int)gloss.len, gloss.ptr, s, g, gloss.len);
                         }
                     }
                 }

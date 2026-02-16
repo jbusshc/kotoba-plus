@@ -224,7 +224,7 @@ static inline uint32_t vowel_to_hiragana(int vowel)
 
 static inline void scoring(query_t *query, kotoba_str *str, uint8_t *out_score, int type)
 {
-    uint8_t exact = (query->len == str->len && memcmp(query->s, str->ptr, query->len) == 0);
+    uint8_t exact = (query->len == str->len) ? 1 : 0; // false positive check i
     uint8_t is_jp = (type == TYPE_KANJI || type == TYPE_READING) ? 1 : 0;
     uint8_t common = 0; // TODO: implement common word detection
 

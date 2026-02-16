@@ -6,7 +6,7 @@
 #include <string.h>
 
 #define IDX_MAGIC   0x494E5658u  // "INVX"
-#define IDX_VERSION 3u          // bumped: gram mode supported at build/query
+#define IDX_VERSION 4u         // bumped: added 'len' field to Posting for better pruning at query time
 
 #include "kotoba.h"
 
@@ -41,7 +41,8 @@ typedef struct {
     uint32_t doc_id;
     uint8_t  meta1;
     uint8_t  meta2;
-    uint8_t  reserved[2];
+    uint8_t  len; // byte length of the indexed string (for quick pruning at query time)
+    uint8_t  reserved;
 } __attribute__((packed)) Posting;
 
 /* runtime mmap view */
@@ -152,19 +153,6 @@ KOTOBA_API size_t index_intersect_postings(
    QUERY GRAM GENERATION
    ========================= */
 
-/*
-   Generate gram hashes for a query string.
-
-   gram_mode:
-     - GRAM_UNIGRAM / BIGRAM / TRIGRAM : force mode
-     - GRAM_GLOSS_AUTO:
-         len 1 → uni
-         len 2 → bi
-         len ≥3 → tri
-     - GRAM_JP 
-        1 char -> uni
-        ≥2 chars -> bi
-*/
 KOTOBA_API size_t query_gram_hashes_mode(
     const char *q,
     GramMode mode,

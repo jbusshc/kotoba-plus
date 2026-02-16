@@ -67,6 +67,7 @@ typedef struct
     uint32_t doc_id;
     uint8_t meta1;
     uint8_t meta2;
+    uint8_t len;
 } Pair;
 
 static int cmp_pair(const void *a, const void *b)
@@ -399,20 +400,20 @@ int index_build_from_pairs(
 {
     Pair *pairs = NULL; size_t pcap = 0, pcount = 0;
 
-    struct GramUD { uint32_t doc; uint8_t m1; uint8_t m2; };
+    struct GramUD { uint32_t doc; uint8_t m1; uint8_t m2; uint8_t len; };
     void capture_cb(const uint8_t *p, size_t len, void *ud)
     {
         struct GramUD *g = (struct GramUD*)ud;
         uint32_t h = fnv1a(p, len);
         if (pcount == pcap) { pcap = pcap ? pcap*2 : 65536; pairs = realloc(pairs, pcap*sizeof(Pair)); if(!pairs){perror("realloc");exit(1);} }
-        pairs[pcount].hash = h; pairs[pcount].doc_id = g->doc; pairs[pcount].meta1 = g->m1; pairs[pcount].meta2 = g->m2; pcount++;
+        pairs[pcount].hash = h; pairs[pcount].doc_id = g->doc; pairs[pcount].meta1 = g->m1; pairs[pcount].meta2 = g->m2; pairs[pcount].len = g->len; pcount++;
     }
 
     for(size_t i=0;i<count;++i)
     {
         const char *txt = texts[i]; if(!txt) continue;
-        struct GramUD ud = { doc_ids?doc_ids[i]:0, meta1?meta1[i]:META_NONE, meta2?meta2[i]:META_NONE };
         size_t len = utf8_strlen(txt);
+        struct GramUD ud = { doc_ids?doc_ids[i]:0, meta1?meta1[i]:META_NONE, meta2?meta2[i]:META_NONE, (uint8_t)len };
 
         if(gram_mode==GRAM_JP_ALL)
         {
@@ -468,7 +469,7 @@ int index_build_from_pairs(
             uint32_t doc=pairs[j].doc_id; uint8_t m1=pairs[j].meta1,m2=pairs[j].meta2;
             if(!(doc==last_doc && m1==last_m1 && m2==last_m2))
             {
-                postings[pi].doc_id=doc; postings[pi].meta1=m1; postings[pi].meta2=m2; pi++;
+                postings[pi].doc_id=doc; postings[pi].meta1=m1; postings[pi].meta2=m2; postings[pi].len=pairs[j].len; pi++;
                 last_doc=doc; last_m1=m1; last_m2=m2;
             }
             j++;
