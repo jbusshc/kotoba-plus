@@ -102,6 +102,13 @@ void SearchPresenter::appendNewResults()
         ResultRow row;
         row.doc_id = docId;
 
+        // dup check: casos extremos,, poco frecuente
+        bool isDuplicate = std::any_of(currentResults.begin(), currentResults.end(),
+                                       [docId](const ResultRow &r) { return r.doc_id == docId; });
+
+        if (isDuplicate)
+            continue;
+
         // Lookup en el diccionario para llenar headword y gloss
         const entry_bin *entry = kotoba_dict_get_entry(dict, docId);
 
