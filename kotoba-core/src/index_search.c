@@ -1,10 +1,5 @@
 #include "../include/index_search.h"
 
-#define SEARCH_MAX_RESULTS 1600
-#define SEARCH_MAX_QUERY_HASHES 128
-#define DEFAULT_PAGE_SIZE 16
-#define PAGE_SIZE_MAX 128
-
 int get_input_type(const char *query)
 {
     if (!query || *query == '\0')
@@ -64,41 +59,53 @@ void init_search_context(struct SearchContext *ctx,
                          uint32_t page_size)
 {
     memset(ctx, 0, sizeof(struct SearchContext));
+
     ctx->dict = dict;
-    ctx->page_size = page_size > 0 && page_size <= PAGE_SIZE_MAX ? page_size : DEFAULT_PAGE_SIZE;
+    ctx->page_size = (page_size > 0 && page_size <= PAGE_SIZE_MAX)
+                         ? page_size
+                         : DEFAULT_PAGE_SIZE;
+
     ctx->results_left = 0;
     ctx->page_result_count = 0;
     ctx->prolongation_mark_flag = 0;
 
+    // ---- INIT ARENA ----
+    arena_init(&ctx->arena, ARENA_SIZE); 
+    // 512 KB es más que suficiente para buffers de búsqueda
+
+    // ---- Trie ----
     ctx->trie_ctx = malloc(sizeof(TrieContext));
     if (!ctx->trie_ctx)
     {
         fprintf(stderr, "Memory allocation failed for TrieContext\n");
         exit(1);
     }
-    ctx->queries_buffer = malloc(QUERY_BUFFER_SIZE);
-    if (!ctx->queries_buffer)
-    {
-        fprintf(stderr, "Memory allocation failed for queries_buffer\n");
-        exit(1);
-    }
-    ctx->mixed_query = ctx->queries_buffer;                   // reuse buffer
-    ctx->variant_query = ctx->queries_buffer + MAX_QUERY_LEN; // reuse buffer
+
     build_trie(ctx->trie_ctx);
 
+    // ---- Query buffer (ARENA) ----
+    ctx->queries_buffer = arena_alloc(&ctx->arena, sizeof(char) * QUERY_BUFFER_SIZE, sizeof(char));
+    if (!ctx->queries_buffer)
+    {
+        fprintf(stderr, "Arena allocation failed for queries_buffer\n");
+        exit(1);
+    }
+
+    ctx->mixed_query   = ctx->queries_buffer;
+    ctx->variant_query = ctx->queries_buffer + MAX_QUERY_LEN;
+
+    // ---- Gloss flags ----
     if (glosses_active)
     {
         for (int i = 0; i < KOTOBA_LANG_COUNT; ++i)
-        {
             ctx->is_gloss_active[i] = glosses_active[i];
-        }
     }
 
+    // ---- JP index (malloc normal) ----
     ctx->jp_invx = malloc(sizeof(InvertedIndex));
-    ctx->gloss_invxs = calloc(KOTOBA_LANG_COUNT, sizeof(InvertedIndex *));
-    if (!ctx->jp_invx || !ctx->gloss_invxs)
+    if (!ctx->jp_invx)
     {
-        fprintf(stderr, "Memory allocation failed in init_search_context\n");
+        fprintf(stderr, "Memory allocation failed for jp_invx\n");
         exit(1);
     }
 
@@ -108,93 +115,112 @@ void init_search_context(struct SearchContext *ctx,
         exit(1);
     }
 
-    // Only allocate and load gloss indexes for active languages
+    // ---- Gloss indexes (malloc normal) ----
+    ctx->gloss_invxs = calloc(KOTOBA_LANG_COUNT, sizeof(InvertedIndex *));
+    if (!ctx->gloss_invxs)
+    {
+        fprintf(stderr, "Memory allocation failed for gloss_invxs\n");
+        exit(1);
+    }
+
     for (int i = 0; i < KOTOBA_LANG_COUNT; ++i)
     {
-        if (ctx->is_gloss_active[i])
+        if (!ctx->is_gloss_active[i])
+            continue;
+
+        ctx->gloss_invxs[i] = malloc(sizeof(InvertedIndex));
+        if (!ctx->gloss_invxs[i])
         {
-            ctx->gloss_invxs[i] = malloc(sizeof(InvertedIndex));
-            if (!ctx->gloss_invxs[i])
-            {
-                fprintf(stderr, "Memory allocation failed for gloss_invxs[%d]\n", i);
-                exit(1);
-            }
-            char fname[64];
-            // You may want to use a mapping for filenames instead of this switch
-            switch (i)
-            {
-            case KOTOBA_LANG_EN:
-                strcpy(fname, "gloss_en.invx");
-                break;
-            case KOTOBA_LANG_ES:
-                strcpy(fname, "gloss_es.invx");
-                break;
-            // Add more cases as needed for other languages
-            default:
-                snprintf(fname, sizeof(fname), "gloss_%d.invx", i);
-                break;
-            }
-            if (index_load(fname, ctx->gloss_invxs[i]) != 0)
-            {
-                fprintf(stderr, "Failed to load %s\n", fname);
-                free(ctx->gloss_invxs[i]);
-                ctx->gloss_invxs[i] = NULL;
-            }
+            fprintf(stderr, "Memory allocation failed for gloss_invxs[%d]\n", i);
+            exit(1);
         }
-        else
+
+        char fname[64];
+
+        switch (i)
         {
+        case KOTOBA_LANG_EN:
+            strcpy(fname, "gloss_en.invx");
+            break;
+        case KOTOBA_LANG_ES:
+            strcpy(fname, "gloss_es.invx");
+            break;
+        default:
+            snprintf(fname, sizeof(fname), "gloss_%d.invx", i);
+            break;
+        }
+
+        if (index_load(fname, ctx->gloss_invxs[i]) != 0)
+        {
+            fprintf(stderr, "Failed to load %s\n", fname);
+            free(ctx->gloss_invxs[i]);
             ctx->gloss_invxs[i] = NULL;
         }
     }
 
-    ctx->results_doc_ids = malloc(sizeof(uint32_t) * PAGE_SIZE_MAX);
-    ctx->results_buffer = malloc(sizeof(PostingRef) * SEARCH_MAX_RESULTS);
+    // ---- Results buffers (ARENA) ----
+    ctx->results_doc_ids =
+        arena_alloc(&ctx->arena, sizeof(uint32_t) * PAGE_SIZE_MAX, sizeof(uint32_t));
 
-    if (!ctx->results_doc_ids || !ctx->results_buffer)
+    ctx->results_buffer =
+        arena_alloc(&ctx->arena, sizeof(PostingRef) * SEARCH_MAX_RESULTS, sizeof(PostingRef));
+
+    ctx->results.results_idx =
+        arena_alloc(&ctx->arena, sizeof(uint32_t) * SEARCH_MAX_RESULTS, sizeof(uint32_t));
+
+    ctx->results.score =
+        arena_alloc(&ctx->arena, sizeof(uint8_t) * SEARCH_MAX_RESULTS, sizeof(uint8_t));
+
+    ctx->results.type =
+        arena_alloc(&ctx->arena, sizeof(uint8_t) * SEARCH_MAX_RESULTS, sizeof(uint8_t));
+
+    if (!ctx->results_doc_ids ||
+        !ctx->results_buffer ||
+        !ctx->results.results_idx ||
+        !ctx->results.score ||
+        !ctx->results.type)
     {
-        fprintf(stderr, "Memory allocation failed for results buffers\n");
-        exit(1);
-    }
-    ctx->results.results_idx = malloc(sizeof(uint32_t) * SEARCH_MAX_RESULTS);
-    ctx->results.score = malloc(sizeof(uint8_t) * SEARCH_MAX_RESULTS);
-    ctx->results.type = malloc(sizeof(uint8_t) * SEARCH_MAX_RESULTS);
-    if (!ctx->results.results_idx || !ctx->results.score || !ctx->results.type)
-    {
-        fprintf(stderr, "Memory allocation failed for SearchResultMeta arrays\n");
+        fprintf(stderr, "Arena allocation failed for results buffers\n");
         exit(1);
     }
 }
+
 
 void free_search_context(struct SearchContext *ctx)
 {
+    if (!ctx) return;
+
+    // ---- JP index ----
     if (ctx->jp_invx)
     {
         index_unload(ctx->jp_invx);
+        free(ctx->jp_invx);
+        ctx->jp_invx = NULL;
     }
 
-    for (int i = 0; i < KOTOBA_LANG_COUNT; ++i)
+    // ---- Gloss indexes ----
+    if (ctx->gloss_invxs)
     {
-        if (ctx->gloss_invxs[i])
+        for (int i = 0; i < KOTOBA_LANG_COUNT; ++i)
         {
-            index_unload(ctx->gloss_invxs[i]);
-            ctx->gloss_invxs[i] = NULL;
+            if (ctx->gloss_invxs[i])
+            {
+                index_unload(ctx->gloss_invxs[i]);
+                free(ctx->gloss_invxs[i]);
+            }
         }
+        free(ctx->gloss_invxs);
+        ctx->gloss_invxs = NULL;
     }
-    free(ctx->results_doc_ids);
-    free(ctx->results.results_idx);
-    free(ctx->results.score);
-    free(ctx->results.type);
-    free(ctx->results_buffer);
 
-    for (int i = 0; i < KOTOBA_LANG_COUNT; ++i)
-    {
-        if (ctx->gloss_invxs[i])
-        {
-            free(ctx->gloss_invxs[i]);
-        }
-    }
-    free(ctx->gloss_invxs);
+    // ---- Trie ----
+    free(ctx->trie_ctx);
+    ctx->trie_ctx = NULL;
+
+    // ---- Arena (libera todos los buffers de golpe) ----
+    arena_free(&ctx->arena);
 }
+
 
 void reset_search_context(struct SearchContext *ctx)
 {
@@ -222,15 +248,14 @@ static inline uint32_t vowel_to_hiragana(int vowel)
     }
 }
 
-static inline void scoring(query_t *query, kotoba_str *str, uint8_t *out_score, int type)
+static inline void scoring(query_t *query, uint8_t *out_score, uint8_t is_jp, uint8_t len)
 {
-    uint8_t exact = (query->len == str->len) ? 1 : 0; // false positive check i
-    uint8_t is_jp = (type == TYPE_KANJI || type == TYPE_READING) ? 1 : 0;
+    uint8_t exact = (query->len == len) ? 1 : 0; // false positive check in further stage.
     uint8_t common = 0; // TODO: implement common word detection
 
-    uint8_t diff = (str->len > query->len)
-                       ? (str->len - query->len)
-                       : (query->len - str->len);
+    uint8_t diff = (len > query->len)
+                       ? (len - query->len)
+                       : (query->len - len);
 
     if (diff > 31)
         diff = 31;
@@ -253,7 +278,7 @@ static int search_jp_query(
 
     query_t q;
     q.s = query_str;
-    q.len = (uint8_t)strlen(query_str);
+    q.len = (uint8_t)utf8_strlen(query_str);
     q.first = query_str[0];
 
     uint32_t hashes[SEARCH_MAX_QUERY_HASHES];
@@ -279,26 +304,10 @@ static int search_jp_query(
     for (int i = 0; i < rcount; ++i)
     {
         PostingRef *pr = &results_buffer[base + i];
-
-        const entry_bin *e = kotoba_entry(dict, pr->p->doc_id);
-
-        kotoba_str str;
-        int elem_id = pr->p->meta1;
-        int type = pr->p->meta2;
-
-        if (type == TYPE_KANJI)
-        {
-            const k_ele_bin *k_ele = kotoba_k_ele(dict, e, elem_id);
-            str = kotoba_keb(dict, k_ele);
-        }
-        else
-        {
-            const r_ele_bin *r_ele = kotoba_r_ele(dict, e, elem_id);
-            str = kotoba_reb(dict, r_ele);
-        }
-
+        int len = pr->p->len; // use indexed length for better pruning
+        int type = pr->p->meta2; // TYPE_KANJI or TYPE_READING
         // ✅ CORRECTO: usamos la longitud de ESTA query
-        if (q.len > str.len)
+        if (q.len > len)
         {
             continue;
         }
@@ -308,7 +317,7 @@ static int search_jp_query(
 
         ctx->results.results_idx[write] = write;
         ctx->results.type[write] = (type == TYPE_KANJI) ? TYPE_KANJI : TYPE_READING;
-        scoring(&q, &str, &ctx->results.score[write], type);
+        scoring(&q, &ctx->results.score[write], 1, len); // 1 for JP type, results.score
 
         write++;
     }
@@ -321,7 +330,7 @@ void query_results(struct SearchContext *ctx, const char *query)
 
     query_t q;
     q.s = query;
-    q.len = (uint8_t)strlen(query);
+    q.len = (uint8_t)utf8_strlen(query);
     q.first = query[0];
 
     uint32_t gloss_hashes[SEARCH_MAX_QUERY_HASHES];
@@ -402,15 +411,9 @@ void query_results(struct SearchContext *ctx, const char *query)
                 for (int i = 0; i < rcount; ++i)
                 {
                     PostingRef *pr = &results_buffer[base + i];
-                    const entry_bin *e = kotoba_entry(dict, pr->p->doc_id);
+                    int len = pr->p->len; // use indexed length for better pruning
 
-                    int sense_id = pr->p->meta1;
-                    int gloss_id = pr->p->meta2;
-
-                    const sense_bin *s = kotoba_sense(dict, e, sense_id);
-                    kotoba_str gloss = kotoba_gloss(dict, s, gloss_id);
-
-                    if (q.len > gloss.len)
+                    if (q.len > len)
                         continue;
 
                     if (write != base + i)
@@ -418,7 +421,7 @@ void query_results(struct SearchContext *ctx, const char *query)
 
                     ctx->results.results_idx[write] = write;
                     ctx->results.type[write] = TYPE_GLOSS;
-                    scoring(&q, &gloss, &ctx->results.score[write], TYPE_GLOSS);
+                    scoring(&q, &ctx->results.score[write], 0, len); // 0 for not is_jp, results.score
 
                     write++;
                 }
@@ -462,15 +465,9 @@ void query_results(struct SearchContext *ctx, const char *query)
                 for (int i = 0; i < rcount; ++i)
                 {
                     PostingRef *pr = &results_buffer[base + i];
-                    const entry_bin *e = kotoba_entry(dict, pr->p->doc_id);
+                    int len = pr->p->len; // use indexed length for better pruning
 
-                    int sense_id = pr->p->meta1;
-                    int gloss_id = pr->p->meta2;
-
-                    const sense_bin *s = kotoba_sense(dict, e, sense_id);
-                    kotoba_str gloss = kotoba_gloss(dict, s, gloss_id);
-
-                    if (q.len > gloss.len)
+                    if (q.len > len)
                         continue;
 
                     if (write != base + i)
@@ -478,7 +475,7 @@ void query_results(struct SearchContext *ctx, const char *query)
 
                     ctx->results.results_idx[write] = write;
                     ctx->results.type[write] = TYPE_GLOSS;
-                    scoring(&q, &gloss, &ctx->results.score[write], TYPE_GLOSS);
+                    scoring(&q, &ctx->results.score[write], 0, len); // 0 for not is_jp, results.score
 
                     write++;
                 }

@@ -48,6 +48,15 @@ void srs_prompt(void)
     printf("  quit\n");
 }
 
+void deep(int level, char* base) { // for estimating stack usage
+    char marker;
+    if (level == 0) {
+        printf("Stack usado aprox: %ld bytes\n", base - &marker);
+        return;
+    }
+    deep(level - 1, base);
+}
+
 /* ---------- CLI ---------- */
 int main(int argc, char **argv)
 {
@@ -55,6 +64,7 @@ int main(int argc, char **argv)
     /* Set Windows console to UTF-8 for input/output */
     system("chcp 65001");
 #endif
+    char base;
 
     if (argc < 2)
     {
@@ -180,6 +190,7 @@ int main(int argc, char **argv)
         }
 
         printf("Results left: %u\n", ctx.results_left);
+        deep(1, &base); // estimar uso de stack para index_build_from_pairs
 
         return 0;
     }

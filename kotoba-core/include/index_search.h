@@ -1,6 +1,5 @@
 #pragma once
 
-
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -11,6 +10,7 @@
 #include "kotoba.h"
 #include "kana.h"
 #include "viewer.h"
+#include "arena.h"
 
 #define TYPE_KANJI 1
 #define TYPE_READING 2
@@ -34,8 +34,7 @@ enum InputTypeFlag
 
 KOTOBA_API int get_input_type(const char *query);
 
-
-/* SCORE LAYOUT (uint_8) 
+/* SCORE LAYOUT (uint_8)
     [ E ][ T ][ C ][ PPPPP ]
     E: Exact match (1 bit)
     T: is jp: (1 bit for jp, 0 for gloss (resembles type))
@@ -43,12 +42,11 @@ KOTOBA_API int get_input_type(const char *query);
     PPPPP: length pruning (5 bits, 0-31) (computed as min(31, word_len - query_len))
 */
 
-
 typedef struct // SoA for better cache locality when sorting
 {
-    uint32_t* results_idx; // index in results buffer
-    uint8_t* score;      // computed score for sorting
-    uint8_t* type;        // 0=kanji,1=reading,2+=gloss lang index
+    uint32_t *results_idx; // index in results buffer
+    uint8_t *score;        // computed score for sorting
+    uint8_t *type;         // 0=kanji,1=reading,2+=gloss lang index
 
 } SearchResultMeta;
 
@@ -57,27 +55,51 @@ sort_scores(SearchResultMeta *a, int n);
 
 #define MAX_QUERY_LEN 256
 #define QUERY_BUFFER_SIZE (MAX_QUERY_LEN * 2) // para normalizaciones (hiragana, vowel prolongation mark, etc)
+#define SEARCH_MAX_RESULTS 1600
+#define SEARCH_MAX_QUERY_HASHES 128
+#define DEFAULT_PAGE_SIZE 16
+#define PAGE_SIZE_MAX 128
+
+#define ARENA_SIZE ( \
+    QUERY_BUFFER_SIZE + \
+    (sizeof(uint32_t) * PAGE_SIZE_MAX) + \
+    (sizeof(PostingRef) * SEARCH_MAX_RESULTS) + \
+    (sizeof(uint32_t) * SEARCH_MAX_RESULTS) + \
+    (sizeof(uint8_t) * SEARCH_MAX_RESULTS) + \
+    (sizeof(uint8_t) * SEARCH_MAX_RESULTS) + \
+    1024 /* margen de seguridad */ \
+)
 
 struct SearchContext
 {
-    bool is_gloss_active[KOTOBA_LANG_COUNT]; // 28 bytes
-    uint8_t _pad0[4];                        // pad to 32 bytes (8-byte aligned)
+    bool is_gloss_active[KOTOBA_LANG_COUNT];
+    uint8_t _pad0[4];
+
     query_t query;
-    TrieContext* trie_ctx;
+    TrieContext *trie_ctx;
+
+    Arena arena;              // 👈 NUEVO (para buffers estáticos)
+
     char *queries_buffer;
     char *mixed_query;
     char *variant_query;
+
     kotoba_dict *dict;
+
     InvertedIndex *jp_invx;
     InvertedIndex **gloss_invxs;
+
     PostingRef *results_buffer;
     uint32_t *results_doc_ids;
+
     SearchResultMeta results;
+
     uint32_t results_left;
     uint32_t page_size;
     uint8_t page_result_count;
-    uint8_t prolongation_mark_flag; // flag to indicate if vowel prolongation mark normalization produced a different query, used to decide whether to apply hard filter with variant query
-};  
+    uint8_t prolongation_mark_flag;
+};
+
 
 KOTOBA_API void init_search_context(struct SearchContext *ctx,
                                     bool *glosses_active,
@@ -94,7 +116,6 @@ KOTOBA_API void query_next_page(struct SearchContext *ctx);
 
 KOTOBA_API
 void warm_up(struct SearchContext *ctx);
-
 
 /*
 TO DO:
