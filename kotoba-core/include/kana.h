@@ -436,7 +436,7 @@ extern "C"
 
     KOTOBA_API void mixed_to_hiragana(const TrieContext *ctx, const char *input, char *output, size_t out_size);
 
-    KOTOBA_API void vowel_prolongation_mark(const char *input, char *output, size_t out_size);
+    KOTOBA_API void vowel_prolongation_mark(const char *input, char *output, size_t out_size, uint8_t* prolongation_mark_flag);
 
 
 #ifdef __cplusplus

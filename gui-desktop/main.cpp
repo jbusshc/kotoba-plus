@@ -1,5 +1,5 @@
-#include "app_context.h"
-#include "mainwindow.h"
+#include "app/context.h"
+#include "ui/mainwindow.h"
 
 #include <QApplication>
 

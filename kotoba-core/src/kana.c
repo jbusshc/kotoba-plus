@@ -207,11 +207,14 @@ static inline uint32_t hiragana_vowel_(uint32_t cp)
     }
 }
 
-void vowel_prolongation_mark(const char *input, char *output, size_t out_size)
+void vowel_prolongation_mark(const char *input, char *output, size_t out_size, uint8_t* prolongation_mark_flag)
 {
     const char *s = input;
     char *out = output;
     size_t left = out_size - 1;
+    if (prolongation_mark_flag) {
+        *prolongation_mark_flag = 0;
+    }
 
     while (*s && left)
     {
@@ -229,6 +232,7 @@ void vowel_prolongation_mark(const char *input, char *output, size_t out_size)
             {
                 emit_utf8(cp, &out, &left);     // mantener primera sílaba
                 emit_utf8(0x30FC, &out, &left); // añadir ー
+                *prolongation_mark_flag = 1;
                 s = peek;
                 continue;
             }

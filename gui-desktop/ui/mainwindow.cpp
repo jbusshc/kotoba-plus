@@ -2,7 +2,6 @@
 #include "ui_mainwindow.h"
 
 #include <QButtonGroup>
-
 MainWindow::MainWindow(KotobaAppContext *ctx, QWidget *parent)
     : QMainWindow(parent),
       ui(new Ui::MainWindow)

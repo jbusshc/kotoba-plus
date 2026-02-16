@@ -170,12 +170,12 @@ int main(int argc, char **argv)
         double elapsed_time = (double)(end_time - start_time) / CLOCKS_PER_SEC;
         printf("Query executed in %.2f milliseconds\n", elapsed_time * 1000);
 
-        printf("results processed: %u\n", ctx.results_processed);
+        printf("results processed: %u\n", ctx.page_result_count);
         printf("results left: %u\n", ctx.results_left);
         query_next_page(&ctx);
 
         printf("Results:\n");
-        for (uint32_t i = 0; i < ctx.results_processed; ++i)
+        for (uint32_t i = 0; i < ctx.page_result_count; ++i)
         {
             print_entry(&d, ctx.results_doc_ids[i]);
         }
@@ -467,37 +467,6 @@ int main(int argc, char **argv)
     }
     else if (strcmp(argv[1], "test") == 0)
     {
-
-        kotoba_dict d;
-        bool languages[KOTOBA_LANG_COUNT] = {0};
-        languages[KOTOBA_LANG_EN] = true;
-        languages[KOTOBA_LANG_ES] = true;
-        kotoba_dict_open(&d, dict_path, idx_path);
-
-        struct SearchContext ctx;
-        init_search_context(&ctx, languages, &d, 20);
-
-        char* test_str = "konpyuuta";
-        
-        char mixed[256];
-        mixed_to_hiragana(ctx.trie_ctx, test_str, mixed, sizeof(mixed));
-        char variant[256];
-        vowel_prolongation_mark( mixed, variant, sizeof(variant));
-
-        printf("Original: %s\n", test_str);
-        printf("Variant: %s\n", variant);
-
-        uint32_t hashes[256];
-        int hcount = query_gram_hashes_mode(variant, GRAM_JP_ALL, hashes, 256);
-        printf("Hashes for variant:\n");
-        for (int i = 0; i < hcount; ++i)
-        {
-            printf("  %u\n", hashes[i]);
-        } 
-        int rc = index_intersect_postings(ctx.jp_invx, hashes, hcount, ctx.results_buffer, ctx.page_size);
-        printf("Search returned %d results\n", rc);
-        
-
         return 0;
     }
 

@@ -14,6 +14,7 @@
 
 #define TYPE_KANJI 1
 #define TYPE_READING 2
+#define TYPE_GLOSS 4
 
 typedef struct
 {
@@ -33,14 +34,20 @@ enum InputTypeFlag
 
 KOTOBA_API int get_input_type(const char *query);
 
-KOTOBA_API int
-word_contains_q(const char *word, int wlen,
-                const query_t *q);
+
+/* SCORE LAYOUT (uint_8) 
+    [ E ][ T ][ C ][ PPPPP ]
+    E: Exact match (1 bit)
+    T: is jp: (1 bit for jp, 0 for gloss (resembles type))
+    C: Common word (1 bit)
+    PPPPP: length pruning (5 bits, 0-31) (computed as min(31, word_len - query_len))
+*/
+
 
 typedef struct // SoA for better cache locality when sorting
 {
     uint32_t* results_idx; // index in results buffer
-    uint8_t* score;       // lower is better
+    uint8_t* score;      // computed score for sorting
     uint8_t* type;        // 0=kanji,1=reading,2+=gloss lang index
 
 } SearchResultMeta;
@@ -67,9 +74,9 @@ struct SearchContext
     uint32_t *results_doc_ids;
     SearchResultMeta results;
     uint32_t results_left;
-    uint32_t results_processed;
     uint32_t page_size;
-    uint32_t last_page;
+    uint8_t page_result_count;
+    uint8_t prolongation_mark_flag; // flag to indicate if vowel prolongation mark normalization produced a different query, used to decide whether to apply hard filter with variant query
 };  
 
 KOTOBA_API void init_search_context(struct SearchContext *ctx,

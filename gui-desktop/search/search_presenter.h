@@ -62,9 +62,8 @@ public:
 
 private:
     KotobaSearchService *service;
-
+    
     QVector<ResultRow> currentResults;
-    int lastCachedResultIndex = 0; // para saber desde dónde cargar más resultados
     kotoba_dict *dict; // acceso directo para lookup de glosas
 
 private:

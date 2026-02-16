@@ -7,8 +7,7 @@ SearchPresenter::SearchPresenter(KotobaSearchService *service,
                                  QObject *parent)
     : QObject(parent),
       service(service),
-      dict(&service->appContext()->dictionary), 
-      lastCachedResultIndex(0)
+      dict(&service->appContext()->dictionary)
 {
 }
 
@@ -20,14 +19,12 @@ void SearchPresenter::onSearchTextChanged(const QString &text)
     if (text.isEmpty()) {
         // Si el texto está vacío, limpiamos resultados y avisamos
         currentResults.clear();
-        lastCachedResultIndex = 0;
         emit resultsReset();
         return;
     }
 
     // 1. Limpiar estado actual
     currentResults.clear();
-    lastCachedResultIndex = 0; // reset paginación
 
     // 2. Ejecutar nueva búsqueda en el servicio
     service->query(text.toStdString());
@@ -90,19 +87,18 @@ const QVector<ResultRow> &SearchPresenter::results() const
 // ------------------------------------------------------------
 void SearchPresenter::appendNewResults()
 {
-    if (service->searchCtx()->results_processed <= lastCachedResultIndex)
+    if (service->searchCtx()->page_result_count == 0)
         return; // no hay nuevos resultados para agregar
     
     const SearchContext *searchCtx = service->searchCtx(); 
     const uint32_t *docIds = searchCtx->results_doc_ids;
 
-    const int newpageResultIndex = lastCachedResultIndex;
-    const int toAppend = std::min((int)searchCtx->results_processed - newpageResultIndex, (int)searchCtx->page_size);
+    const kotoba_dict *dict = &service->appContext()->dictionary;
+    const int toAppend = searchCtx->page_result_count;
 
-    printf("appendNewResults called. results_left: %d, results_processed: %d, lastCachedResultIndex: %d\n", searchCtx->results_left, searchCtx->results_processed, lastCachedResultIndex);
     for (int i = 0; i < toAppend; ++i)
     {
-        uint32_t docId = docIds[newpageResultIndex + i];
+        uint32_t docId = docIds[i];
         ResultRow row;
         row.doc_id = docId;
 
@@ -144,7 +140,6 @@ void SearchPresenter::appendNewResults()
         currentResults.push_back(std::move(row));
 
     }
-    lastCachedResultIndex += toAppend;
 }
 
 EntryDetails SearchPresenter::buildEntryDetails(uint32_t docId) const
