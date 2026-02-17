@@ -25,4 +25,7 @@ void SrsDashboard::updateStats(uint32_t due,
     ui->labelLearning->setText(QString("Learning: %1").arg(learning));
     ui->labelNew->setText(QString("New: %1").arg(newly));
     ui->labelLapsed->setText(QString("Lapsed: %1").arg(lapsed));
+
+    // 🔥 lógica correcta
+    ui->btnStart->setEnabled(due > 0);
 }

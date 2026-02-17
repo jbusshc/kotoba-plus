@@ -11,16 +11,18 @@ SrsPresenter::SrsPresenter(KotobaAppContext* ctx,
 
 void SrsPresenter::startSession()
 {
-    uint64_t now = srs_now();
-    totalDue = service->dueCount(now);
-    studied = 0;
+    refreshStats();
 
-    emit showCounts(totalDue,
-                    service->learningCount(),
-                    service->newCount(),
-                    service->lapsedCount());
+    if (totalDue == 0)
+    {
+        emit noMoreCards();
+        return;
+    }
 
+    loadNext();
 }
+
+
 
 void SrsPresenter::loadNext()
 {
@@ -100,23 +102,57 @@ void SrsPresenter::revealAnswer()
 void SrsPresenter::answerAgain()
 {
     service->answer(currentEntryId, SRS_AGAIN);
+
+    // marcar progreso
+    studied++;
+    emit updateProgress(studied, totalDue);
+
     loadNext();
 }
 
 void SrsPresenter::answerHard()
 {
     service->answer(currentEntryId, SRS_HARD);
+
+    studied++;
+    emit updateProgress(studied, totalDue);
+
     loadNext();
 }
 
 void SrsPresenter::answerGood()
 {
     service->answer(currentEntryId, SRS_GOOD);
+
+    studied++;
+    emit updateProgress(studied, totalDue);
+
     loadNext();
 }
 
 void SrsPresenter::answerEasy()
 {
     service->answer(currentEntryId, SRS_EASY);
+
+    studied++;
+    emit updateProgress(studied, totalDue);
+
     loadNext();
+}
+
+void SrsPresenter::refreshStats()
+{
+    uint64_t now = srs_now();
+
+    totalDue = service->dueCount(now);
+    studied = 0;
+
+    emit showCounts(
+        totalDue,
+        service->learningCount(),
+        service->newCount(),
+        service->lapsedCount()
+    );
+
+    emit updateProgress(0, totalDue);
 }

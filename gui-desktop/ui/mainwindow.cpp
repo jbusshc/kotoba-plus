@@ -1,37 +1,67 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
 
-#include <QButtonGroup>
 MainWindow::MainWindow(KotobaAppContext *ctx, QWidget *parent)
     : QMainWindow(parent),
-      ui(new Ui::MainWindow)
+      ui(new Ui::MainWindow),
+      context(ctx)
 {
     ui->setupUi(this);
 
-    // Crear páginas
+    /*
+     --------------------------------------------------
+     Crear páginas
+     --------------------------------------------------
+    */
+
     dictionaryPage = new DictionaryPage(ctx, this);
     detailsPage    = new DetailsPage(this);
+    srsDashboard   = new SrsDashboard(this);
     srsPage        = new SrsPage(ctx, this);
 
-    ui->stackedWidget->addWidget(dictionaryPage);
-    ui->stackedWidget->addWidget(detailsPage);
-    ui->stackedWidget->addWidget(srsPage);
+    /*
+     --------------------------------------------------
+     Añadir al stacked widget
+     --------------------------------------------------
+    */
+
+    ui->stackedWidget->addWidget(dictionaryPage);   // index 0
+    ui->stackedWidget->addWidget(detailsPage);      // index 1
+    ui->stackedWidget->addWidget(srsDashboard);     // index 2
+    ui->stackedWidget->addWidget(srsPage);          // index 3
 
     ui->stackedWidget->setCurrentWidget(dictionaryPage);
 
-    // Navegación tabs
-    QButtonGroup *group = new QButtonGroup(this);
-    group->setExclusive(true);
-    group->addButton(ui->btnDictionary);
-    group->addButton(ui->btnSrs);
+    setupNavigation();
 
-    ui->btnDictionary->setChecked(true);
+    /*
+     --------------------------------------------------
+     FLUJO SRS
+     --------------------------------------------------
+    */
 
-    connect(ui->btnDictionary, &QToolButton::clicked, this, [=]() {
-        ui->stackedWidget->setCurrentWidget(dictionaryPage);
-    });
 
-    // Conexión Dictionary → Details
+
+    // Dashboard -> Start -> Study Page
+    connect(srsDashboard, &SrsDashboard::startRequested,
+            this, [=]() {
+                ui->stackedWidget->setCurrentWidget(srsPage);
+                ui->btnDictionary->setChecked(false);
+                ui->btnSrs->setChecked(true);
+                srsPage->startStudy();
+            });
+
+    // Actualizar estadísticas desde SrsPage
+    connect(srsPage, &SrsPage::countsUpdated,
+            srsDashboard, &SrsDashboard::updateStats);
+
+    // Cuando termina sesión -> volver al dashboard y refrescar
+    connect(srsPage, &SrsPage::sessionFinished,
+            this, [=]() {
+                ui->stackedWidget->setCurrentWidget(srsDashboard);
+                srsPage->refreshStats(); // recalcula internamente
+            });
+
     connect(dictionaryPage, &DictionaryPage::entryRequested,
             this, [=](uint32_t entryId) {
 
@@ -39,23 +69,37 @@ MainWindow::MainWindow(KotobaAppContext *ctx, QWidget *parent)
         detailsPage->setEntry(details);
 
         ui->stackedWidget->setCurrentWidget(detailsPage);
-    });
-
-    // Conexión SRS 
-    connect(ui->btnSrs, &QToolButton::clicked, this, [=]() {
-        ui->stackedWidget->setCurrentWidget(srsPage);
-    });
-
-    // Conexión Back
-    connect(detailsPage, &DetailsPage::backRequested,
-            this, [=]() {
-        ui->stackedWidget->setCurrentWidget(dictionaryPage);
-    });
-
-
+    }); 
 }
 
 MainWindow::~MainWindow()
 {
     delete ui;
+}
+
+void MainWindow::setupNavigation()
+{
+    // Botón Diccionario
+    connect(ui->btnDictionary, &QToolButton::clicked,
+            this, [=]() {
+
+                ui->btnDictionary->setChecked(true);
+                ui->btnSrs->setChecked(false);
+
+                ui->stackedWidget->setCurrentWidget(dictionaryPage);
+            });
+
+    // Botón SRS
+    connect(ui->btnSrs, &QToolButton::clicked,
+            this, [=]() {
+
+                ui->btnDictionary->setChecked(false);
+                ui->btnSrs->setChecked(true);
+
+                ui->stackedWidget->setCurrentWidget(srsDashboard);
+
+                // 🔥 recalcular stats reales
+                srsPage->refreshStats();
+            });
+
 }

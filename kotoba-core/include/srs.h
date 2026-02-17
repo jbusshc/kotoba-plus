@@ -9,10 +9,10 @@
 #include "kotoba.h"
 
 /* ─────────────────────────────────────────────────────────────
- *  Time model (unix seconds)
+ *  Time model
  * ───────────────────────────────────────────────────────────── */
 
-#define SRS_DAY 86400ULL   /* seconds in a day */
+#define SRS_DAY 86400ULL
 
 /* ─────────────────────────────────────────────────────────────
  *  Review quality
@@ -26,45 +26,53 @@ typedef enum {
 } srs_quality;
 
 /* ─────────────────────────────────────────────────────────────
- *  SRS state
+ *  Card state (robust model)
  * ───────────────────────────────────────────────────────────── */
 
 typedef enum {
-    SRS_LEARNING = 0,
-    SRS_REVIEW   = 1
+    SRS_STATE_NEW = 0,
+    SRS_STATE_LEARNING,
+    SRS_STATE_RELEARNING,
+    SRS_STATE_REVIEW,
+    SRS_STATE_SUSPENDED
 } srs_state;
 
 /* ─────────────────────────────────────────────────────────────
- *  SRS item (persistent)
+ *  Flags
+ * ───────────────────────────────────────────────────────────── */
+
+#define SRS_FLAG_LEECH   0x01
+#define SRS_FLAG_BURIED  0x02
+
+/* ─────────────────────────────────────────────────────────────
+ *  Persistent card
  * ───────────────────────────────────────────────────────────── */
 
 typedef struct {
     uint32_t entry_id;
 
-    uint64_t due;        /* unix timestamp (seconds) */
+    uint64_t due;
 
-    uint16_t interval;  /* days (review only) */
+    uint16_t interval;
     uint16_t reps;
     uint16_t lapses;
 
-    float    ease;
+    float ease;
 
-    uint8_t  state;     /* srs_state */
-    uint8_t  step;      /* learning step */
+    uint8_t state;
+    uint8_t step;
+    uint8_t flags;
+    uint8_t reserved;
 } srs_item;
 
-/* ─────────────────────────────────────────────────────────────
- *  Review handle (ephemeral)
- * ───────────────────────────────────────────────────────────── */
+/* ───────────────────────────────────────────────────────────── */
 
 typedef struct {
     srs_item *item;
-    uint32_t  index;
+    uint32_t index;
 } srs_review;
 
-/* ─────────────────────────────────────────────────────────────
- *  SRS profile
- * ───────────────────────────────────────────────────────────── */
+/* ───────────────────────────────────────────────────────────── */
 
 typedef struct {
     srs_item *items;
@@ -77,6 +85,22 @@ typedef struct {
     uint8_t  *bitmap;
     uint32_t  dict_size;
 } srs_profile;
+
+/* ─────────────────────────────────────────────────────────────
+ *  Dashboard statistics
+ * ───────────────────────────────────────────────────────────── */
+
+typedef struct {
+    uint32_t total_cards;
+    uint32_t new_count;
+    uint32_t learning_count;
+    uint32_t relearning_count;
+    uint32_t review_count;
+    uint32_t mature_count;
+    uint32_t suspended_count;
+    uint32_t leech_count;
+    uint32_t due_now;
+} srs_stats;
 
 /* ─────────────────────────────────────────────────────────────
  *  API
@@ -95,6 +119,7 @@ static inline bool srs_contains(const srs_profile *p, uint32_t entry_id)
 
 KOTOBA_API bool srs_add(srs_profile *p, uint32_t entry_id, uint64_t now);
 KOTOBA_API bool srs_remove(srs_profile *p, uint32_t entry_id);
+KOTOBA_API void srs_heapify(srs_profile *p);
 
 KOTOBA_API srs_item *srs_peek_due(srs_profile *p, uint64_t now);
 KOTOBA_API bool srs_pop_due_review(srs_profile *p, srs_review *out);
@@ -102,9 +127,11 @@ KOTOBA_API void srs_requeue(srs_profile *p, uint32_t index);
 
 KOTOBA_API void srs_answer(srs_item *item, srs_quality q, uint64_t now);
 
-/* ─────────────────────────────────────────────────────────────
- *  Time helpers (portable)
- * ───────────────────────────────────────────────────────────── */
+KOTOBA_API void srs_compute_stats(const srs_profile *p,
+                                  uint64_t now,
+                                  srs_stats *out);
+
+/* ───────────────────────────────────────────────────────────── */
 
 static inline uint64_t srs_now(void)
 {
@@ -112,19 +139,9 @@ static inline uint64_t srs_now(void)
     return (t < 0) ? 0 : (uint64_t)t;
 }
 
-static inline void srs_print_time(uint64_t t)
+static inline bool srs_is_mature(const srs_item *it)
 {
-    time_t tt = (time_t)t;
-    struct tm *tm = localtime(&tt);
-    if (!tm) return;
-
-    printf("%04d-%02d-%02d %02d:%02d:%02d",
-           tm->tm_year + 1900,
-           tm->tm_mon + 1,
-           tm->tm_mday,
-           tm->tm_hour,
-           tm->tm_min,
-           tm->tm_sec);
+    return it->state == SRS_STATE_REVIEW && it->interval >= 21;
 }
 
-#endif /* SRS_H */
+#endif

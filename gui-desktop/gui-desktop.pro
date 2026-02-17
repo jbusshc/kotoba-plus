@@ -8,18 +8,20 @@ SOURCES += \
     ui/dictionary/dictionarypage.cpp \
     ui/details/detailspage.cpp \
     ui/srs/srspage.cpp \
+    ui/srs/srsdashboard.cpp \
     app/context.cpp \
     search/search_presenter.cpp \
     search/search_service.cpp \
     search/result_model.cpp \
     srs/srs_presenter.cpp \
-    srs/srs_service.cpp
+    srs/srs_service.cpp 
 
 HEADERS += \
     ui/mainwindow.h \
     ui/dictionary/dictionarypage.h \
     ui/details/detailspage.h \
     ui/srs/srspage.h \
+    ui/srs/srsdashboard.h \
     app/context.h \
     search/search_presenter.h \
     search/search_service.h \
@@ -31,7 +33,8 @@ FORMS += \
     ui/mainwindow.ui \
     ui/dictionary/dictionarypage.ui \
     ui/details/detailspage.ui \
-    ui/srs/srspage.ui
+    ui/srs/srspage.ui \
+    ui/srs/srsdashboard.ui
 
 
 # =========================

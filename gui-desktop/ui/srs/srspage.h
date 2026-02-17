@@ -21,6 +21,12 @@ public:
     void setMeaning(const QString &meaning);
     void resetCard();
     void showNoMoreCards();
+    void refreshDashboardStats();
+    void refreshStats();
+
+
+    // invocado por la UI externa (por ejemplo el dashboard)
+    Q_SLOT void startStudy();
 
 signals:
     void showAnswerRequested();
@@ -28,6 +34,10 @@ signals:
     void hardRequested();
     void goodRequested();
     void easyRequested();
+
+    // reenvía contadores para que MainWindow o Dashboard puedan conectar
+    void countsUpdated(uint32_t due, uint32_t learning, uint32_t newly, uint32_t lapsed);
+    void sessionFinished();
 
 private:
     Ui::SrsPage *ui;

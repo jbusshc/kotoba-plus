@@ -1,154 +1,190 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
  <class>SrsPage</class>
-   <item>
-   <layout class="QHBoxLayout" name="topInfoLayout">
-   <item>
-      <widget class="QLabel" name="labelProgress">
-      <property name="text">
-      <string>0 / 0</string>
-      </property>
-      </widget>
-   </item>
-
-   <item>
-      <widget class="QProgressBar" name="progressBar">
-      <property name="value">
-      <number>0</number>
-      </property>
-      </widget>
-   </item>
-   </layout>
-   </item>
-
  <widget class="QWidget" name="SrsPage">
-  <property name="geometry">
-   <rect>
-    <x>0</x>
-    <y>0</y>
-    <width>288</width>
-    <height>237</height>
-   </rect>
+  <property name="minimumSize">
+   <size>
+    <width>800</width>
+    <height>600</height>
+   </size>
   </property>
-  <widget class="QLabel" name="labelTitle">
-   <property name="geometry">
-    <rect>
-     <x>16</x>
-     <y>16</y>
-     <width>141</width>
-     <height>30</height>
-    </rect>
+
+  <layout class="QVBoxLayout" name="mainLayout">
+   <property name="spacing">
+    <number>20</number>
    </property>
-   <property name="styleSheet">
-    <string>
-font-size: 22px;
-font-weight: bold;
+   <property name="leftMargin">
+    <number>20</number>
+   </property>
+   <property name="rightMargin">
+    <number>20</number>
+   </property>
+   <property name="topMargin">
+    <number>12</number>
+   </property>
+   <property name="bottomMargin">
+    <number>12</number>
+   </property>
+
+   <!-- Top info: progreso -->
+   <item>
+    <layout class="QHBoxLayout" name="topInfoLayout">
+     <property name="spacing">
+      <number>12</number>
+     </property>
+     <item>
+      <widget class="QLabel" name="labelProgress">
+       <property name="text">
+        <string>0 / 0</string>
+       </property>
+       <property name="styleSheet">
+        <string>font-size: 14px;</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QProgressBar" name="progressBar">
+       <property name="value">
+        <number>0</number>
+       </property>
+       <property name="minimumHeight">
+        <number>14</number>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+
+   <!-- Card Frame -->
+   <item>
+    <widget class="QFrame" name="cardFrame">
+     <property name="frameShape">
+      <enum>QFrame::StyledPanel</enum>
+     </property>
+     <property name="frameShadow">
+      <enum>QFrame::Raised</enum>
+     </property>
+     <property name="styleSheet">
+      <string>
+QFrame { border-radius: 8px; border: 1px solid #ccc; background: #fafafa; }
       </string>
-   </property>
-   <property name="text">
-    <string>Modo Repaso</string>
-   </property>
-  </widget>
-  <widget class="QFrame" name="cardFrame">
-   <property name="geometry">
-    <rect>
-     <x>16</x>
-     <y>58</y>
-     <width>176</width>
-     <height>120</height>
-    </rect>
-   </property>
-   <property name="frameShape">
-    <enum>QFrame::Shape::StyledPanel</enum>
-   </property>
-   <property name="frameShadow">
-    <enum>QFrame::Shadow::Raised</enum>
-   </property>
-   <layout class="QVBoxLayout" name="cardLayout">
-    <property name="spacing">
-     <number>12</number>
-    </property>
-    <property name="margin" stdset="0">
-     <number>20</number>
-    </property>
-    <item>
-     <widget class="QLabel" name="labelWord">
-      <property name="styleSheet">
-       <string>
-font-size: 28px;
-font-weight: bold;
-         </string>
+     </property>
+
+     <layout class="QVBoxLayout" name="cardLayout">
+      <property name="spacing">
+       <number>18</number>
       </property>
-      <property name="text">
-       <string>Palabra</string>
+      <property name="leftMargin">
+       <number>36</number>
       </property>
-      <property name="alignment">
-       <set>Qt::AlignmentFlag::AlignCenter</set>
+      <property name="rightMargin">
+       <number>36</number>
       </property>
-     </widget>
-    </item>
-    <item>
-     <widget class="QPushButton" name="btnShowAnswer">
-      <property name="text">
-       <string>Show Answer</string>
+      <property name="topMargin">
+       <number>36</number>
       </property>
-     </widget>
-    </item>
-    <item>
-     <widget class="QLabel" name="labelAnswer">
-      <property name="visible">
-       <bool>false</bool>
+      <property name="bottomMargin">
+       <number>36</number>
       </property>
-      <property name="text">
-       <string>Significado aquí</string>
-      </property>
-      <property name="alignment">
-       <set>Qt::AlignmentFlag::AlignCenter</set>
-      </property>
-     </widget>
-    </item>
-   </layout>
-  </widget>
-  <widget class="QWidget" name="">
-   <property name="geometry">
-    <rect>
-     <x>10</x>
-     <y>190</y>
-     <width>343</width>
-     <height>31</height>
-    </rect>
-   </property>
-   <layout class="QHBoxLayout" name="horizontalLayout">
-    <item>
-     <widget class="QPushButton" name="btnAgain">
-      <property name="text">
-       <string>Again</string>
-      </property>
-     </widget>
-    </item>
-    <item>
-     <widget class="QPushButton" name="btnGood">
-      <property name="text">
-       <string>Good</string>
-      </property>
-     </widget>
-    </item>
-    <item>
-     <widget class="QPushButton" name="btnHard">
-      <property name="text">
-       <string>Hard</string>
-      </property>
-     </widget>
-    </item>
-    <item>
-     <widget class="QPushButton" name="btnEasy">
-      <property name="text">
-       <string>Easy</string>
-      </property>
-     </widget>
-    </item>
-   </layout>
-  </widget>
+
+      <item>
+       <widget class="QLabel" name="labelWord">
+        <property name="styleSheet">
+         <string>font-size: 56px; font-weight: bold;</string>
+        </property>
+        <property name="text">
+         <string>言葉</string>
+        </property>
+        <property name="alignment">
+         <set>Qt::AlignCenter</set>
+        </property>
+       </widget>
+      </item>
+
+      <item>
+       <widget class="QPushButton" name="btnShowAnswer">
+        <property name="minimumHeight">
+         <number>42</number>
+        </property>
+        <property name="text">
+         <string>Show Answer</string>
+        </property>
+       </widget>
+      </item>
+
+      <item>
+       <widget class="QLabel" name="labelAnswer">
+        <property name="visible">
+         <bool>false</bool>
+        </property>
+        <property name="styleSheet">
+         <string>font-size: 18px;</string>
+        </property>
+        <property name="text">
+         <string>Significado aquí</string>
+        </property>
+        <property name="alignment">
+         <set>Qt::AlignCenter</set>
+        </property>
+        <property name="wordWrap">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+
+     </layout>
+    </widget>
+   </item>
+
+   <!-- Buttons -->
+   <item>
+    <layout class="QHBoxLayout" name="buttonsLayout">
+     <property name="spacing">
+      <number>14</number>
+     </property>
+     <item>
+      <widget class="QPushButton" name="btnAgain">
+       <property name="minimumHeight">
+        <number>48</number>
+       </property>
+       <property name="text">
+        <string>Again (1)</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="btnHard">
+       <property name="minimumHeight">
+        <number>48</number>
+       </property>
+       <property name="text">
+        <string>Hard (2)</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="btnGood">
+       <property name="minimumHeight">
+        <number>48</number>
+       </property>
+       <property name="text">
+        <string>Good (3)</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="btnEasy">
+       <property name="minimumHeight">
+        <number>48</number>
+       </property>
+       <property name="text">
+        <string>Easy (4)</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+  </layout>
  </widget>
  <resources/>
  <connections/>

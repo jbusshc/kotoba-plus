@@ -59,12 +59,17 @@ std::optional<SrsService::ReviewItem> SrsService::nextDue()
 
 void SrsService::answer(uint32_t entryId, srs_quality quality)
 {
+    uint64_t now = srs_now();
+
     for (uint32_t i = 0; i < profile.count; ++i)
     {
         if (profile.items[i].entry_id == entryId)
         {
-            srs_answer(&profile.items[i], quality, srs_now());
-            break;
+            srs_answer(&profile.items[i], quality, now);
+
+            // 🔥 CRÍTICO: reconstruir heap
+            srs_heapify(&profile);
+            return;
         }
     }
 }
@@ -72,7 +77,8 @@ void SrsService::answer(uint32_t entryId, srs_quality quality)
 uint32_t SrsService::dueCount(uint64_t now) const
 {
     uint32_t c = 0;
-    for (uint32_t i = 0; i < profile.count; ++i) {
+    for (uint32_t i = 0; i < profile.count; ++i)
+    {
         if (profile.items[i].due <= now)
             ++c;
     }
@@ -82,31 +88,41 @@ uint32_t SrsService::dueCount(uint64_t now) const
 uint32_t SrsService::learningCount() const
 {
     uint32_t c = 0;
-    for (uint32_t i = 0; i < profile.count; ++i) {
-        // si la librería soporta SRS_LEARNING
-        if (profile.items[i].state == SRS_LEARNING)
+
+    for (uint32_t i = 0; i < profile.count; ++i)
+    {
+        // En v2 consideramos learning si intervalo < 1 día
+        if (profile.items[i].interval < 86400)
             ++c;
     }
+
     return c;
 }
 
 uint32_t SrsService::newCount() const
 {
     uint32_t c = 0;
-    for (uint32_t i = 0; i < dictSize; ++i) {
-        // el bitmap marca los elementos incluidos en SRS
-        bool in_srs = (profile.bitmap[i >> 3] >> (i & 7)) & 1;
-        if (!in_srs) ++c;
+
+    for (uint32_t i = 0; i < profile.count; ++i)
+    {
+        // carta en estado inicial
+        if (profile.items[i].state == SRS_STATE_NEW)
+            ++c;
     }
+
     return c;
 }
+
 
 uint32_t SrsService::lapsedCount() const
 {
     uint32_t c = 0;
-    for (uint32_t i = 0; i < profile.count; ++i) {
+
+    for (uint32_t i = 0; i < profile.count; ++i)
+    {
         if (profile.items[i].lapses > 0)
             ++c;
     }
+
     return c;
 }
