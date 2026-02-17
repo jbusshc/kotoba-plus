@@ -41,6 +41,11 @@ MainWindow::MainWindow(KotobaAppContext *ctx, QWidget *parent)
         ui->stackedWidget->setCurrentWidget(detailsPage);
     });
 
+    // Conexión SRS 
+    connect(ui->btnSrs, &QToolButton::clicked, this, [=]() {
+        ui->stackedWidget->setCurrentWidget(srsPage);
+    });
+
     // Conexión Back
     connect(detailsPage, &DetailsPage::backRequested,
             this, [=]() {

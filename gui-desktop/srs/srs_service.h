@@ -21,6 +21,12 @@ public:
     bool add(uint32_t entryId);
     bool remove(uint32_t entryId);
     bool contains(uint32_t entryId) const;
+// añade a la clase SrsService (deja el resto igual)
+    uint32_t dueCount(uint64_t now) const;
+    uint32_t learningCount() const;
+    uint32_t newCount() const;
+    uint32_t lapsedCount() const;
+
 
     struct ReviewItem {
         uint32_t entryId;

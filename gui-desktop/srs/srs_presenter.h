@@ -12,7 +12,6 @@ extern "C" {
 }
 #endif
 
-
 class SrsPresenter : public QObject
 {
     Q_OBJECT
@@ -21,18 +20,23 @@ public:
     explicit SrsPresenter(KotobaAppContext* ctx,
                         QObject* parent = nullptr);
 
-
     void startSession();
 
 public slots:
     void answerAgain();
+    void answerHard();
     void answerGood();
     void answerEasy();
+
+    void revealAnswer(); // nuevo: revelar la respuesta cuando se pida
 
 signals:
     void showQuestion(QString word);
     void showAnswer(QString meaning);
     void noMoreCards();
+
+    // opcional: enviar contadores al dashboard
+    void showCounts(uint32_t due, uint32_t learning, uint32_t newly, uint32_t lapsed);
 
 private:
     void loadNext();
@@ -42,6 +46,9 @@ private:
 
     uint32_t currentEntryId = 0;
     kotoba_dict* dict;
+    QString currentMeaning; // almacenar la respuesta hasta revelarla
+    uint32_t totalDue = 0;
+    uint32_t studied = 0;
 
 };
 

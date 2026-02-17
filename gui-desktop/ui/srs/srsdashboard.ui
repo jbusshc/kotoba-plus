@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>SrsDashboard</class>
+ <widget class="QWidget" name="SrsDashboard">
+  <property name="minimumSize">
+   <size>
+    <width>800</width>
+    <height>600</height>
+   </size>
+  </property>
+  <property name="windowTitle">
+   <string>Kotoba - Study</string>
+  </property>
+
+  <layout class="QVBoxLayout" name="mainLayout">
+   <property name="spacing">
+    <number>30</number>
+   </property>
+   <property name="leftMargin">
+    <number>60</number>
+   </property>
+   <property name="rightMargin">
+    <number>60</number>
+   </property>
+   <property name="topMargin">
+    <number>60</number>
+   </property>
+   <property name="bottomMargin">
+    <number>60</number>
+   </property>
+
+   <!-- Title -->
+   <item>
+    <widget class="QLabel" name="labelTitle">
+     <property name="text">
+      <string>Study Session</string>
+     </property>
+     <property name="styleSheet">
+      <string>
+font-size: 36px;
+font-weight: bold;
+      </string>
+     </property>
+     <property name="alignment">
+      <set>Qt::AlignCenter</set>
+     </property>
+    </widget>
+   </item>
+
+   <!-- Stats -->
+   <item>
+    <layout class="QHBoxLayout" name="statsLayout">
+     <property name="spacing">
+      <number>40</number>
+     </property>
+
+     <item>
+      <widget class="QLabel" name="labelDue">
+       <property name="text">
+        <string>Due: 0</string>
+       </property>
+       <property name="styleSheet">
+        <string>font-size: 20px;</string>
+       </property>
+      </widget>
+     </item>
+
+     <item>
+      <widget class="QLabel" name="labelLearning">
+       <property name="text">
+        <string>Learning: 0</string>
+       </property>
+       <property name="styleSheet">
+        <string>font-size: 20px;</string>
+       </property>
+      </widget>
+     </item>
+
+     <item>
+      <widget class="QLabel" name="labelNew">
+       <property name="text">
+        <string>New: 0</string>
+       </property>
+       <property name="styleSheet">
+        <string>font-size: 20px;</string>
+       </property>
+      </widget>
+     </item>
+
+     <item>
+      <widget class="QLabel" name="labelLapsed">
+       <property name="text">
+        <string>Lapsed: 0</string>
+       </property>
+       <property name="styleSheet">
+        <string>font-size: 20px;</string>
+       </property>
+      </widget>
+     </item>
+
+    </layout>
+   </item>
+
+   <!-- Spacer -->
+   <item>
+    <spacer>
+     <property name="orientation">
+      <enum>Qt::Vertical</enum>
+     </property>
+    </spacer>
+   </item>
+
+   <!-- Start Button -->
+   <item>
+    <widget class="QPushButton" name="btnStart">
+     <property name="minimumHeight">
+      <number>60</number>
+     </property>
+     <property name="text">
+      <string>Start Study</string>
+     </property>
+     <property name="styleSheet">
+      <string>
+QPushButton {
+    font-size: 22px;
+    border-radius: 10px;
+}
+      </string>
+     </property>
+    </widget>
+   </item>
+
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

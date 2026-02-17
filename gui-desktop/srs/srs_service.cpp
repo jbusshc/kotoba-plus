@@ -68,3 +68,45 @@ void SrsService::answer(uint32_t entryId, srs_quality quality)
         }
     }
 }
+
+uint32_t SrsService::dueCount(uint64_t now) const
+{
+    uint32_t c = 0;
+    for (uint32_t i = 0; i < profile.count; ++i) {
+        if (profile.items[i].due <= now)
+            ++c;
+    }
+    return c;
+}
+
+uint32_t SrsService::learningCount() const
+{
+    uint32_t c = 0;
+    for (uint32_t i = 0; i < profile.count; ++i) {
+        // si la librería soporta SRS_LEARNING
+        if (profile.items[i].state == SRS_LEARNING)
+            ++c;
+    }
+    return c;
+}
+
+uint32_t SrsService::newCount() const
+{
+    uint32_t c = 0;
+    for (uint32_t i = 0; i < dictSize; ++i) {
+        // el bitmap marca los elementos incluidos en SRS
+        bool in_srs = (profile.bitmap[i >> 3] >> (i & 7)) & 1;
+        if (!in_srs) ++c;
+    }
+    return c;
+}
+
+uint32_t SrsService::lapsedCount() const
+{
+    uint32_t c = 0;
+    for (uint32_t i = 0; i < profile.count; ++i) {
+        if (profile.items[i].lapses > 0)
+            ++c;
+    }
+    return c;
+}

@@ -30,7 +30,7 @@ HEADERS += \
 FORMS += \
     ui/mainwindow.ui \
     ui/dictionary/dictionarypage.ui \
-    ui/details/detailspage.ui 
+    ui/details/detailspage.ui \
     ui/srs/srspage.ui
 
 

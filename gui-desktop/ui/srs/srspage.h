@@ -1,8 +1,6 @@
 #pragma once
 
 #include "../../srs/srs_presenter.h"
-
-
 #include <QWidget>
 
 namespace Ui {
@@ -27,6 +25,7 @@ public:
 signals:
     void showAnswerRequested();
     void againRequested();
+    void hardRequested();
     void goodRequested();
     void easyRequested();
 

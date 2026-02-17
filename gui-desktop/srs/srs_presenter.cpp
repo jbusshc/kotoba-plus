@@ -9,10 +9,17 @@ SrsPresenter::SrsPresenter(KotobaAppContext* ctx,
     service = new SrsService(ctx->dictionary.entry_count);
 }
 
-
 void SrsPresenter::startSession()
 {
-    loadNext();
+    uint64_t now = srs_now();
+    totalDue = service->dueCount(now);
+    studied = 0;
+
+    emit showCounts(totalDue,
+                    service->learningCount(),
+                    service->newCount(),
+                    service->lapsedCount());
+
 }
 
 void SrsPresenter::loadNext()
@@ -39,9 +46,7 @@ void SrsPresenter::loadNext()
     QString word;
     QString meaning;
 
-    // ======================
     // HEADWORD
-    // ======================
     if (entry->k_elements_count > 0)
     {
         const k_ele_bin* k_ele =
@@ -63,9 +68,7 @@ void SrsPresenter::loadNext()
         word = QString::fromUtf8(reb.ptr, reb.len);
     }
 
-    // ======================
     // MEANING (primer sense)
-    // ======================
     if (entry->senses_count > 0)
     {
         const sense_bin* sense =
@@ -83,13 +86,26 @@ void SrsPresenter::loadNext()
         }
     }
 
+    currentMeaning = meaning; // guardamos hasta que se pida revelar
     emit showQuestion(word);
-    emit showAnswer(meaning);
+
+    // IMPORTANTE: no emitir showAnswer aquí — será emitido por revealAnswer()
+}
+
+void SrsPresenter::revealAnswer()
+{
+    emit showAnswer(currentMeaning);
 }
 
 void SrsPresenter::answerAgain()
 {
     service->answer(currentEntryId, SRS_AGAIN);
+    loadNext();
+}
+
+void SrsPresenter::answerHard()
+{
+    service->answer(currentEntryId, SRS_HARD);
     loadNext();
 }
 
