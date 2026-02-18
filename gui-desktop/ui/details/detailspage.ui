@@ -116,6 +116,14 @@ font-weight: 600;
     </widget>
    </item>
 
+    <item>
+    <widget class="QPushButton" name="btnSrsAction">
+    <property name="text">
+    <string>Añadir al SRS</string>
+    </property>
+    </widget>
+    </item>
+
   </layout>
  </widget>
  <resources/>

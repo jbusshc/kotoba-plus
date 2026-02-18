@@ -23,6 +23,23 @@ public:
 
     void startSession();
     void refreshStats();
+    bool contains(uint32_t entryId) const
+    {
+        return service->contains(entryId);
+    }
+
+    void add(uint32_t entryId)
+    {
+        service->add(entryId);
+        refreshStats();
+    }
+
+    void remove(uint32_t entryId)
+    {
+        service->remove(entryId);
+        refreshStats();
+    }
+
 
 public slots:
     void answerAgain();

@@ -19,6 +19,8 @@ MainWindow::MainWindow(KotobaAppContext *ctx, QWidget *parent)
     srsDashboard   = new SrsDashboard(this);
     srsPage        = new SrsPage(ctx, this);
 
+    detailsPage->setSrsPresenter(srsPage->getSrsPresenter());
+
     /*
      --------------------------------------------------
      Añadir al stacked widget
@@ -66,10 +68,20 @@ MainWindow::MainWindow(KotobaAppContext *ctx, QWidget *parent)
             this, [=](uint32_t entryId) {
 
         auto details = dictionaryPage->buildEntryDetails(entryId);
-        detailsPage->setEntry(details);
+        detailsPage->setEntry(details, entryId);
 
         ui->stackedWidget->setCurrentWidget(detailsPage);
     }); 
+
+    connect(detailsPage, &DetailsPage::backRequested,
+            this, [=]() {
+
+                ui->stackedWidget->setCurrentWidget(dictionaryPage);
+
+                ui->btnDictionary->setChecked(true);
+                ui->btnSrs->setChecked(false);
+            });
+
 }
 
 MainWindow::~MainWindow()

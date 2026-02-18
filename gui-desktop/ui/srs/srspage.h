@@ -23,6 +23,7 @@ public:
     void showNoMoreCards();
     void refreshDashboardStats();
     void refreshStats();
+    SrsPresenter* getSrsPresenter() const { return presenter; }
 
 
     // invocado por la UI externa (por ejemplo el dashboard)
