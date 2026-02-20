@@ -1,346 +1,369 @@
 #include "srs_sync.h"
-
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 
-/* ─────────────────────────────────────────────────────────────
- *  Internal helpers
- * ───────────────────────────────────────────────────────────── */
+/* =========================================================
+   UTILIDADES INTERNAS
+   ========================================================= */
 
-static bool write_event(FILE *fp, const srs_event *e)
+static int srs_event_compare(const void *a, const void *b)
 {
-    return fwrite(e, sizeof(*e), 1, fp) == 1;
+    const SrsEvent *ea = a;
+    const SrsEvent *eb = b;
+
+    if (ea->timestamp != eb->timestamp)
+        return (ea->timestamp < eb->timestamp) ? -1 : 1;
+
+    if (ea->device_id != eb->device_id)
+        return (ea->device_id < eb->device_id) ? -1 : 1;
+
+    if (ea->seq != eb->seq)
+        return (ea->seq < eb->seq) ? -1 : 1;
+
+    return 0;
 }
 
-/* ------------------------------------------------------------- */
-/* Rebuild bitmap + heap after snapshot load                     */
-/* ------------------------------------------------------------- */
-
-static void rebuild_runtime_structures(srs_profile *p)
+static int srs_event_exists(const SrsSync *s,
+                            uint64_t device_id,
+                            uint64_t seq)
 {
-    /* limpiar bitmap */
-    memset(p->bitmap, 0, (p->dict_size + 7) / 8);
+    for (size_t i = 0; i < s->event_count; i++) {
+        if (s->events[i].device_id == device_id &&
+            s->events[i].seq == seq)
+            return 1;
+    }
+    return 0;
+}
 
-    /* reconstruir bitmap */
-    for (uint32_t i = 0; i < p->count; ++i)
-        p->bitmap[p->items[i].entry_id >> 3] |=
-            (1u << (p->items[i].entry_id & 7));
+static uint64_t srs_compute_next_seq(const SrsSync *s)
+{
+    uint64_t max_seq = 0;
 
-    /* reconstruir heap */
-    for (uint32_t i = 0; i < p->count; ++i)
-        p->heap[i] = i;
-
-    p->heap_size = p->count;
-
-    /* heapify */
-    for (int32_t i = (int32_t)p->heap_size / 2 - 1;
-         i >= 0;
-         --i)
-    {
-        /* sift down manual inline */
-        uint32_t idx = (uint32_t)i;
-
-        while (1) {
-            uint32_t l = (idx << 1) + 1;
-            uint32_t r = l + 1;
-            uint32_t s = idx;
-
-            if (l < p->heap_size &&
-                p->items[p->heap[l]].due <
-                p->items[p->heap[s]].due)
-                s = l;
-
-            if (r < p->heap_size &&
-                p->items[p->heap[r]].due <
-                p->items[p->heap[s]].due)
-                s = r;
-
-            if (s == idx) break;
-
-            uint32_t tmp = p->heap[idx];
-            p->heap[idx] = p->heap[s];
-            p->heap[s] = tmp;
-
-            idx = s;
+    for (size_t i = 0; i < s->event_count; i++) {
+        if (s->events[i].device_id == s->device_id) {
+            if (s->events[i].seq > max_seq)
+                max_seq = s->events[i].seq;
         }
     }
+
+    return max_seq + 1;
 }
 
-/* ─────────────────────────────────────────────────────────────
- *  Snapshot format (v2)
- *
- *  [event_count]
- *  [card_count]
- *  [srs_item array]
- * ───────────────────────────────────────────────────────────── */
-
-static bool save_snapshot(FILE *fp,
-                          const srs_profile *p,
-                          uint32_t event_count)
+static void srs_ensure_capacity(SrsSync *s)
 {
-    rewind(fp);
+    if (s->event_count < s->event_capacity)
+        return;
 
-    fwrite(&event_count, sizeof(event_count), 1, fp);
-    fwrite(&p->count, sizeof(p->count), 1, fp);
-    fwrite(p->items, sizeof(srs_item), p->count, fp);
+    size_t new_cap = (s->event_capacity == 0)
+        ? 128
+        : s->event_capacity * 2;
 
-    fflush(fp);
-    return true;
+    SrsEvent *new_events =
+        realloc(s->events, new_cap * sizeof(SrsEvent));
+
+    if (!new_events)
+        abort();
+
+    s->events = new_events;
+    s->event_capacity = new_cap;
 }
 
-static bool load_snapshot(FILE *fp,
-                          srs_profile *p,
-                          uint32_t dict_size,
-                          uint32_t *out_event_count)
+/* =========================================================
+   SRS LWW
+   ========================================================= */
+
+static void srs_recalculate(CardState *card, uint8_t grade)
 {
-    rewind(fp);
+    if (card->ease < 1.3f)
+        card->ease = 2.5f;
 
-    if (fread(out_event_count,
-              sizeof(*out_event_count),
-              1, fp) != 1)
-        return false;
-
-    uint32_t count;
-    if (fread(&count,
-              sizeof(count),
-              1, fp) != 1)
-        return false;
-
-    if (!srs_init(p, dict_size))
-        return false;
-
-    if (count > p->capacity) {
-        p->capacity = count;
-        p->items = realloc(p->items,
-                           p->capacity * sizeof(srs_item));
-        p->heap  = realloc(p->heap,
-                           p->capacity * sizeof(uint32_t));
+    
+    if (grade < 2) {
+        card->interval = 1;
+    } else {
+        if (card->interval == 0)
+            card->interval = 1;
+        else
+            card->interval = (int)(card->interval * card->ease);
     }
 
-    if (fread(p->items,
-              sizeof(srs_item),
-              count, fp) != count)
-        return false;
+    card->ease += 0.1f * (grade - 2);
+    if (card->ease < 1.3f)
+        card->ease = 1.3f;
 
-    p->count = count;
-
-    rebuild_runtime_structures(p);
-
-    return true;
+    card->due = time(NULL) + card->interval * 86400;
 }
 
-/* ─────────────────────────────────────────────────────────────
- *  Open / Close
- * ───────────────────────────────────────────────────────────── */
+static void srs_apply_event_lww(CardState *card,
+                                const SrsEvent *ev)
+{
+    if (ev->timestamp < card->last_timestamp)
+        return;
 
-bool srs_sync_open(srs_sync *s,
-                   const char *events_path,
-                   const char *snapshot_path,
-                   uint32_t device_id,
-                   uint32_t dict_size)
+    if (ev->timestamp == card->last_timestamp) {
+        if (ev->device_id < card->last_device)
+            return;
+
+        if (ev->device_id == card->last_device &&
+            ev->seq <= card->last_seq)
+            return;
+    }
+
+    card->last_timestamp = ev->timestamp;
+    card->last_device    = ev->device_id;
+    card->last_seq       = ev->seq;
+
+    srs_recalculate(card, ev->grade);
+}
+
+/* =========================================================
+   API PRINCIPAL
+   ========================================================= */
+
+void srs_sync_init(SrsSync *s,
+                   uint64_t device_id,
+                   size_t card_count)
 {
     memset(s, 0, sizeof(*s));
+
     s->device_id = device_id;
+    s->card_count = card_count;
 
-    s->events_fp = fopen(events_path, "ab+");
-    if (!s->events_fp)
-        return false;
-
-    s->snapshot_fp = fopen(snapshot_path, "rb+");
-    if (!s->snapshot_fp)
-        s->snapshot_fp = fopen(snapshot_path, "wb+");
-
-    fseek(s->events_fp, 0, SEEK_END);
-    long sz = ftell(s->events_fp);
-    s->event_count =
-        (uint32_t)(sz / sizeof(srs_event));
-
-    s->next_seq = 1;
-    return true;
+    s->cards = calloc(card_count, sizeof(CardState));
+    if (!s->cards)
+        abort();
 }
 
-void srs_sync_close(srs_sync *s)
+void srs_sync_free(SrsSync *s)
 {
-    if (s->events_fp) fclose(s->events_fp);
-    if (s->snapshot_fp) fclose(s->snapshot_fp);
+    free(s->events);
+    free(s->cards);
 }
 
-/* ─────────────────────────────────────────────────────────────
- *  Append helpers
- * ───────────────────────────────────────────────────────────── */
-
-static bool append_event(srs_sync *s,
-                         const srs_event *e)
+void srs_sync_add_local_review(SrsSync *s,
+                               uint32_t card_id,
+                               uint8_t grade,
+                               uint64_t timestamp)
 {
-    if (!write_event(s->events_fp, e))
-        return false;
+    srs_ensure_capacity(s);
 
-    fflush(s->events_fp);
-    s->event_count++;
-    return true;
+    SrsEvent *ev = &s->events[s->event_count++];
+
+    ev->device_id = s->device_id;
+    ev->seq       = s->next_seq++;
+    ev->timestamp = timestamp;
+    ev->card_id   = card_id;
+    ev->grade     = grade;
 }
 
-/* ─────────────────────────────────────────────────────────────
- *  Public API
- * ───────────────────────────────────────────────────────────── */
-
-bool srs_sync_add(srs_sync *s,
-                  srs_profile *p,
-                  uint32_t entry_id,
-                  uint64_t now)
+void srs_sync_merge_events(SrsSync *s,
+                           const SrsEvent *remote,
+                           size_t remote_count)
 {
-    if (!srs_add(p, entry_id, now))
-        return false;
+    for (size_t i = 0; i < remote_count; i++) {
 
-    srs_event e = {
-        .timestamp = now,
-        .entry_id  = entry_id,
-        .device_id = s->device_id,
-        .seq       = s->next_seq++,
-        .type      = SRS_EVT_ADD
-    };
+        const SrsEvent *ev = &remote[i];
 
-    return append_event(s, &e);
-}
+        if (srs_event_exists(s,
+                             ev->device_id,
+                             ev->seq))
+            continue;
 
-bool srs_sync_remove(srs_sync *s,
-                     srs_profile *p,
-                     uint32_t entry_id,
-                     uint64_t now)
-{
-    if (!srs_remove(p, entry_id))
-        return false;
-
-    srs_event e = {
-        .timestamp = now,
-        .entry_id  = entry_id,
-        .device_id = s->device_id,
-        .seq       = s->next_seq++,
-        .type      = SRS_EVT_REMOVE
-    };
-
-    return append_event(s, &e);
-}
-
-bool srs_sync_review(srs_sync *s,
-                     srs_profile *p,
-                     uint32_t entry_id,
-                     srs_quality q,
-                     uint64_t now)
-{
-    for (uint32_t i = 0; i < p->count; ++i) {
-        if (p->items[i].entry_id == entry_id) {
-
-            srs_answer(&p->items[i], q, now);
-
-            /* importante: requeue */
-            p->heap[p->heap_size++] = i;
-
-            break;
-        }
+        srs_ensure_capacity(s);
+        s->events[s->event_count++] = *ev;
     }
 
-    srs_event e = {
-        .timestamp = now,
-        .entry_id  = entry_id,
-        .device_id = s->device_id,
-        .seq       = s->next_seq++,
-        .type      = SRS_EVT_REVIEW,
-        .quality   = q
-    };
-
-    return append_event(s, &e);
+    s->next_seq = srs_compute_next_seq(s);
 }
 
-/* ─────────────────────────────────────────────────────────────
- *  Rebuild (snapshot + replay)
- * ───────────────────────────────────────────────────────────── */
-
-bool srs_sync_rebuild(srs_sync *s,
-                      srs_profile *p,
-                      uint32_t dict_size)
+void srs_sync_rebuild(SrsSync *s)
 {
-    uint32_t snap_events = 0;
+    memset(s->cards, 0,
+        sizeof(CardState) * s->card_count);
 
-    if (!load_snapshot(s->snapshot_fp,
-                       p,
-                       dict_size,
-                       &snap_events))
-    {
-        srs_init(p, dict_size);
-        snap_events = 0;
+    for (size_t i = 0; i < s->card_count; i++) {
+        s->cards[i].ease = 2.5f;   // valor base SM-2 clásico
+        s->cards[i].interval = 0;
     }
 
-    fseek(s->events_fp,
-          snap_events * sizeof(srs_event),
-          SEEK_SET);
 
-    srs_event e;
+    qsort(s->events,
+          s->event_count,
+          sizeof(SrsEvent),
+          srs_event_compare);
 
-    while (fread(&e,
-                 sizeof(e),
-                 1,
-                 s->events_fp) == 1)
-    {
-        switch (e.type) {
+    for (size_t i = 0; i < s->event_count; i++) {
 
-        case SRS_EVT_ADD:
-            srs_add(p,
-                    e.entry_id,
-                    e.timestamp);
-            break;
+        SrsEvent *ev = &s->events[i];
 
-        case SRS_EVT_REMOVE:
-            srs_remove(p,
-                       e.entry_id);
-            break;
+        if (ev->card_id >= s->card_count)
+            continue;
 
-        case SRS_EVT_REVIEW:
-            for (uint32_t i = 0;
-                 i < p->count;
-                 ++i)
-            {
-                if (p->items[i].entry_id
-                    == e.entry_id)
-                {
-                    srs_answer(&p->items[i],
-                               (srs_quality)e.quality,
-                               e.timestamp);
-                    break;
-                }
-            }
-            break;
-        }
+        srs_apply_event_lww(
+            &s->cards[ev->card_id],
+            ev);
     }
 
-    rebuild_runtime_structures(p);
-
-    if (s->event_count - snap_events
-        >= SRS_SNAPSHOT_INTERVAL)
-    {
-        save_snapshot(s->snapshot_fp,
-                      p,
-                      s->event_count);
-    }
-
-    return true;
+    s->next_seq = srs_compute_next_seq(s);
 }
 
-/* ─────────────────────────────────────────────────────────────
- *  Merge remote events
- * ───────────────────────────────────────────────────────────── */
+/* =========================================================
+   SNAPSHOT
+   ========================================================= */
 
-bool srs_sync_merge_events(srs_sync *s,
-                           const srs_event *events,
-                           uint32_t count)
+int srs_snapshot_save(SrsSync *s, const char *path)
 {
-    fseek(s->events_fp, 0, SEEK_END);
+    FILE *f = fopen(path, "wb");
+    if (!f) return 0;
 
-    for (uint32_t i = 0; i < count; ++i)
-        write_event(s->events_fp, &events[i]);
+    uint32_t version = 1;
 
-    fflush(s->events_fp);
-    s->event_count += count;
+    fwrite(&version, sizeof(uint32_t), 1, f);
+    fwrite(&s->device_id, sizeof(uint64_t), 1, f);
+    fwrite(&s->next_seq, sizeof(uint64_t), 1, f);
+    fwrite(&s->card_count, sizeof(size_t), 1, f);
 
-    return true;
+    for (size_t i = 0; i < s->card_count; i++) {
+        CardState *c = &s->cards[i];
+
+        fwrite(&c->last_timestamp, sizeof(uint64_t), 1, f);
+        fwrite(&c->last_device, sizeof(uint64_t), 1, f);
+        fwrite(&c->last_seq, sizeof(uint64_t), 1, f);
+
+        fwrite(&c->interval, sizeof(int), 1, f);
+        fwrite(&c->ease, sizeof(float), 1, f);
+        fwrite(&c->due, sizeof(time_t), 1, f);
+    }
+
+    fclose(f);
+    return 1;
+}
+int srs_snapshot_load(SrsSync *s, const char *path)
+{
+    FILE *f = fopen(path, "rb");
+    if (!f) return 0;
+
+    uint32_t version;
+
+    fread(&version, sizeof(uint32_t), 1, f);
+    if (version != 1) {
+        fclose(f);
+        return 0;
+    }
+
+    fread(&s->device_id, sizeof(uint64_t), 1, f);
+    fread(&s->next_seq, sizeof(uint64_t), 1, f);
+    fread(&s->card_count, sizeof(size_t), 1, f);
+
+    CardState *tmp = realloc(s->cards,
+                             sizeof(CardState) * s->card_count);
+    if (!tmp) {
+        fclose(f);
+        return 0;
+    }
+
+    s->cards = tmp;
+
+    for (size_t i = 0; i < s->card_count; i++) {
+        CardState *c = &s->cards[i];
+
+        fread(&c->last_timestamp, sizeof(uint64_t), 1, f);
+        fread(&c->last_device, sizeof(uint64_t), 1, f);
+        fread(&c->last_seq, sizeof(uint64_t), 1, f);
+
+        fread(&c->interval, sizeof(int), 1, f);
+        fread(&c->ease, sizeof(float), 1, f);
+        fread(&c->due, sizeof(time_t), 1, f);
+    }
+
+    fclose(f);
+    return 1;
+}
+
+
+/* =========================================================
+   LOG
+   ========================================================= */
+
+int srs_log_save(SrsSync *s, const char *path)
+{
+    FILE *f = fopen(path, "wb");
+    if (!f) return 0;
+
+    fwrite(&s->event_count, sizeof(size_t), 1, f);
+    fwrite(s->events,
+           sizeof(SrsEvent),
+           s->event_count,
+           f);
+
+    fclose(f);
+    return 1;
+}
+
+int srs_log_load(SrsSync *s, const char *path)
+{
+    FILE *f = fopen(path, "rb");
+    if (!f) return 0;
+
+    fread(&s->event_count, sizeof(size_t), 1, f);
+
+    s->event_capacity = s->event_count;
+    SrsEvent *tmp = realloc(s->events,
+                            sizeof(SrsEvent) * s->event_capacity);
+
+    if (!tmp) {
+        fclose(f);
+        return 0;
+    }
+
+    s->events = tmp;
+
+
+    fread(s->events,
+          sizeof(SrsEvent),
+          s->event_count,
+          f);
+
+    fclose(f);
+
+    s->next_seq = srs_compute_next_seq(s);
+
+    return 1;
+}
+
+int srs_log_truncate(const char *path)
+{
+    FILE *f = fopen(path, "wb");
+    if (!f) return 0;
+
+    size_t zero = 0;
+    fwrite(&zero, sizeof(size_t), 1, f);
+
+    fclose(f);
+    return 1;
+}
+
+/* =========================================================
+   COMPACTION
+   ========================================================= */
+
+int srs_compact(SrsSync *s,
+                const char *snapshot_path,
+                const char *log_path)
+{
+    srs_sync_rebuild(s);
+
+    if (!srs_snapshot_save(s, snapshot_path))
+        return 0;
+
+    if (!srs_log_truncate(log_path))
+        return 0;
+
+    free(s->events);
+    s->events = NULL;
+    s->event_count = 0;
+    s->event_capacity = 0;
+
+    return 1;
 }

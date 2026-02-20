@@ -7,22 +7,20 @@ SrsPresenter::SrsPresenter(KotobaAppContext* ctx,
       dict(&ctx->dictionary)
 {
     service = new SrsService(ctx->dictionary.entry_count);
+    snapshotPath = "srs_profile.dat";
+    service->load(snapshotPath);
 }
 
 void SrsPresenter::startSession()
 {
-    refreshStats();
+    service->resetSessionSeenBitset();
 
-    if (totalDue == 0)
-    {
-        emit noMoreCards();
-        return;
-    }
+    sessionTotal = service->countDueAndLearningToday();
+    sessionRemaining = sessionTotal;
 
+    emit updateProgress(0, sessionTotal);
     loadNext();
 }
-
-
 
 void SrsPresenter::loadNext()
 {
@@ -36,7 +34,7 @@ void SrsPresenter::loadNext()
 
     currentEntryId = review->entryId;
 
-    const entry_bin* entry =
+    const entry_bin *entry =
         kotoba_dict_get_entry(dict, currentEntryId);
 
     if (!entry)
@@ -48,10 +46,9 @@ void SrsPresenter::loadNext()
     QString word;
     QString meaning;
 
-    // HEADWORD
     if (entry->k_elements_count > 0)
     {
-        const k_ele_bin* k_ele =
+        const k_ele_bin *k_ele =
             kotoba_k_ele(dict, entry, 0);
 
         kotoba_str keb =
@@ -61,7 +58,7 @@ void SrsPresenter::loadNext()
     }
     else if (entry->r_elements_count > 0)
     {
-        const r_ele_bin* r_ele =
+        const r_ele_bin *r_ele =
             kotoba_r_ele(dict, entry, 0);
 
         kotoba_str reb =
@@ -70,10 +67,9 @@ void SrsPresenter::loadNext()
         word = QString::fromUtf8(reb.ptr, reb.len);
     }
 
-    // MEANING (primer sense)
     if (entry->senses_count > 0)
     {
-        const sense_bin* sense =
+        const sense_bin *sense =
             kotoba_sense(dict, entry, 0);
 
         for (uint32_t g = 0; g < sense->gloss_count; ++g)
@@ -88,10 +84,8 @@ void SrsPresenter::loadNext()
         }
     }
 
-    currentMeaning = meaning; // guardamos hasta que se pida revelar
+    currentMeaning = meaning;
     emit showQuestion(word);
-
-    // IMPORTANTE: no emitir showAnswer aquí — será emitido por revealAnswer()
 }
 
 void SrsPresenter::revealAnswer()
@@ -99,60 +93,60 @@ void SrsPresenter::revealAnswer()
     emit showAnswer(currentMeaning);
 }
 
-void SrsPresenter::answerAgain()
+void SrsPresenter::handleAnswer(srs_quality grade)
 {
-    service->answer(currentEntryId, SRS_AGAIN);
+    service->answer(currentEntryId, grade);
+    autoSave();
 
-    // marcar progreso
-    studied++;
-    emit updateProgress(studied, totalDue);
+    // 🔥 CLAVE: solo baja remaining si ya no es del día
+    if (!service->isDueToday(currentEntryId))
+    {
+        if (sessionRemaining > 0)
+            sessionRemaining--;
+    }
+
+    emit updateProgress(
+        sessionTotal - sessionRemaining,
+        sessionTotal
+    );
 
     loadNext();
 }
 
-void SrsPresenter::answerHard()
-{
-    service->answer(currentEntryId, SRS_HARD);
-
-    studied++;
-    emit updateProgress(studied, totalDue);
-
-    loadNext();
-}
-
-void SrsPresenter::answerGood()
-{
-    service->answer(currentEntryId, SRS_GOOD);
-
-    studied++;
-    emit updateProgress(studied, totalDue);
-
-    loadNext();
-}
-
-void SrsPresenter::answerEasy()
-{
-    service->answer(currentEntryId, SRS_EASY);
-
-    studied++;
-    emit updateProgress(studied, totalDue);
-
-    loadNext();
-}
+void SrsPresenter::answerAgain() { handleAnswer(SRS_AGAIN); }
+void SrsPresenter::answerHard()  { handleAnswer(SRS_HARD); }
+void SrsPresenter::answerGood()  { handleAnswer(SRS_GOOD); }
+void SrsPresenter::answerEasy()  { handleAnswer(SRS_EASY); }
 
 void SrsPresenter::refreshStats()
 {
     uint64_t now = srs_now();
 
-    totalDue = service->dueCount(now);
-    studied = 0;
-
     emit showCounts(
-        totalDue,
+        service->dueCount(now),
         service->learningCount(),
         service->newCount(),
-        service->lapsedCount()
-    );
+        service->lapsedCount());
+}
 
-    emit updateProgress(0, totalDue);
+bool SrsPresenter::contains(uint32_t entryId) const
+{
+    return service->contains(entryId);
+}
+
+void SrsPresenter::add(uint32_t entryId)
+{
+    service->add(entryId);
+    refreshStats();
+}
+
+void SrsPresenter::remove(uint32_t entryId)
+{
+    service->remove(entryId);
+    refreshStats();
+}
+
+void SrsPresenter::autoSave()
+{
+    service->save(snapshotPath);
 }

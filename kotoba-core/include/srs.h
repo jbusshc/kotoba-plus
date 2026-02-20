@@ -14,6 +14,21 @@
 
 #define SRS_DAY 86400ULL
 
+/* Día comienza a las 04:00 AM */
+#define SRS_DAY_START_OFFSET (4 * 3600ULL)
+
+static inline uint64_t srs_today(uint64_t now)
+{
+    if (now < SRS_DAY_START_OFFSET)
+        return 0;
+    return (now - SRS_DAY_START_OFFSET) / SRS_DAY;
+}
+
+static inline uint64_t srs_day_to_unix(uint64_t day)
+{
+    return day * SRS_DAY + SRS_DAY_START_OFFSET;
+}
+
 /* ─────────────────────────────────────────────────────────────
  *  Review quality
  * ───────────────────────────────────────────────────────────── */
@@ -26,7 +41,7 @@ typedef enum {
 } srs_quality;
 
 /* ─────────────────────────────────────────────────────────────
- *  Card state (robust model)
+ *  Card state
  * ───────────────────────────────────────────────────────────── */
 
 typedef enum {
@@ -51,7 +66,7 @@ typedef enum {
 typedef struct {
     uint32_t entry_id;
 
-    uint64_t due;
+    uint64_t due;      /* unix seconds */
 
     uint16_t interval;
     uint16_t reps;
@@ -86,9 +101,7 @@ typedef struct {
     uint32_t  dict_size;
 } srs_profile;
 
-/* ─────────────────────────────────────────────────────────────
- *  Dashboard statistics
- * ───────────────────────────────────────────────────────────── */
+/* ───────────────────────────────────────────────────────────── */
 
 typedef struct {
     uint32_t total_cards;
@@ -130,8 +143,6 @@ KOTOBA_API void srs_answer(srs_item *item, srs_quality q, uint64_t now);
 KOTOBA_API void srs_compute_stats(const srs_profile *p,
                                   uint64_t now,
                                   srs_stats *out);
-
-/* ───────────────────────────────────────────────────────────── */
 
 static inline uint64_t srs_now(void)
 {

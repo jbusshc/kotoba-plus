@@ -54,24 +54,30 @@ SrsPage::SrsPage(KotobaAppContext *ctx, QWidget *parent)
     connect(this, &SrsPage::showAnswerRequested,
             presenter, &SrsPresenter::revealAnswer);
 
-    // Ocultar respuesta y deshabilitar botones de valoración al inicio
+    // Ocultar respuesta y deshabilitar visualizacion de botones de valoración al inicio
     ui->labelAnswer->setVisible(false);
-    ui->btnAgain->setEnabled(false);
-    ui->btnHard->setEnabled(false);
-    ui->btnGood->setEnabled(false);
-    ui->btnEasy->setEnabled(false);
+    ui->btnAgain->setVisible(false);
+    ui->btnHard->setVisible(false);
+    ui->btnGood->setVisible(false);
+    ui->btnEasy->setVisible(false);
 
-    // Conectar botón Mostrar respuesta
     connect(ui->btnShowAnswer, &QPushButton::clicked, this, [=]() {
+
         ui->labelAnswer->setVisible(true);
-        // activar botones de valoración cuando la respuesta ya es visible
-        ui->btnAgain->setEnabled(true);
-        ui->btnHard->setEnabled(true);
-        ui->btnGood->setEnabled(true);
-        ui->btnEasy->setEnabled(true);
-        ui->btnShowAnswer->setEnabled(false); // evitar doble click
+
+        ui->btnShowAnswer->setVisible(false);
+
+        ui->btnAgain->setVisible(true);
+        ui->btnHard->setVisible(true);
+        ui->btnGood->setVisible(true);
+        ui->btnEasy->setVisible(true);
+
+        enableShortcuts(true);
+
         emit showAnswerRequested();
     });
+
+
 
     // conectar botones de valoración
     connect(ui->btnAgain, &QPushButton::clicked,
@@ -87,15 +93,18 @@ SrsPage::SrsPage(KotobaAppContext *ctx, QWidget *parent)
             this, &SrsPage::easyRequested);
 
     // Atajos teclado: 1=A, 2=H, 3=G, 4=E
-    auto makeShortcut = [&](const QKeySequence &seq, std::function<void()> cb){
-        QShortcut *s = new QShortcut(seq, this);
-        connect(s, &QShortcut::activated, this, cb);
-    };
+    scAgain = new QShortcut(QKeySequence(Qt::Key_1), this);
+    scHard  = new QShortcut(QKeySequence(Qt::Key_2), this);
+    scGood  = new QShortcut(QKeySequence(Qt::Key_3), this);
+    scEasy  = new QShortcut(QKeySequence(Qt::Key_4), this);
 
-    makeShortcut(QKeySequence(Qt::Key_1), [=](){ if (ui->btnAgain->isEnabled()) ui->btnAgain->click(); });
-    makeShortcut(QKeySequence(Qt::Key_2), [=](){ if (ui->btnHard->isEnabled()) ui->btnHard->click(); });
-    makeShortcut(QKeySequence(Qt::Key_3), [=](){ if (ui->btnGood->isEnabled()) ui->btnGood->click(); });
-    makeShortcut(QKeySequence(Qt::Key_4), [=](){ if (ui->btnEasy->isEnabled()) ui->btnEasy->click(); });
+    connect(scAgain, &QShortcut::activated, this, [=](){ ui->btnAgain->click(); });
+    connect(scHard,  &QShortcut::activated, this, [=](){ ui->btnHard->click(); });
+    connect(scGood,  &QShortcut::activated, this, [=](){ ui->btnGood->click(); });
+    connect(scEasy,  &QShortcut::activated, this, [=](){ ui->btnEasy->click(); });
+
+    enableShortcuts(false);
+
 
     connect(presenter, &SrsPresenter::noMoreCards,
         this, [this]() {
@@ -123,26 +132,44 @@ void SrsPage::setMeaning(const QString &meaning)
 
 void SrsPage::resetCard()
 {
-    ui->labelAnswer->setVisible(false);
     ui->labelAnswer->clear();
-    ui->btnAgain->setEnabled(false);
-    ui->btnHard->setEnabled(false);
-    ui->btnGood->setEnabled(false);
-    ui->btnEasy->setEnabled(false);
+    ui->labelAnswer->setVisible(false);
+
+    ui->btnAgain->setVisible(false);
+    ui->btnHard->setVisible(false);
+    ui->btnGood->setVisible(false);
+    ui->btnEasy->setVisible(false);
+
+    ui->btnAgain->setEnabled(true);
+    ui->btnHard->setEnabled(true);
+    ui->btnGood->setEnabled(true);
+    ui->btnEasy->setEnabled(true);
+
+    ui->btnShowAnswer->setVisible(true);
     ui->btnShowAnswer->setEnabled(true);
+
+    enableShortcuts(false);
 }
+
+
 
 void SrsPage::showNoMoreCards()
 {
     ui->labelWord->setText("No hay más tarjetas para hoy");
+
     ui->labelAnswer->clear();
     ui->labelAnswer->setVisible(false);
-    ui->btnAgain->setEnabled(false);
-    ui->btnHard->setEnabled(false);
-    ui->btnGood->setEnabled(false);
-    ui->btnEasy->setEnabled(false);
-    ui->btnShowAnswer->setEnabled(false);
+
+    ui->btnAgain->setVisible(false);
+    ui->btnHard->setVisible(false);
+    ui->btnGood->setVisible(false);
+    ui->btnEasy->setVisible(false);
+
+    ui->btnShowAnswer->setVisible(false);
+
+    enableShortcuts(false);
 }
+
 
 void SrsPage::startStudy()
 {
@@ -157,4 +184,12 @@ void SrsPage::refreshDashboardStats()
 void SrsPage::refreshStats()
 {
     presenter->refreshStats();
+}
+
+void SrsPage::enableShortcuts(bool enabled)
+{
+    scAgain->setEnabled(enabled);
+    scHard->setEnabled(enabled);
+    scGood->setEnabled(enabled);
+    scEasy->setEnabled(enabled);
 }

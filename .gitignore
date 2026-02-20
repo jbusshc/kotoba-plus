@@ -33,3 +33,4 @@ assets/
 tsv/
 *.invx
 *.ignore
+contextDumper.py

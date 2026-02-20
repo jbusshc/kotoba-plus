@@ -2,102 +2,86 @@
 #define SRS_SYNC_H
 
 #include <stdint.h>
-#include <stdbool.h>
-#include <stdio.h>
+#include <stddef.h>
+#include <time.h>
 
-#include "srs.h"
-
-#include "kotoba.h"
-
-/* ─────────────────────────────────────────────────────────────
- *  Configuration
- * ───────────────────────────────────────────────────────────── */
-
-#define SRS_SNAPSHOT_INTERVAL 1000   /* events */
-
-/* ─────────────────────────────────────────────────────────────
- *  Event types
- * ───────────────────────────────────────────────────────────── */
-
-typedef enum {
-    SRS_EVT_ADD    = 1,
-    SRS_EVT_REMOVE = 2,
-    SRS_EVT_REVIEW = 3
-} srs_event_type;
-
-/* ─────────────────────────────────────────────────────────────
- *  Event
- * ───────────────────────────────────────────────────────────── */
+/* =========================
+   EVENTO
+   ========================= */
 
 typedef struct {
-    uint64_t timestamp;     /* unix seconds */
-    uint32_t entry_id;
+    uint64_t device_id;
+    uint64_t seq;
+    uint64_t timestamp;
 
-    uint32_t device_id;     /* unique per device */
-    uint32_t seq;           /* monotonic per device */
+    uint32_t card_id;
+    uint8_t  grade;
+} SrsEvent;
 
-    uint8_t  type;          /* srs_event_type */
-    uint8_t  quality;       /* review only */
-
-    uint8_t  reserved[2];
-} srs_event;
-
-/* ─────────────────────────────────────────────────────────────
- *  Snapshot
- * ───────────────────────────────────────────────────────────── */
+/* =========================
+   ESTADO DE CARTA (LWW)
+   ========================= */
 
 typedef struct {
-    uint64_t last_event_time;
-    uint32_t last_event_count;
+    uint64_t last_timestamp;
+    uint64_t last_device;
+    uint64_t last_seq;
 
-    srs_profile profile;
-} srs_snapshot;
+    int      interval;
+    float    ease;
+    time_t   due;
+} CardState;
 
-/* ─────────────────────────────────────────────────────────────
- *  Sync handle
- * ───────────────────────────────────────────────────────────── */
+/* =========================
+   SYNC PRINCIPAL
+   ========================= */
 
 typedef struct {
-    FILE *events_fp;
-    FILE *snapshot_fp;
+    uint64_t device_id;
+    uint64_t next_seq;
 
-    uint32_t device_id;
-    uint32_t next_seq;
+    SrsEvent *events;
+    size_t    event_count;
+    size_t    event_capacity;
 
-    uint32_t event_count;
-} srs_sync;
+    CardState *cards;
+    size_t     card_count;
+} SrsSync;
 
-/* ─────────────────────────────────────────────────────────────
- *  API
- * ───────────────────────────────────────────────────────────── */
+/* =========================
+   API PRINCIPAL
+   ========================= */
 
-/* init / shutdown */
-KOTOBA_API bool srs_sync_open(srs_sync *s,
-                   const char *events_path,
-                   const char *snapshot_path,
-                   uint32_t device_id,
-                   uint32_t dict_size);
+void srs_sync_init(SrsSync *s,
+                   uint64_t device_id,
+                   size_t card_count);
 
-KOTOBA_API void srs_sync_close(srs_sync *s);
+void srs_sync_free(SrsSync *s);
 
-/* append events */
-KOTOBA_API bool srs_sync_add(srs_sync *s, srs_profile *p,
-                  uint32_t entry_id, uint64_t now);
+void srs_sync_add_local_review(SrsSync *s,
+                               uint32_t card_id,
+                               uint8_t grade,
+                               uint64_t timestamp);
 
-KOTOBA_API bool srs_sync_remove(srs_sync *s, srs_profile *p,
-                     uint32_t entry_id, uint64_t now);
+void srs_sync_merge_events(SrsSync *s,
+                           const SrsEvent *remote,
+                           size_t remote_count);
 
-KOTOBA_API bool srs_sync_review(srs_sync *s, srs_profile *p,
-                     uint32_t entry_id,
-                     srs_quality q,
-                     uint64_t now);
+void srs_sync_rebuild(SrsSync *s);
 
-/* replay & merge */
-KOTOBA_API bool srs_sync_rebuild(srs_sync *s, srs_profile *p, uint32_t dict_size);
+/* =========================
+   PERSISTENCIA
+   ========================= */
 
-/* import remote events */
-KOTOBA_API bool srs_sync_merge_events(srs_sync *s,
-                           const srs_event *events,
-                           uint32_t count);
+int srs_snapshot_save(SrsSync *s, const char *path);
+int srs_snapshot_load(SrsSync *s, const char *path);
 
-#endif /* SRS_SYNC_H */
+int srs_log_save(SrsSync *s, const char *path);
+int srs_log_load(SrsSync *s, const char *path);
+int srs_log_truncate(const char *path);
+
+int srs_compact(SrsSync *s,
+                const char *snapshot_path,
+                const char *log_path);
+
+#endif

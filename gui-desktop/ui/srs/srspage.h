@@ -2,6 +2,7 @@
 
 #include "../../srs/srs_presenter.h"
 #include <QWidget>
+#include <QShortcut>
 
 namespace Ui {
 class SrsPage;
@@ -24,6 +25,13 @@ public:
     void refreshDashboardStats();
     void refreshStats();
     SrsPresenter* getSrsPresenter() const { return presenter; }
+
+    QShortcut* scAgain;
+    QShortcut* scHard;
+    QShortcut* scGood;
+    QShortcut* scEasy;
+
+    void enableShortcuts(bool enabled);
 
 
     // invocado por la UI externa (por ejemplo el dashboard)

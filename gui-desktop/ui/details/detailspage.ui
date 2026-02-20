@@ -56,7 +56,6 @@ font-weight: bold;
          <property name="styleSheet">
           <string>
 font-size: 18px;
-color: #555;
           </string>
          </property>
          <property name="text">

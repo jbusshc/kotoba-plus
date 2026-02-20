@@ -167,11 +167,15 @@ void srs_answer(srs_item *it, srs_quality q, uint64_t now)
             return;
         }
 
-        /* Graduate */
+        /* Graduate to REVIEW (día lógico) */
         it->state = SRS_STATE_REVIEW;
         it->reps = 1;
         it->interval = 1;
-        it->due = now + SRS_DAY;
+
+        uint64_t today = srs_today(now);
+        uint64_t due_day = today + 1;
+        it->due = srs_day_to_unix(due_day);
+
         return;
     }
 
@@ -193,14 +197,21 @@ void srs_answer(srs_item *it, srs_quality q, uint64_t now)
         return;
     }
 
+    /* REVIEW success */
+
     if (it->reps == 1)
         it->interval = 6;
     else
         it->interval = (uint16_t)(it->interval * it->ease);
 
     it->reps++;
-    it->due = now + (uint64_t)it->interval * SRS_DAY;
+
+    uint64_t today = srs_today(now);
+    uint64_t due_day = today + it->interval;
+
+    it->due = srs_day_to_unix(due_day);
 }
+
 
 /* ───────────────────────────────────────────── */
 

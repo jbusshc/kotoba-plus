@@ -2,6 +2,8 @@
 #define MAINWINDOW_H
 
 #include <QMainWindow>
+#include <QCloseEvent>
+
 
 #include "../app/context.h"
 #include "dictionary/dictionarypage.h"
@@ -20,6 +22,9 @@ class MainWindow : public QMainWindow
 public:
     explicit MainWindow(KotobaAppContext *ctx, QWidget *parent = nullptr);
     ~MainWindow();
+
+protected:
+    void closeEvent(QCloseEvent *event) override;
 
 private:
     void setupNavigation();

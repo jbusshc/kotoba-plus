@@ -115,3 +115,9 @@ void MainWindow::setupNavigation()
             });
 
 }
+
+void MainWindow::closeEvent(QCloseEvent *event)
+{
+    srsPage->refreshStats(); // fuerza update final
+    event->accept();
+}

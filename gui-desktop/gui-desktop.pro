@@ -14,7 +14,8 @@ SOURCES += \
     search/search_service.cpp \
     search/result_model.cpp \
     srs/srs_presenter.cpp \
-    srs/srs_service.cpp 
+    srs/srs_service.cpp \
+    ThemeManager.cpp
 
 HEADERS += \
     ui/mainwindow.h \
@@ -27,7 +28,8 @@ HEADERS += \
     search/search_service.h \
     search/result_model.h \
     srs/srs_presenter.h \
-    srs/srs_service.h
+    srs/srs_service.h \
+    ThemeManager.h
 
 FORMS += \
     ui/mainwindow.ui \
