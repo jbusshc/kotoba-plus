@@ -7,10 +7,12 @@ extern "C" {
 #include <loader.h>
 }
 
+struct Configuration; // forward declaration
+
 class SearchService
 {
 public:
-    explicit SearchService(kotoba_dict *dict, uint32_t pageSize = DEFAULT_PAGE_SIZE);
+    explicit SearchService(kotoba_dict *dict, Configuration* config);
     ~SearchService();
 
     void query(const QString &q);
@@ -22,4 +24,5 @@ public:
 private:
     SearchContext m_ctx;
     kotoba_dict *m_dict;
+    Configuration* m_config;
 };

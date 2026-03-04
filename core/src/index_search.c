@@ -525,7 +525,7 @@ void query_results(struct SearchContext *ctx, const char *query)
 
     ctx->query = q;
     ctx->results_left = total_results;
-    printf("[INDEX_SEARCH][QUERY_RESULTS] Total results found: %d\n", total_results);
+    LOG_DEBUG("[CORE][INDEX_SEARCH][QUERY_RESULTS] Total results found: %d\n", total_results);
 }
 
 static inline void delete_result(uint32_t idx, uint32_t *results_left, SearchResultMeta *results_meta)
@@ -742,7 +742,7 @@ void query_next_page(struct SearchContext *ctx)
     }
 
     ctx->page_result_count = topk_size;
-    printf("[INDEX_SEARCH][QUERY_NEXT_PAGE] Page results: %d, Results left: %d\n", topk_size, ctx->results_left);
+    LOG_DEBUG("[CORE][INDEX_SEARCH][QUERY_NEXT_PAGE] Page results: %d, Results left: %d\n", topk_size, ctx->results_left);
 }
 
 /*

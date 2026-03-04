@@ -5,6 +5,7 @@ import glob
 import os
 import sys
 from pathlib import Path
+from datetime import datetime
 
 OUTPUT_FILE = "dump.txt"
 
@@ -78,7 +79,8 @@ def main():
 
     dump_files(final_files, OUTPUT_FILE)
 
-    print(f"Dump generado en {OUTPUT_FILE} con {len(final_files)} archivos.")
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    print(f"Dump generado en {OUTPUT_FILE} con {len(final_files)} archivos. [{timestamp}]")
 
 
 if __name__ == "__main__":

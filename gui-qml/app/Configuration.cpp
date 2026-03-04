@@ -4,6 +4,8 @@
 #include <QStandardPaths>
 #include <QDir>
 
+
+
 void saveConfiguration(const Configuration &config, const QString &filePath)
 {
     QSettings settings(filePath, QSettings::IniFormat);
@@ -42,6 +44,7 @@ void saveConfiguration(const Configuration &config, const QString &filePath)
     settings.setValue("search_delay_ms", config.searchDelayMs);
     settings.setValue("remember_last_query", config.rememberLastQuery);
     settings.setValue("highlight_matches", config.highlightMatches);
+    settings.setValue("page_size", config.searchPageSize);
     settings.endGroup();
     
     // SRS

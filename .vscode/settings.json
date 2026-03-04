@@ -3,5 +3,6 @@
         "**/.git/objects/**": true,
         "**/node_modules/**": true,
         "**/build/**": true
-    }
+    },
+    "C_Cpp.errorSquiggles": "disabled"
 }

@@ -2,15 +2,12 @@
 #include <cstring>
 #include <QDebug>
 
-SearchService::SearchService(kotoba_dict *dict, uint32_t pageSize)
-    : m_dict(dict)
-{
-    // default enable english gloss
-    bool active[KOTOBA_LANG_COUNT];
-    memset(active, 0, sizeof(active));
-    active[KOTOBA_LANG_EN] = true;
+#include "../app/Configuration.h"
 
-    init_search_context(&m_ctx, active, m_dict, (int)pageSize);
+SearchService::SearchService(kotoba_dict *dict, Configuration* config)
+    : m_dict(dict), m_config(config)
+{
+    init_search_context(&m_ctx, config->languages, m_dict, config->searchPageSize);
     warm_up(&m_ctx);
 }
 

@@ -10,7 +10,15 @@
 ```bash
 mkdir build
 cd build
-cmake -G Ninja ..
+cmake -G Ninja .. 
+ninja
+```
+
+or
+```bash
+mkdir build
+cd build
+cmake -G Ninja -DDEBUG=1 ..
 ninja
 ```
 

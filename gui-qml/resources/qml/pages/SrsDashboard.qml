@@ -4,7 +4,12 @@ import QtQuick.Layouts
 import QtQuick.Controls.Material
 
 Page {
+    id: page
     padding: 20
+
+    property bool darkTheme: appConfig && appConfig.config ? appConfig.config.theme === "dark" : true
+    property color textColor: darkTheme ? "white" : "black"
+    property color hintColor: darkTheme ? "#B0BEC5" : "#757575"
 
     ColumnLayout {
         anchors.fill: parent
@@ -14,14 +19,16 @@ Page {
             text: "SRS Dashboard"
             font.pixelSize: 24
             font.bold: true
-            color: palette.text
+            color: textColor
         }
 
         Button {
             text: "Start Study"
             onClicked: {
-                stack.push("qrc:/qml/pages/SrsStudy.qml")
-                srsVM.startSession()
+                if (stack && srsVM) {
+                    stack.push("qrc:/qml/pages/SrsStudy.qml")
+                    srsVM.startSession()
+                }
             }
         }
     }

@@ -4,7 +4,12 @@ import QtQuick.Layouts
 import QtQuick.Controls.Material
 
 Page {
+    id: page
     padding: 20
+
+    property bool darkTheme: appConfig && appConfig.config ? appConfig.config.theme === "dark" : true
+    property color textColor: darkTheme ? "white" : "black"
+    property color hintColor: darkTheme ? "#B0BEC5" : "#757575"
 
     ColumnLayout {
         anchors.fill: parent
@@ -14,48 +19,52 @@ Page {
             id: q
             font.pixelSize: 28
             font.bold: true
-            color: palette.text
+            color: textColor
         }
 
         Text {
             id: a
             visible: false
             font.pixelSize: 16
-            color: Material.hintTextColor
+            color: hintColor
             wrapMode: Text.WordWrap
         }
 
         Button {
             text: "Show Answer"
-            onClicked: srsVM.revealAnswer()
+            onClicked: if (srsVM) srsVM.revealAnswer()
         }
 
         RowLayout {
             spacing: 8
 
-            Button { text: "Again"; onClicked: srsVM.answerAgain() }
-            Button { text: "Hard"; onClicked: srsVM.answerHard() }
-            Button { text: "Good"; onClicked: srsVM.answerGood() }
-            Button { text: "Easy"; onClicked: srsVM.answerEasy() }
+            Button { text: "Again"; onClicked: if (srsVM) srsVM.answerAgain() }
+            Button { text: "Hard"; onClicked: if (srsVM) srsVM.answerHard() }
+            Button { text: "Good"; onClicked: if (srsVM) srsVM.answerGood() }
+            Button { text: "Easy"; onClicked: if (srsVM) srsVM.answerEasy() }
         }
     }
 
     Connections {
         target: srsVM
-
         function onShowQuestion(word) {
-            q.text = word
+            q.text = word || ""
             a.visible = false
         }
-
         function onShowAnswer(ans) {
-            a.text = ans
+            a.text = ans || ""
             a.visible = true
         }
-
         function onNoMoreCards() {
             q.text = "No more cards"
             a.visible = false
         }
+    }
+
+    // reset view on back
+    onVisibleChanged: if (visible) {
+        q.text = ""
+        a.text = ""
+        a.visible = false
     }
 }

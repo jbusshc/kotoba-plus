@@ -20,12 +20,14 @@
 
 int main(int argc, char **argv)
 {
-    Configuration config;
+    ConfigWrapper configWrapper;
+
     QString configPath = QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
     if (configPath.isEmpty()) configPath = QDir::currentPath();
     QDir().mkpath(configPath);
     configPath = QDir(configPath).filePath("config.ini");
-    loadConfiguration(config, configPath);
+    loadConfiguration(configWrapper.m_config, configPath);
+
 
     QQuickStyle::setStyle("Material");
     QGuiApplication app(argc, argv);
@@ -59,7 +61,7 @@ int main(int argc, char **argv)
     kotoba_dict *dict = repo->dict();
 
     // Services
-    SearchService *searchSvc = new SearchService(dict);
+    SearchService *searchSvc = new SearchService(dict, &configWrapper.m_config);
     SrsService *srsSvc = new SrsService(dict->entry_count);
 
     // Models & ViewModels
@@ -75,6 +77,7 @@ int main(int argc, char **argv)
     engine.rootContext()->setContextProperty("detailsVM", detailsVM);
     engine.rootContext()->setContextProperty("srsVM", srsVM);
     engine.rootContext()->setContextProperty("appDataPath", appData);
+    engine.rootContext()->setContextProperty("appConfig", &configWrapper);
 
     engine.load(QUrl(QStringLiteral("qrc:/qml/Main.qml")));
     if (engine.rootObjects().isEmpty()) return -1;

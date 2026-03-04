@@ -400,9 +400,8 @@ int index_build_from_pairs(
 {
     Pair *pairs = NULL; size_t pcap = 0, pcount = 0;
 
-    struct GramUD { uint32_t doc; uint8_t m1; uint8_t m2; uint8_t len; };
-    void capture_cb(const uint8_t *p, size_t len, void *ud)
-    {
+    struct GramUD { uint32_t doc; uint8_t m1; uint8_t m2; uint8_t len; }; 
+    void capture_cb(const uint8_t *p, size_t len, void *ud) {
         struct GramUD *g = (struct GramUD*)ud;
         uint32_t h = fnv1a(p, len);
         if (pcount == pcap) { pcap = pcap ? pcap*2 : 65536; pairs = realloc(pairs, pcap*sizeof(Pair)); if(!pairs){perror("realloc");exit(1);} }
