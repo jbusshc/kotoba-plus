@@ -111,6 +111,6 @@ public:
 };
 
 void saveConfiguration(const Configuration &config, const QString &filePath);
-void loadConfiguration(Configuration &config, const QString &filePath);
+bool loadConfiguration(Configuration &config, const QString &filePath);
 
 #endif // CONFIGURATION_H

@@ -61,6 +61,14 @@ QVariantMap EntryDetailsViewModel::buildDetails(int docId)
         }
         senses << glossParts.join("; ");
     }
+    printf("Total senses included: %d\n", senses.size()); // debug
+    // print languages used
+    printf("Languages included:\n");
+    for (int l = 0; l < 32; ++l) {
+        if (langs[l]) {
+            printf("  - Language %d\n", l);
+        }
+    }
     map["senses"] = senses;
 
     return map;

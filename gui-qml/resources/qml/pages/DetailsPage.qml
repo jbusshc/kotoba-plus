@@ -6,43 +6,55 @@ import QtQuick.Controls.Material
 Page {
     id: page
     property int docId: -1
-    padding: 12
 
     property bool darkTheme: appConfig && appConfig.config ? appConfig.config.theme === "dark" : true
     property color textColor: darkTheme ? "white" : "black"
     property color hintColor: darkTheme ? "#B0BEC5" : "#757575"
 
-    ColumnLayout {
+    ScrollView {
         anchors.fill: parent
-        spacing: 10
+        clip: true
 
-        Button {
-            text: "< Back"
-            onClicked: stack.pop()
-        }
+        ColumnLayout {
+            id: contentLayout
+            width: parent.width
+            spacing: 6
+            anchors.margins: 12   // ✅ reemplaza padding
 
-        Text {
-            id: heading
-            font.pixelSize: 24
-            font.bold: true
-            color: textColor
-        }
-
-        Text {
-            id: readings
-            font.pixelSize: 14
-            color: hintColor
-        }
-
-        Repeater {
-            id: sensesRepeater
-            model: []
-
-            delegate: Text {
-                text: modelData || ""
-                wrapMode: Text.WordWrap
-                color: textColor
+            Button {
+                text: "< Back"
+                onClicked: stack.pop()
+                Layout.alignment: Qt.AlignLeft
             }
+
+            Text {
+                id: heading
+                font.pixelSize: 24
+                font.bold: true
+                color: textColor
+                wrapMode: Text.WordWrap
+            }
+
+            Text {
+                id: readings
+                font.pixelSize: 14
+                color: hintColor
+                wrapMode: Text.WordWrap
+            }
+
+            Repeater {
+                id: sensesRepeater
+                model: []
+
+                delegate: Text {
+                    text: modelData || ""
+                    wrapMode: Text.WordWrap
+                    color: textColor
+                    font.pixelSize: 14
+                }
+            }
+
+            Item { Layout.fillHeight: true }
         }
     }
 
@@ -55,7 +67,6 @@ Page {
         }
     }
 
-    // reset selection when returning
     onVisibleChanged: if (visible) {
         heading.text = ""
         readings.text = ""

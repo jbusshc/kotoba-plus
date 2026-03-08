@@ -22,12 +22,14 @@ int main(int argc, char **argv)
 {
     ConfigWrapper configWrapper;
 
-    QString configPath = QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
-    if (configPath.isEmpty()) configPath = QDir::currentPath();
-    QDir().mkpath(configPath);
-    configPath = QDir(configPath).filePath("config.ini");
-    loadConfiguration(configWrapper.m_config, configPath);
+    // Ruta de config en la misma carpeta del ejecutable
+    QString exeDir = QCoreApplication::applicationDirPath();
+    QString configPath = QDir(exeDir).filePath("config.ini");
 
+    qDebug() << "Config file path:" << configPath;
+    qDebug() << "File exists:" << QFile::exists(configPath);
+
+    bool b = loadConfiguration(configWrapper.m_config, configPath);
 
     QQuickStyle::setStyle("Material");
     QGuiApplication app(argc, argv);

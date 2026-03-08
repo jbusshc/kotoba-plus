@@ -77,11 +77,14 @@ void SearchViewModel::fillFromContext(bool append)
             }
 
             // gloss: use first sense's glosses (respecting enabled languages in SearchContext)
-            if (entry->senses_count > 0)
+            for (uint32_t s = 0; s < entry->senses_count; ++s)
             {
-                const sense_bin *sense = kotoba_sense(m_dict, entry, 0);
-                if (sense->lang < 0 || sense->lang >= 32 || ctx->is_gloss_active[sense->lang] == 0)
+                const sense_bin *sense = kotoba_sense(m_dict, entry, s);
+            
+                if (sense->lang < 0 || sense->lang >= 32 || ctx->is_gloss_active[sense->lang] == 0) {
                     continue; // filtrar por idioma
+                } 
+
                 if (sense && sense->gloss_count > 0)
                 {
                     QStringList parts;
@@ -91,7 +94,7 @@ void SearchViewModel::fillFromContext(bool append)
                         parts << QString::fromUtf8(gs.ptr, gs.len);
                     }
                     r.gloss = parts.join("; ");
-                    // break; // stop at first active language with glosses}
+                    break; // stop at first active language with glosses}
                 }
             }
 

@@ -82,23 +82,24 @@ void saveConfiguration(const Configuration &config, const QString &filePath)
     settings.sync();
 }
 
-void loadConfiguration(Configuration &config, const QString &filePath)
+bool loadConfiguration(Configuration &config, const QString &filePath)
 {
     if (!QFile::exists(filePath)) {
         saveConfiguration(config, filePath);
-        return;
+        return false;
     }
+
     QSettings settings(filePath, QSettings::IniFormat);
 
-    // General
+    // ----------------- General -----------------
     settings.beginGroup("General");
-    config.firstRun = false; // if config file exists, it's not the first run
+    config.firstRun = false; // si el archivo existe, no es la primera ejecución
     config.appVersion = settings.value("app_version", config.appVersion).toString();
     config.autoSave = settings.value("auto_save", config.autoSave).toBool();
     config.checkUpdates = settings.value("check_updates", config.checkUpdates).toBool();
     settings.endGroup();
-    
-    // UI
+
+    // ----------------- UI -----------------
     settings.beginGroup("UI");
     config.theme = settings.value("theme", config.theme).toString();
     config.primaryColor = settings.value("primary_color", config.primaryColor).toString();
@@ -109,24 +110,25 @@ void loadConfiguration(Configuration &config, const QString &filePath)
     config.compactMode = settings.value("compact_mode", config.compactMode).toBool();
     config.animations = settings.value("animations", config.animations).toBool();
     settings.endGroup();
-    
-    // Language
+
+    // ----------------- Language -----------------
     settings.beginGroup("Language");
     config.interface = settings.value("interface", config.interface).toString();
-    config.glossLanguages = settings.value("gloss_languages", config.glossLanguages).toString();
     config.fallbackLanguage = settings.value("fallback_language", config.fallbackLanguage).toString();
+    QStringList langs = settings.value("gloss_languages", config.glossLanguages).toStringList();
     settings.endGroup();
-    
-    // Dictionary
+
+    // ----------------- Dictionary -----------------
     settings.beginGroup("Dictionary");
     config.maxResults = settings.value("max_results", config.maxResults).toInt();
     config.searchOnTyping = settings.value("search_on_typing", config.searchOnTyping).toBool();
     config.searchDelayMs = settings.value("search_delay_ms", config.searchDelayMs).toInt();
     config.rememberLastQuery = settings.value("remember_last_query", config.rememberLastQuery).toBool();
     config.highlightMatches = settings.value("highlight_matches", config.highlightMatches).toBool();
+    config.searchPageSize = settings.value("page_size", config.searchPageSize).toInt();
     settings.endGroup();
-    
-    // SRS
+
+    // ----------------- SRS -----------------
     settings.beginGroup("SRS");
     config.dailyNewCards = settings.value("daily_new_cards", config.dailyNewCards).toInt();
     config.dailyReviewLimit = settings.value("daily_review_limit", config.dailyReviewLimit).toInt();
@@ -137,15 +139,15 @@ void loadConfiguration(Configuration &config, const QString &filePath)
     config.buryRelated = settings.value("bury_related", config.buryRelated).toBool();
     config.showAnswerAuto = settings.value("show_answer_auto", config.showAnswerAuto).toBool();
     settings.endGroup();
-    
-    // Audio
+
+    // ----------------- Audio -----------------
     settings.beginGroup("Audio");
     config.audioEnabled = settings.value("enabled", config.audioEnabled).toBool();
     config.volume = settings.value("volume", config.volume).toInt();
     config.autoPlay = settings.value("auto_play", config.autoPlay).toBool();
     settings.endGroup();
-    
-    // Data
+
+    // ----------------- Data -----------------
     settings.beginGroup("Data");
     config.dictPath = settings.value("dict_path", config.dictPath).toString();
     config.dictIndexPath = settings.value("dict_index_path", config.dictIndexPath).toString();
@@ -158,63 +160,49 @@ void loadConfiguration(Configuration &config, const QString &filePath)
     config.backupIntervalDays = settings.value("backup_interval_days", config.backupIntervalDays).toInt();
     settings.endGroup();
 
-    // set active gloss languages based on glossLanguages string
-    QStringList langs = config.glossLanguages.split(",", Qt::SkipEmptyParts);
-    int fallback = false;
-    for (const QString &lang : langs) {
-        if (lang == "en")
-            config.languages[KOTOBA_LANG_EN] = true;
-        else if (lang == "fr")
-            config.languages[KOTOBA_LANG_FR] = true;
-        else if (lang == "de")
-            config.languages[KOTOBA_LANG_DE] = true;
-        else if (lang == "ru")
-            config.languages[KOTOBA_LANG_RU] = true;
-        else if (lang == "es")
-            config.languages[KOTOBA_LANG_ES] = true;
-        else if (lang == "pt")
-            config.languages[KOTOBA_LANG_PT] = true;
-        else if (lang == "it")
-            config.languages[KOTOBA_LANG_IT] = true;
-        else if (lang == "nl")
-            config.languages[KOTOBA_LANG_NL] = true;
-        else if (lang == "hu")
-            config.languages[KOTOBA_LANG_HU] = true;
-        else if (lang == "sv")
-            config.languages[KOTOBA_LANG_SV] = true;
-        else if (lang == "cs")
-            config.languages[KOTOBA_LANG_CS] = true;
-        else if (lang == "pl")
-            config.languages[KOTOBA_LANG_PL] = true;
-        else if (lang == "ro")
-            config.languages[KOTOBA_LANG_RO] = true;
-        else if (lang == "he")
-            config.languages[KOTOBA_LANG_HE] = true;
-        else if (lang == "ar")
-            config.languages[KOTOBA_LANG_AR] = true;
-        else if (lang == "tr")
-            config.languages[KOTOBA_LANG_TR] = true;
-        else if (lang == "th")
-            config.languages[KOTOBA_LANG_TH] = true;
-        else if (lang == "vi")
-            config.languages[KOTOBA_LANG_VI] = true;
-        else if (lang == "id")
-            config.languages[KOTOBA_LANG_ID] = true;
-        else if (lang == "ms")
-            config.languages[KOTOBA_LANG_MS] = true;
-        else if (lang == "ko")
-            config.languages[KOTOBA_LANG_KO] = true;
-        else if (lang == "zh" || lang == "zh_cn" || lang == "zh_tw")
-            config.languages[KOTOBA_LANG_ZH] = true; // treat all Chinese variants as the same for glosses
-        else if (lang == "fa")
-            config.languages[KOTOBA_LANG_FA] = true;
-        else if (lang == "eo")
-            config.languages[KOTOBA_LANG_EO] = true;
-        else if (lang == "slv")
-            config.languages[KOTOBA_LANG_SLV] = true;
-        else {
-            fallback = true;
-        }
+    // ----------------- Procesar idiomas -----------------
+    // Limpia todos los idiomas
+    for (int i = 0; i < KOTOBA_LANG_COUNT; ++i)
+        config.languages[i] = false;
+
+    printf("Loaded config: interface=%s, gloss_languages=%s\n", config.interface.toStdString().c_str(), config.glossLanguages.toStdString().c_str());
+
+    // Separar la lista de idiomas y limpiar espacios
+    for (QString &lang : langs) {
+        lang = lang.trimmed();
+        if (lang == "en") config.languages[KOTOBA_LANG_EN] = true;
+        else if (lang == "es") config.languages[KOTOBA_LANG_ES] = true;
+        else if (lang == "fr") config.languages[KOTOBA_LANG_FR] = true;
+        else if (lang == "de") config.languages[KOTOBA_LANG_DE] = true;
+        else if (lang == "ru") config.languages[KOTOBA_LANG_RU] = true;
+        else if (lang == "pt") config.languages[KOTOBA_LANG_PT] = true;
+        else if (lang == "it") config.languages[KOTOBA_LANG_IT] = true;
+        else if (lang == "nl") config.languages[KOTOBA_LANG_NL] = true;
+        else if (lang == "hu") config.languages[KOTOBA_LANG_HU] = true;
+        else if (lang == "sv") config.languages[KOTOBA_LANG_SV] = true;
+        else if (lang == "cs") config.languages[KOTOBA_LANG_CS] = true;
+        else if (lang == "pl") config.languages[KOTOBA_LANG_PL] = true;
+        else if (lang == "ro") config.languages[KOTOBA_LANG_RO] = true;
+        else if (lang == "he") config.languages[KOTOBA_LANG_HE] = true;
+        else if (lang == "ar") config.languages[KOTOBA_LANG_AR] = true;
+        else if (lang == "tr") config.languages[KOTOBA_LANG_TR] = true;
+        else if (lang == "th") config.languages[KOTOBA_LANG_TH] = true;
+        else if (lang == "vi") config.languages[KOTOBA_LANG_VI] = true;
+        else if (lang == "id") config.languages[KOTOBA_LANG_ID] = true;
+        else if (lang == "ms") config.languages[KOTOBA_LANG_MS] = true;
+        else if (lang == "ko") config.languages[KOTOBA_LANG_KO] = true;
+        else if (lang == "zh" || lang == "zh_cn" || lang == "zh_tw") config.languages[KOTOBA_LANG_ZH] = true;
+        else if (lang == "fa") config.languages[KOTOBA_LANG_FA] = true;
+        else if (lang == "eo") config.languages[KOTOBA_LANG_EO] = true;
+        else if (lang == "slv") config.languages[KOTOBA_LANG_SLV] = true;
     }
 
+    // Fallback seguro si no se activó ninguno
+    bool anyActive = false;
+    for (int i = 0; i < KOTOBA_LANG_COUNT; ++i)
+        if (config.languages[i]) { anyActive = true; break; }
+    if (!anyActive)
+        config.languages[KOTOBA_LANG_EN] = true;
+
+    return true;
 }
