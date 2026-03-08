@@ -62,12 +62,12 @@ int main(int argc, char **argv)
 
     // Services
     SearchService *searchSvc = new SearchService(dict, &configWrapper.m_config);
-    SrsService *srsSvc = new SrsService(dict->entry_count);
+    SrsService *srsSvc = new SrsService(dict->entry_count, &configWrapper.m_config);
 
     // Models & ViewModels
     SearchResultModel *searchModel = new SearchResultModel();
     SearchViewModel *searchVM = new SearchViewModel(searchSvc, searchModel, dict);
-    EntryDetailsViewModel *detailsVM = new EntryDetailsViewModel(dict);
+    EntryDetailsViewModel *detailsVM = new EntryDetailsViewModel(dict, &configWrapper.m_config);
     SrsViewModel *srsVM = new SrsViewModel(srsSvc, dict);
 
     QQmlApplicationEngine engine;

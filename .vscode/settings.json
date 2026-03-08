@@ -4,5 +4,7 @@
         "**/node_modules/**": true,
         "**/build/**": true
     },
-    "C_Cpp.errorSquiggles": "disabled"
+    "C_Cpp.errorSquiggles": "disabled",
+    "C_Cpp.intelliSenseEngine": "Tag Parser",
+    "C_Cpp.autocomplete": "default",
 }

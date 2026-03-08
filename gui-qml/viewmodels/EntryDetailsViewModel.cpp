@@ -1,9 +1,12 @@
 #include "EntryDetailsViewModel.h"
 #include "../../core/include/viewer.h"
+#include "../../core/include/types.h"
+#include "../../gui-qml/app/Configuration.h"
+
 #include <QStringList>
 
-EntryDetailsViewModel::EntryDetailsViewModel(kotoba_dict *dict, QObject *parent)
-    : QObject(parent), m_dict(dict)
+EntryDetailsViewModel::EntryDetailsViewModel(kotoba_dict *dict, Configuration *config, QObject *parent)
+    : QObject(parent), m_dict(dict), m_config(config)
 {
 }
 
@@ -43,14 +46,18 @@ QVariantMap EntryDetailsViewModel::buildDetails(int docId)
 
     // SENSES
     QVariantList senses;
+    bool* langs = m_config->languages; // suponer que Configuration tiene un array de bools para los idiomas
     for (uint32_t s = 0; s < entry->senses_count; ++s)
     {
         const sense_bin *sense = kotoba_sense(m_dict, entry, s);
+        if (sense->lang < 0 || sense->lang >= 32 || !langs[sense->lang])
+            continue; // filtrar por idioma
         QStringList glossParts;
         for (uint32_t g = 0; g < sense->gloss_count; ++g)
         {
             kotoba_str gs = kotoba_gloss(m_dict, sense, g);
             glossParts << QString::fromUtf8(gs.ptr, gs.len);
+            //printf("Sense %u, gloss %u: %.*s\n", s, g, (int)gs.len, gs.ptr); // debug
         }
         senses << glossParts.join("; ");
     }

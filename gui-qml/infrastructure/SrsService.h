@@ -6,10 +6,12 @@ extern "C" {
 #include <srs.h>
 }
 
+class Configuration; // forward declaration
+
 class SrsService
 {
 public:
-    explicit SrsService(uint32_t dictSize);
+    explicit SrsService(uint32_t dictSize, Configuration *config);
     ~SrsService();
 
     bool load(const char *path);
@@ -30,4 +32,5 @@ public:
 private:
     srs_profile m_profile;
     uint32_t m_dictSize;
+    Configuration* m_config;
 };

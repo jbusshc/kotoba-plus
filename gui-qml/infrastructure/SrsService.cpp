@@ -1,8 +1,8 @@
 #include "SrsService.h"
 #include <cstring>
 
-SrsService::SrsService(uint32_t dictSize)
-    : m_dictSize(dictSize)
+SrsService::SrsService(uint32_t dictSize, Configuration *config)
+    : m_dictSize(dictSize), m_config(config)
 {
     srs_init(&m_profile, dictSize);
     srs_heapify(&m_profile);

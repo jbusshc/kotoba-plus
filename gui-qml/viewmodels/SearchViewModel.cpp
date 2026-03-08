@@ -2,6 +2,7 @@
 #include "../infrastructure/SearchService.h"
 #include "SearchResultModel.h"
 #include "../../core/include/viewer.h"
+#include "../../core/include/types.h"
 #include <QStringList>
 
 SearchViewModel::SearchViewModel(SearchService *service, SearchResultModel *model, kotoba_dict *dict, QObject *parent)
@@ -79,6 +80,8 @@ void SearchViewModel::fillFromContext(bool append)
             if (entry->senses_count > 0)
             {
                 const sense_bin *sense = kotoba_sense(m_dict, entry, 0);
+                if (sense->lang < 0 || sense->lang >= 32 || ctx->is_gloss_active[sense->lang] == 0)
+                    continue; // filtrar por idioma
                 if (sense && sense->gloss_count > 0)
                 {
                     QStringList parts;
@@ -88,8 +91,10 @@ void SearchViewModel::fillFromContext(bool append)
                         parts << QString::fromUtf8(gs.ptr, gs.len);
                     }
                     r.gloss = parts.join("; ");
+                    // break; // stop at first active language with glosses}
                 }
             }
+
         }
 
         rows.push_back(std::move(r));
