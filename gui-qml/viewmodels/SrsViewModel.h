@@ -21,6 +21,8 @@ public:
     Q_INVOKABLE void answerEasy();
 
     Q_INVOKABLE void handleAnswer(int quality);
+    Q_INVOKABLE bool contains(int entryId);
+    Q_INVOKABLE void add(int entryId);
 
 signals:
     void showQuestion(QString word);

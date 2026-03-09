@@ -73,3 +73,13 @@ void SrsViewModel::answerAgain() { handleAnswer(SRS_AGAIN); }
 void SrsViewModel::answerHard() { handleAnswer(SRS_HARD); }
 void SrsViewModel::answerGood() { handleAnswer(SRS_GOOD); }
 void SrsViewModel::answerEasy() { handleAnswer(SRS_EASY); }
+
+bool SrsViewModel::contains(int entryId)
+{
+    return m_service->contains(entryId);
+}
+
+void SrsViewModel::add(int entryId)
+{
+    m_service->add(entryId);
+}

@@ -29,12 +29,32 @@ Page {
         anchors.margins: 12
         spacing: 6
 
+    RowLayout {
+        Layout.fillWidth: true
+
         Button {
             text: "< Back"
             onClicked: stack.pop()
-            Layout.alignment: Qt.AlignLeft
         }
 
+        Item {
+            Layout.fillWidth: true
+        }
+
+        Button {
+            id: addSrsButton
+            text: srsVM.contains(docId) ? "Already in SRS" : "Add to SRS"
+            enabled: !srsVM.contains(docId)
+
+            onClicked: {
+                if (docId !== -1) {
+                    srsVM.add(docId)
+                    addSrsButton.enabled = false
+                    addSrsButton.text = "Already in SRS"
+                }
+            }
+        }
+    }
         Text {
             id: heading
             font.pixelSize: 24
