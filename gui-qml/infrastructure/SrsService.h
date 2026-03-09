@@ -1,9 +1,11 @@
 #pragma once
 #include <optional>
 #include <cstdint>
+#include <ctime>
 
 extern "C" {
 #include <srs.h>
+#include <srs_sync.h>
 }
 
 class Configuration; // forward declaration
@@ -33,4 +35,11 @@ private:
     srs_profile m_profile;
     uint32_t m_dictSize;
     Configuration* m_config;
+
+    // sync state
+    SrsSync m_sync;
+
+    // last popped review index (used to efficiently requeue without full heapify)
+    int32_t m_lastPoppedIndex;
+    uint32_t m_lastPoppedEntryId;
 };

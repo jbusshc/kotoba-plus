@@ -306,11 +306,17 @@ int srs_log_load(SrsSync *s, const char *path)
     FILE *f = fopen(path, "rb");
     if (!f) return 0;
 
-    fread(&s->event_count, sizeof(size_t), 1, f);
+    fseek(f, 0, SEEK_END);
+    long size = ftell(f);
+    rewind(f);
 
-    s->event_capacity = s->event_count;
+    size_t count = size / sizeof(SrsEvent);
+
+    s->event_capacity = count;
+    s->event_count = count;
+
     SrsEvent *tmp = realloc(s->events,
-                            sizeof(SrsEvent) * s->event_capacity);
+                            count * sizeof(SrsEvent));
 
     if (!tmp) {
         fclose(f);
@@ -319,10 +325,9 @@ int srs_log_load(SrsSync *s, const char *path)
 
     s->events = tmp;
 
-
     fread(s->events,
           sizeof(SrsEvent),
-          s->event_count,
+          count,
           f);
 
     fclose(f);
@@ -365,5 +370,16 @@ int srs_compact(SrsSync *s,
     s->event_count = 0;
     s->event_capacity = 0;
 
+    return 1;
+}
+
+int srs_log_append(const char *path, const SrsEvent *e)
+{
+    FILE *f = fopen(path, "ab");
+    if (!f) return 0;
+
+    fwrite(e, sizeof(SrsEvent), 1, f);
+
+    fclose(f);
     return 1;
 }

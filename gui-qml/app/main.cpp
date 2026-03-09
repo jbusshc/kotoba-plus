@@ -33,7 +33,7 @@ int main(int argc, char **argv)
 
     QQuickStyle::setStyle("Material");
     QGuiApplication app(argc, argv);
-    app.setApplicationName("Kotoba Plus");
+    app.setApplicationName("KotobaPlus");
 
     qDebug() << "Working dir:" << QDir::currentPath();
     qDebug() << "App dir:" << QCoreApplication::applicationDirPath();
@@ -84,6 +84,17 @@ int main(int argc, char **argv)
     engine.load(QUrl(QStringLiteral("qrc:/qml/Main.qml")));
     if (engine.rootObjects().isEmpty()) return -1;
 
+    const char* srsProfilePath = configWrapper.m_config.srsPath.toStdString().c_str();
+    printf("Loading SRS profile...\n");
+    srsSvc->load(srsProfilePath);
+
+     // Ensure profile is saved on exit (persisting any sync state)
+    QObject::connect(&app, &QCoreApplication::aboutToQuit, [&]() {
+        printf("Saving SRS profile...\n");
+        srsSvc->save(srsProfilePath);
+        saveConfiguration(configWrapper.m_config, configPath.toStdString().c_str());
+    });
+    
     int result = app.exec();
 
     delete searchVM;

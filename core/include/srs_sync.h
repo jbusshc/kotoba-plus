@@ -84,6 +84,7 @@ int srs_snapshot_load(SrsSync *s, const char *path);
 int srs_log_save(SrsSync *s, const char *path);
 int srs_log_load(SrsSync *s, const char *path);
 int srs_log_truncate(const char *path);
+int srs_log_append(const char *path, const SrsEvent *e);
 
 int srs_compact(SrsSync *s,
                 const char *snapshot_path,

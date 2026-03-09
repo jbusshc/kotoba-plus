@@ -54,8 +54,7 @@ struct Configuration {
     // Data
     QString dictPath = "dict.kotoba";
     QString dictIndexPath = "dict.kotoba.idx";
-    QString srsDbPath = "srs.bin";
-    QString srsEventLogPath = "srs_events.log";
+    QString srsPath = "profile.dat";
     QString jpPath = "jp.invx";
     QString glossEnPath = "gloss_en.invx";
     QString glossEsPath = "gloss_es.invx";

@@ -5,66 +5,145 @@ import QtQuick.Controls.Material
 
 Page {
     id: page
-    padding: 20
+    padding: 24
 
     property bool darkTheme: appConfig && appConfig.config ? appConfig.config.theme === "dark" : true
     property color textColor: darkTheme ? "white" : "black"
     property color hintColor: darkTheme ? "#B0BEC5" : "#757575"
 
+    property bool answerShown: false
+
     ColumnLayout {
         anchors.fill: parent
-        spacing: 16
+        spacing: 20
 
-        Text {
-            id: q
-            font.pixelSize: 28
-            font.bold: true
-            color: textColor
-        }
+        Item { Layout.fillHeight: true }
 
-        Text {
-            id: a
-            visible: false
-            font.pixelSize: 16
-            color: hintColor
-            wrapMode: Text.WordWrap
+        Frame {
+            Layout.alignment: Qt.AlignHCenter
+            Layout.preferredWidth: 640
+            Layout.preferredHeight: 260
+
+            background: Rectangle {
+                radius: 14
+                color: darkTheme ? "#1E1E1E" : "#FAFAFA"
+                border.color: darkTheme ? "#333" : "#DDD"
+            }
+
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.margins: 24
+                spacing: 16
+
+                Item { Layout.fillHeight: true }
+
+                Text {
+                    id: questionText
+                    Layout.alignment: Qt.AlignHCenter
+                    font.pixelSize: 36
+                    font.bold: true
+                    color: textColor
+                    text: ""
+                }
+
+                Text {
+                    id: answerText
+                    Layout.alignment: Qt.AlignHCenter
+                    visible: page.answerShown
+                    font.pixelSize: 18
+                    color: hintColor
+                    wrapMode: Text.WordWrap
+                    horizontalAlignment: Text.AlignHCenter
+                    width: parent.width * 0.9
+                }
+
+                Item { Layout.fillHeight: true }
+            }
         }
 
         Button {
+            id: revealButton
+            Layout.alignment: Qt.AlignHCenter
+            enabled: questionText.text !== "No more cards 🎉"
             text: "Show Answer"
-            onClicked: if (srsVM) srsVM.revealAnswer()
+
+            onClicked: {
+                page.answerShown = true
+                if (srsVM) srsVM.revealAnswer()
+            }
         }
 
         RowLayout {
-            spacing: 8
+            Layout.alignment: Qt.AlignHCenter
+            spacing: 12
+            visible: page.answerShown
 
-            Button { text: "Again"; onClicked: if (srsVM) srsVM.answerAgain() }
-            Button { text: "Hard"; onClicked: if (srsVM) srsVM.answerHard() }
-            Button { text: "Good"; onClicked: if (srsVM) srsVM.answerGood() }
-            Button { text: "Easy"; onClicked: if (srsVM) srsVM.answerEasy() }
+            Button {
+                text: "Again"
+                Material.background: "#D32F2F"
+
+                onClicked: {
+                    page.answerShown = false
+                    if (srsVM) srsVM.answerAgain()
+                }
+            }
+
+            Button {
+                text: "Hard"
+                Material.background: "#F57C00"
+
+                onClicked: {
+                    page.answerShown = false
+                    if (srsVM) srsVM.answerHard()
+                }
+            }
+
+            Button {
+                text: "Good"
+                Material.background: "#388E3C"
+
+                onClicked: {
+                    page.answerShown = false
+                    if (srsVM) srsVM.answerGood()
+                }
+            }
+
+            Button {
+                text: "Easy"
+                Material.background: "#1976D2"
+
+                onClicked: {
+                    page.answerShown = false
+                    if (srsVM) srsVM.answerEasy()
+                }
+            }
         }
+
+        Item { Layout.fillHeight: true }
     }
 
     Connections {
         target: srsVM
+
         function onShowQuestion(word) {
-            q.text = word || ""
-            a.visible = false
+            questionText.text = word || ""
+            answerText.text = ""
+            page.answerShown = false
         }
+
         function onShowAnswer(ans) {
-            a.text = ans || ""
-            a.visible = true
+            answerText.text = ans || ""
         }
+
         function onNoMoreCards() {
-            q.text = "No more cards"
-            a.visible = false
+            if (stack)
+                stack.pop()
         }
     }
 
-    // reset view on back
     onVisibleChanged: if (visible) {
-        q.text = ""
-        a.text = ""
-        a.visible = false
+        questionText.text = ""
+        answerText.text = ""
+        page.answerShown = false
     }
 }

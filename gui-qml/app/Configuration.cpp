@@ -70,7 +70,7 @@ void saveConfiguration(const Configuration &config, const QString &filePath)
     settings.beginGroup("Data");
     settings.setValue("dict_path", config.dictPath);
     settings.setValue("dict_index_path", config.dictIndexPath);
-    settings.setValue("srs_db_path", config.srsDbPath);
+    settings.setValue("srs_path", config.srsPath);
     settings.setValue("srs_event_log_path", config.srsEventLogPath);
     settings.setValue("jp_path", config.jpPath);
     settings.setValue("gloss_en_path", config.glossEnPath);
@@ -151,7 +151,7 @@ bool loadConfiguration(Configuration &config, const QString &filePath)
     settings.beginGroup("Data");
     config.dictPath = settings.value("dict_path", config.dictPath).toString();
     config.dictIndexPath = settings.value("dict_index_path", config.dictIndexPath).toString();
-    config.srsDbPath = settings.value("srs_db_path", config.srsDbPath).toString();
+    config.srsPath = settings.value("srs_path", config.srsPath).toString();
     config.srsEventLogPath = settings.value("srs_event_log_path", config.srsEventLogPath).toString();
     config.jpPath = settings.value("jp_path", config.jpPath).toString();
     config.glossEnPath = settings.value("gloss_en_path", config.glossEnPath).toString();
