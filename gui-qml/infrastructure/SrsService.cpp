@@ -1,36 +1,42 @@
 #include "SrsService.h"
 #include "../app/Configuration.h"
-#include <cstring>
+
 #include <string>
-#include <sstream>
-#include <cstdlib>
-
-SrsService::SrsService(uint32_t dictSize, Configuration *config)
-    : m_dictSize(dictSize), m_config(config),
-      m_lastPoppedIndex(-1), m_lastPoppedEntryId(0)
-{
-    srs_init(&m_profile, dictSize);
-    srs_heapify(&m_profile);
-
-    // generate a decent device id if config doesn't provide one
-    uint64_t device_id =  config->deviceId;
-    srs_sync_init(&m_sync, device_id, dictSize);
-}
-
-SrsService::~SrsService()
-{
-    // persist/cleanup sync structures if needed
-    srs_sync_free(&m_sync);
-    srs_free(&m_profile);
-}
 
 static inline std::string snapshot_path_for(const char* base)
 {
     return std::string(base) + ".sync.snap";
 }
+
 static inline std::string log_path_for(const char* base)
 {
     return std::string(base) + ".sync.log";
+}
+
+SrsService::SrsService(uint32_t dictSize, Configuration *config)
+    : m_dictSize(dictSize), m_config(config)
+{
+    srs_init(&m_profile, dictSize);
+    srs_heapify(&m_profile);
+
+    uint64_t device_id = config->deviceId;
+    srs_sync_init(&m_sync, device_id, dictSize);
+
+    m_idIndex.resize(dictSize, -1);
+}
+
+SrsService::~SrsService()
+{
+    srs_sync_free(&m_sync);
+    srs_free(&m_profile);
+}
+
+int32_t SrsService::indexOf(uint32_t entryId) const
+{
+    if (entryId >= m_idIndex.size())
+        return -1;
+
+    return m_idIndex[entryId];
 }
 
 bool SrsService::load(const char *path)
@@ -38,15 +44,21 @@ bool SrsService::load(const char *path)
     bool ok = srs_load(&m_profile, path, m_dictSize);
     if (!ok) return false;
 
-    // try to load sync snapshot + log (non-fatal)
     std::string snap = snapshot_path_for(path);
     std::string log = log_path_for(path);
 
     (void)srs_snapshot_load(&m_sync, snap.c_str());
     (void)srs_log_load(&m_sync, log.c_str());
 
-    // rebuild sync derived state
     srs_sync_rebuild(&m_sync);
+
+    // rebuild index
+    for (uint32_t i = 0; i < m_profile.count; ++i)
+    {
+        uint32_t id = m_profile.items[i].entry_id;
+        if (id < m_idIndex.size())
+            m_idIndex[id] = i;
+    }
 
     return true;
 }
@@ -64,64 +76,76 @@ bool SrsService::save(const char *path)
 
 bool SrsService::add(uint32_t entryId)
 {
-    return srs_add(&m_profile, entryId, srs_now());
+    if (!srs_add(&m_profile, entryId, srs_now()))
+        return false;
+
+    for (uint32_t i = 0; i < m_profile.count; ++i)
+    {
+        if (m_profile.items[i].entry_id == entryId)
+        {
+            m_idIndex[entryId] = i;
+            break;
+        }
+    }
+
+    return true;
 }
 
 bool SrsService::remove(uint32_t entryId)
 {
-    return srs_remove(&m_profile, entryId);
+    int32_t idx = indexOf(entryId);
+    if (idx < 0)
+        return false;
+
+    bool ok = srs_remove(&m_profile, entryId);
+
+    if (ok)
+        m_idIndex[entryId] = -1;
+
+    return ok;
 }
 
 bool SrsService::contains(uint32_t entryId) const
 {
-    return srs_contains(&m_profile, entryId);
+    return indexOf(entryId) >= 0;
 }
 
 std::optional<srs_review> SrsService::nextDue()
 {
+    uint64_t now = srs_now();
+
+    srs_item *it = srs_peek_due(&m_profile, now);
+
+    if (!it)
+        return std::nullopt;
+
     srs_review out;
-    if (srs_pop_due_review(&m_profile, &out)) {
-        // store index so answer() can requeue efficiently
-        m_lastPoppedIndex = (int32_t)out.index;
-        m_lastPoppedEntryId = out.item ? out.item->entry_id : 0;
-        return out;
-    }
-    m_lastPoppedIndex = -1;
-    return std::nullopt;
+    out.item = it;
+    out.index = (uint32_t)(it - m_profile.items); // calcular índice
+
+    return out;
 }
 
 void SrsService::answer(uint32_t entryId, srs_quality q)
 {
     uint64_t now = srs_now();
 
-    // If user is answering the last popped card, requeue using its index
-    if (m_lastPoppedIndex >= 0 &&
-        m_profile.items[m_lastPoppedIndex].entry_id == entryId)
-    {
-        srs_answer(&m_profile.items[m_lastPoppedIndex], q, now);
-        srs_requeue(&m_profile, (uint32_t)m_lastPoppedIndex);
-        m_lastPoppedIndex = -1;
-    }
-    else
-    {
-        // fallback: find by entry id and apply answer, then rebuild heap
-        for (uint32_t i = 0; i < m_profile.count; ++i)
-        {
-            if (m_profile.items[i].entry_id == entryId)
-            {
-                srs_answer(&m_profile.items[i], q, now);
-                srs_heapify(&m_profile);
-                break;
-            }
-        }
-    }
+    int32_t idx = indexOf(entryId);
+    if (idx < 0)
+        return;
 
-    // register local review in sync state (timestamp = now)
+    srs_item *item = &m_profile.items[idx];
+
+    srs_answer(item, q, now);
+
+    // heap reorder
+    srs_heapify(&m_profile);
+
     srs_sync_add_local_review(&m_sync, entryId, (uint8_t)q, now);
 
-    // persist log
     std::string log = log_path_for(m_config->srsPath.toStdString().c_str());
-    (void)srs_log_append(log.c_str(), &m_sync.events[m_sync.event_count - 1]);
+    (void)srs_log_append(log.c_str(),
+                         &m_sync.events[m_sync.event_count - 1]);
 }
 
 uint32_t SrsService::dueCount(uint64_t now) const
@@ -133,28 +157,42 @@ uint32_t SrsService::dueCount(uint64_t now) const
 
 uint32_t SrsService::learningCount() const
 {
-    // count by state: LEARNING or RELEARNING are "learning"
     uint32_t c = 0;
-    for (uint32_t i = 0; i < m_profile.count; ++i) {
+
+    for (uint32_t i = 0; i < m_profile.count; ++i)
+    {
         uint8_t s = m_profile.items[i].state;
-        if (s == SRS_STATE_LEARNING || s == SRS_STATE_RELEARNING)
+
+        if (s == SRS_STATE_LEARNING ||
+            s == SRS_STATE_RELEARNING)
             ++c;
     }
+
     return c;
 }
 
 uint32_t SrsService::newCount() const
 {
     uint32_t c = 0;
+
     for (uint32_t i = 0; i < m_profile.count; ++i)
-        if (m_profile.items[i].state == SRS_STATE_NEW) ++c;
+    {
+        if (m_profile.items[i].state == SRS_STATE_NEW)
+            ++c;
+    }
+
     return c;
 }
 
 uint32_t SrsService::lapsedCount() const
 {
     uint32_t c = 0;
+
     for (uint32_t i = 0; i < m_profile.count; ++i)
-        if (m_profile.items[i].lapses > 0) ++c;
+    {
+        if (m_profile.items[i].lapses > 0)
+            ++c;
+    }
+
     return c;
 }

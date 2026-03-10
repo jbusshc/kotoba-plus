@@ -11,7 +11,7 @@ struct Configuration {
     QString appVersion = "1.0";
     bool autoSave = true;
     bool checkUpdates = false;
-    uint64_t deviceId = 0;
+    int deviceId = 0;
 
     // UI
     QString theme = "dark";

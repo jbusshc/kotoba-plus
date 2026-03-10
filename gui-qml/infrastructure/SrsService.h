@@ -1,14 +1,14 @@
 #pragma once
 #include <optional>
 #include <cstdint>
-#include <ctime>
+#include <vector>
 
 extern "C" {
 #include <srs.h>
 #include <srs_sync.h>
 }
 
-class Configuration; // forward declaration
+class Configuration;
 
 class SrsService
 {
@@ -23,7 +23,7 @@ public:
     bool remove(uint32_t entryId);
     bool contains(uint32_t entryId) const;
 
-    std::optional<srs_review> nextDue(); // returns review (srs_review) if present
+    std::optional<srs_review> nextDue();
     void answer(uint32_t entryId, srs_quality q);
 
     uint32_t dueCount(uint64_t now) const;
@@ -32,14 +32,15 @@ public:
     uint32_t lapsedCount() const;
 
 private:
+
+    int32_t indexOf(uint32_t entryId) const;
+
     srs_profile m_profile;
     uint32_t m_dictSize;
-    Configuration* m_config;
+    Configuration *m_config;
 
-    // sync state
     SrsSync m_sync;
 
-    // last popped review index (used to efficiently requeue without full heapify)
-    int32_t m_lastPoppedIndex;
-    uint32_t m_lastPoppedEntryId;
+    // entryId → index in heap
+    std::vector<int32_t> m_idIndex;
 };

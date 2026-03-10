@@ -39,6 +39,15 @@ void SrsViewModel::startSession()
 
 void SrsViewModel::loadNext()
 {
+
+    if (m_service->dueCount(srs_now()) == 0) // guard
+    {
+        m_hasCard = false;
+        emit noMoreCards();
+        updateStats();
+        return;
+    }
+
     auto maybe = m_service->nextDue();
 
     if (!maybe.has_value())
@@ -125,6 +134,13 @@ void SrsViewModel::handleAnswer(int quality)
     m_service->answer(m_currentEntryId, q);
 
     updateStats();
+
+    if (m_service->dueCount(srs_now()) == 0)
+    {
+        m_hasCard = false;
+        emit noMoreCards();
+        return;
+    }
 
     loadNext();
 }
