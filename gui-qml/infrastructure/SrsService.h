@@ -42,13 +42,23 @@ private:
 
     SrsSync m_sync;
 
-    // entryId → index in heap
     std::vector<int32_t> m_idIndex;
 
-    // path used when loading / saving profile (base path without extensions)
     std::string m_profilePath;
 
-    // helper
     void rebuildIndex();
     void applySyncEventsToProfile();
+
+    // ---- scheduler helpers ----
+
+    void rebuildNewQueue();
+    void resetDailyLimits();
+
+    std::vector<uint32_t> m_newQueue;
+    std::vector<uint32_t> m_dueQueue;
+
+    uint32_t m_newToday = 0;
+    uint32_t m_newLimit = 20;
+
+    uint64_t m_dayStamp = 0;
 };

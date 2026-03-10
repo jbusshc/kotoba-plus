@@ -10,8 +10,6 @@ extern "C" {
 #include <time.h>
 #include <stdio.h>
 
-#include "kotoba.h"
-
 /* ─────────────────────────────────────────────────────────────
  *  Time model
  * ───────────────────────────────────────────────────────────── */
@@ -84,26 +82,50 @@ typedef struct {
     uint8_t reserved;
 } srs_item;
 
-/* ───────────────────────────────────────────────────────────── */
-
-typedef struct {
-    srs_item *item;
-    uint32_t index;
-} srs_review;
-
-/* ───────────────────────────────────────────────────────────── */
+/* ─────────────────────────────────────────────────────────────
+ *  In-memory profile with queues
+ * ───────────────────────────────────────────────────────────── */
 
 typedef struct {
     srs_item *items;
     uint32_t  count;
     uint32_t  capacity;
 
-    uint32_t *heap;
-    uint32_t  heap_size;
+    /* review heap (min-heap by due) - stores indices into items[] */
+    uint32_t *review_heap;
+    uint32_t  review_heap_size;
 
+    /* learning heap (min-heap by due) */
+    uint32_t *learning_heap;
+    uint32_t  learning_heap_size;
+
+    /* new queue (randomized stack) - stores indices into items[] */
+    uint32_t *new_stack;
+    uint32_t  new_stack_size;
+
+    /* bitmap of membership (same meaning as before) */
     uint8_t  *bitmap;
     uint32_t  dict_size;
+
+    /* daily limits / counters (in-memory, not persisted to keep format) */
+    uint32_t daily_new_limit;
+    uint32_t daily_review_limit;
+
+    uint64_t current_logical_day;
+    uint32_t new_served_today;
+    uint32_t review_served_today;
+
+    /* learning steps (configurable) */
+    uint64_t *learning_steps;
+    uint32_t  learning_steps_count;
 } srs_profile;
+
+/* ───────────────────────────────────────────────────────────── */
+
+typedef struct {
+    srs_item *item;
+    uint32_t index;
+} srs_review;
 
 /* ───────────────────────────────────────────────────────────── */
 
@@ -123,12 +145,15 @@ typedef struct {
  *  API
  * ───────────────────────────────────────────────────────────── */
 
-KOTOBA_API bool srs_init(srs_profile *p, uint32_t dict_size);
-KOTOBA_API void srs_free(srs_profile *p);
+/* lifecycle */
+bool srs_init(srs_profile *p, uint32_t dict_size);
+void srs_free(srs_profile *p);
 
-KOTOBA_API bool srs_load(srs_profile *p, const char *path, uint32_t dict_size);
-KOTOBA_API bool srs_save(const srs_profile *p, const char *path);
+/* persistence (keeps old on-disk layout: dict_size, count, items, bitmap) */
+bool srs_load(srs_profile *p, const char *path, uint32_t dict_size);
+bool srs_save(const srs_profile *p, const char *path);
 
+/* membership */
 static inline bool srs_contains(const srs_profile *p, uint32_t entry_id)
 {
     if (entry_id >= p->dict_size)
@@ -137,20 +162,30 @@ static inline bool srs_contains(const srs_profile *p, uint32_t entry_id)
     return (p->bitmap[entry_id >> 3] >> (entry_id & 7)) & 1;
 }
 
-KOTOBA_API bool srs_add(srs_profile *p, uint32_t entry_id, uint64_t now);
-KOTOBA_API bool srs_remove(srs_profile *p, uint32_t entry_id);
-KOTOBA_API void srs_heapify(srs_profile *p);
+/* add/remove */
+bool srs_add(srs_profile *p, uint32_t entry_id, uint64_t now);
+bool srs_remove(srs_profile *p, uint32_t entry_id);
 
-KOTOBA_API srs_item *srs_peek_due(srs_profile *p, uint64_t now);
-KOTOBA_API bool srs_pop_due_review(srs_profile *p, srs_review *out);
-KOTOBA_API void srs_requeue(srs_profile *p, uint32_t index);
+/* queue management */
+void srs_heapify(srs_profile *p);
 
-KOTOBA_API void srs_answer(srs_item *item, srs_quality q, uint64_t now);
+/* peek/pop next due according to policy:
+   priority: learning_due -> review_due -> new (if limits allow) */
+srs_item *srs_peek_due(srs_profile *p, uint64_t now);
+bool srs_pop_due_review(srs_profile *p, srs_review *out);
 
-KOTOBA_API void srs_compute_stats(const srs_profile *p,
-                                  uint64_t now,
-                                  srs_stats *out);
+/* requeue after update (push item index into appropriate queue) */
+void srs_requeue(srs_profile *p, uint32_t index);
 
+/* answer a card (updates fields, but doesn't requeue automatically) */
+void srs_answer(srs_item *item, srs_quality q, uint64_t now);
+
+/* stats */
+void srs_compute_stats(const srs_profile *p,
+                       uint64_t now,
+                       srs_stats *out);
+
+/* helpers */
 static inline uint64_t srs_now(void)
 {
     time_t t = time(NULL);
@@ -162,6 +197,22 @@ static inline bool srs_is_mature(const srs_item *it)
     return it->state == SRS_STATE_REVIEW && it->interval >= 21;
 }
 
+/* ---------------------------
+   Configuration helpers
+   --------------------------- */
+
+/* set daily limits (0 = unlimited) */
+void srs_set_limits(srs_profile *p,
+                    uint32_t daily_new_limit,
+                    uint32_t daily_review_limit);
+
+/* set learning steps (array copy) */
+bool srs_set_learning_steps(srs_profile *p,
+                            const uint64_t *steps,
+                            uint32_t count);
+
+/* random seed control (optional) */
+void srs_seed_random(uint32_t seed);
 
 #ifdef __cplusplus
 } /* extern "C" */

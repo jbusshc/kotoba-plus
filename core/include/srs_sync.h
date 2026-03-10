@@ -27,9 +27,9 @@ typedef struct {
     uint64_t timestamp;
 
     uint32_t card_id;
-
     uint8_t  type;   // SrsEventType
     uint8_t  grade;  // solo válido si type == REVIEW
+    uint8_t  padding[2]; // para alineación
 
 } SrsEvent;
 /* =========================

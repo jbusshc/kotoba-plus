@@ -73,26 +73,28 @@ static void srs_ensure_capacity(SrsSync *s)
    SRS LWW
    ========================================================= */
 
-static void srs_recalculate(CardState *card, uint8_t grade)
+static void srs_recalculate(CardState *card,
+                            uint8_t grade,
+                            uint64_t timestamp)
 {
     if (card->ease < 1.3f)
         card->ease = 2.5f;
 
-    
     if (grade < 2) {
         card->interval = 1;
     } else {
         if (card->interval == 0)
             card->interval = 1;
         else
-            card->interval = (int)(card->interval * card->ease);
+            card->interval = (int)((float)card->interval * card->ease + 0.5f);
     }
 
     card->ease += 0.1f * (grade - 2);
+
     if (card->ease < 1.3f)
         card->ease = 1.3f;
 
-    card->due = time(NULL) + card->interval * 86400;
+    card->due = timestamp + (uint64_t)card->interval * 86400ULL;
 }
 
 static void srs_apply_event_lww(CardState *card,
@@ -114,7 +116,7 @@ static void srs_apply_event_lww(CardState *card,
     card->last_device    = ev->device_id;
     card->last_seq       = ev->seq;
 
-    srs_recalculate(card, ev->grade);
+    srs_recalculate(card, ev->grade, ev->timestamp);
 }
 
 /* =========================================================
@@ -146,6 +148,8 @@ void srs_sync_add_local_review(SrsSync *s,
                                uint8_t grade,
                                uint64_t timestamp)
 {
+    if (card_id >= s->card_count)
+        return;
     srs_ensure_capacity(s);
 
     SrsEvent *ev = &s->events[s->event_count++];
@@ -221,20 +225,23 @@ void srs_sync_merge_events(SrsSync *s,
 
 void srs_sync_rebuild(SrsSync *s)
 {
-    memset(s->cards, 0,
-        sizeof(CardState) * s->card_count);
+    if (!s) return;
+
+    /* Reset estado de cartas */
+    memset(s->cards, 0, sizeof(CardState) * s->card_count);
 
     for (size_t i = 0; i < s->card_count; i++) {
-        s->cards[i].ease = 2.5f;   // valor base SM-2 clásico
+        s->cards[i].ease = 2.5f;
         s->cards[i].interval = 0;
     }
 
-
+    /* Ordenar eventos para replay determinístico */
     qsort(s->events,
           s->event_count,
           sizeof(SrsEvent),
           srs_event_compare);
 
+    /* Reaplicar eventos */
     for (size_t i = 0; i < s->event_count; i++) {
 
         SrsEvent *ev = &s->events[i];
@@ -242,13 +249,41 @@ void srs_sync_rebuild(SrsSync *s)
         if (ev->card_id >= s->card_count)
             continue;
 
-        /* Sólo aplicamos como LWW si el evento es review (0..5).
-           ADD/REMOVE son manejados fuera (pues afectan existencia en profile).
-        */
-        if (ev->grade <= 5) {
-            srs_apply_event_lww(
-                &s->cards[ev->card_id],
-                ev);
+        CardState *card = &s->cards[ev->card_id];
+
+        /* REMOVE */
+        if (ev->type == SRS_EVENT_REMOVE) {
+
+            memset(card, 0, sizeof(CardState));
+            card->ease = 2.5f;
+
+            card->last_timestamp = ev->timestamp;
+            card->last_device    = ev->device_id;
+            card->last_seq       = ev->seq;
+
+            continue;
+        }
+
+        /* ADD */
+        if (ev->type == SRS_EVENT_ADD) {
+
+            if (ev->timestamp >= card->last_timestamp) {
+                card->last_timestamp = ev->timestamp;
+                card->last_device    = ev->device_id;
+                card->last_seq       = ev->seq;
+
+                card->interval = 0;
+                card->ease = 2.5f;
+                card->due = 0;
+            }
+
+            continue;
+        }
+
+        /* REVIEW */
+        if (ev->type == SRS_EVENT_REVIEW && ev->grade <= 5) {
+
+            srs_apply_event_lww(card, ev);
         }
     }
 

@@ -1,6 +1,8 @@
 #include "SrsService.h"
 #include "../app/Configuration.h"
 
+#include <algorithm>
+#include <random>
 #include <string>
 
 static inline std::string snapshot_path_for(const char* base)
@@ -13,6 +15,11 @@ static inline std::string log_path_for(const char* base)
     return std::string(base) + ".sync.log";
 }
 
+static uint64_t today_stamp()
+{
+    return srs_now() / 86400;
+}
+
 SrsService::SrsService(uint32_t dictSize, Configuration *config)
     : m_dictSize(dictSize), m_config(config)
 {
@@ -23,6 +30,8 @@ SrsService::SrsService(uint32_t dictSize, Configuration *config)
     srs_sync_init(&m_sync, device_id, dictSize);
 
     m_idIndex.resize(dictSize, -1);
+
+    m_dayStamp = today_stamp();
 }
 
 SrsService::~SrsService()
@@ -39,14 +48,40 @@ int32_t SrsService::indexOf(uint32_t entryId) const
     return m_idIndex[entryId];
 }
 
+void SrsService::resetDailyLimits()
+{
+    uint64_t today = today_stamp();
+
+    if (today != m_dayStamp)
+    {
+        m_dayStamp = today;
+        m_newToday = 0;
+        rebuildNewQueue();
+    }
+}
+
+void SrsService::rebuildNewQueue()
+{
+    m_newQueue.clear();
+
+    for (uint32_t i = 0; i < m_profile.count; ++i)
+    {
+        if (m_profile.items[i].state == SRS_STATE_NEW)
+            m_newQueue.push_back(m_profile.items[i].entry_id);
+    }
+
+    static std::mt19937 rng(std::random_device{}());
+    std::shuffle(m_newQueue.begin(), m_newQueue.end(), rng);
+}
+
 void SrsService::rebuildIndex()
 {
-    // reset
     std::fill(m_idIndex.begin(), m_idIndex.end(), -1);
 
     for (uint32_t i = 0; i < m_profile.count; ++i)
     {
         uint32_t id = m_profile.items[i].entry_id;
+
         if (id < m_idIndex.size())
             m_idIndex[id] = i;
     }
@@ -54,9 +89,6 @@ void SrsService::rebuildIndex()
 
 void SrsService::applySyncEventsToProfile()
 {
-    // el profile viene cargado desde profile.bin
-    // los eventos ya vienen ordenados por srs_sync_rebuild()
-
     rebuildIndex();
 
     for (size_t i = 0; i < m_sync.event_count; ++i)
@@ -76,9 +108,7 @@ void SrsService::applySyncEventsToProfile()
             if (!srs_contains(&m_profile, id))
             {
                 if (srs_add(&m_profile, id, ev->timestamp))
-                {
                     m_idIndex[id] = m_profile.count - 1;
-                }
             }
             break;
         }
@@ -101,7 +131,6 @@ void SrsService::applySyncEventsToProfile()
                 break;
 
             srs_item *it = &m_profile.items[idx];
-
             srs_answer(it, (srs_quality)ev->grade, ev->timestamp);
 
             break;
@@ -112,11 +141,20 @@ void SrsService::applySyncEventsToProfile()
         }
     }
 
-    // solo ahora reconstruimos el heap completo
     srs_heapify(&m_profile);
-
-    // reconstruir índice final
     rebuildIndex();
+    rebuildNewQueue();
+
+    m_dueQueue.clear();
+
+    for (uint32_t i = 0; i < m_profile.count; ++i)
+    {
+        if (m_profile.items[i].state == SRS_STATE_LEARNING ||
+            m_profile.items[i].state == SRS_STATE_RELEARNING)
+        {
+            m_dueQueue.push_back(m_profile.items[i].entry_id);
+        }
+    }
 }
 
 bool SrsService::load(const char *path)
@@ -124,7 +162,6 @@ bool SrsService::load(const char *path)
     bool ok = srs_load(&m_profile, path, m_dictSize);
     if (!ok) return false;
 
-    // store base path for later saves/log appends
     m_profilePath = path;
 
     std::string snap = snapshot_path_for(path);
@@ -133,14 +170,10 @@ bool SrsService::load(const char *path)
     (void)srs_snapshot_load(&m_sync, snap.c_str());
     (void)srs_log_load(&m_sync, log.c_str());
 
-    // rebuild sync LWW state and sort events
     srs_sync_rebuild(&m_sync);
 
-    // apply events (adds/removes/reviews) to profile so profile reflects snapshot+log
     applySyncEventsToProfile();
 
-    // if we want to persist the applied changes into the profile file (optional),
-    // perform a save so next load doesn't need to replay same events
     (void)srs_save(&m_profile, path);
 
     return true;
@@ -166,23 +199,21 @@ bool SrsService::add(uint32_t entryId)
 
     m_idIndex[entryId] = m_profile.count - 1;
 
-    // append an ADD event to sync and persist to log (append-only)
     srs_sync_add_local_add(&m_sync, entryId, now);
 
-    // Base path seguro (evita c_str() de temporales)
     std::string base = m_profilePath.empty() ? m_config->srsPath.toStdString() : m_profilePath;
     std::string log = log_path_for(base.c_str());
 
     (void)srs_log_append(log.c_str(),
                          &m_sync.events[m_sync.event_count - 1]);
 
-    // rebuild index because heap may have changed
     srs_heapify(&m_profile);
     rebuildIndex();
 
+    m_newQueue.push_back(entryId);
+
     return true;
 }
-
 
 bool SrsService::remove(uint32_t entryId)
 {
@@ -194,17 +225,18 @@ bool SrsService::remove(uint32_t entryId)
 
     if (ok)
     {
-        // append REMOVE event
         uint64_t now = srs_now();
+
         srs_sync_add_local_remove(&m_sync, entryId, now);
 
         std::string base = m_profilePath.empty() ? m_config->srsPath.toStdString() : m_profilePath;
         std::string log = log_path_for(base.c_str());
+
         (void)srs_log_append(log.c_str(),
                              &m_sync.events[m_sync.event_count - 1]);
 
-        // rebuild index after heapify done inside srs_remove
         rebuildIndex();
+        rebuildNewQueue();
     }
 
     return ok;
@@ -217,16 +249,56 @@ bool SrsService::contains(uint32_t entryId) const
 
 std::optional<srs_review> SrsService::nextDue()
 {
+    resetDailyLimits();
+
     uint64_t now = srs_now();
 
-    srs_item *it = srs_peek_due(&m_profile, now);
+    // 1️⃣ revisar si hay cartas de learning/relearning pendientes
+    while (!m_dueQueue.empty())
+    {
+        uint32_t id = m_dueQueue.back();
+        m_dueQueue.pop_back();
 
-    if (!it)
+        int32_t idx = indexOf(id);
+        if (idx >= 0)
+        {
+            srs_item *item = &m_profile.items[idx];
+            // solo se mantiene si sigue siendo learning/relearning
+            if (item->state == SRS_STATE_LEARNING ||
+                item->state == SRS_STATE_RELEARNING)
+            {
+                srs_review out;
+                out.item = item;
+                out.index = idx;
+                return out;
+            }
+        }
+    }
+
+    // 2️⃣ revisar cartas con repaso debido (review)
+    srs_item *it = srs_peek_due(&m_profile, now);
+    if (it)
+    {
+        srs_review out;
+        out.item = it;
+        out.index = (uint32_t)(it - m_profile.items);
+        return out;
+    }
+
+    // 3️⃣ revisar cartas nuevas
+    if (m_newToday >= m_newLimit || m_newQueue.empty())
+        return std::nullopt;
+
+    uint32_t id = m_newQueue.back();
+    m_newQueue.pop_back();
+
+    int32_t idx = indexOf(id);
+    if (idx < 0)
         return std::nullopt;
 
     srs_review out;
-    out.item = it;
-    out.index = (uint32_t)(it - m_profile.items); // calcular índice
+    out.item = &m_profile.items[idx];
+    out.index = idx;
 
     return out;
 }
@@ -236,14 +308,22 @@ void SrsService::answer(uint32_t entryId, srs_quality q)
     uint64_t now = srs_now();
 
     int32_t idx = indexOf(entryId);
-    if (idx < 0)
-        return;
+    if (idx < 0) return;
 
     srs_item *item = &m_profile.items[idx];
 
+    if (item->state == SRS_STATE_NEW)
+        m_newToday++;
+
     srs_answer(item, q, now);
 
-    // heap reorder -> srs_heapify invalida índices, así que reconstruimos
+    // 🔹 si la carta sigue siendo learning/relearning, reingresarla a la sesión
+    if (item->state == SRS_STATE_LEARNING ||
+        item->state == SRS_STATE_RELEARNING)
+    {
+        m_dueQueue.push_back(entryId);
+    }
+
     srs_heapify(&m_profile);
     rebuildIndex();
 
@@ -251,6 +331,7 @@ void SrsService::answer(uint32_t entryId, srs_quality q)
 
     std::string base = m_profilePath.empty() ? m_config->srsPath.toStdString() : m_profilePath;
     std::string log = log_path_for(base.c_str());
+
     (void)srs_log_append(log.c_str(),
                          &m_sync.events[m_sync.event_count - 1]);
 }
@@ -280,15 +361,7 @@ uint32_t SrsService::learningCount() const
 
 uint32_t SrsService::newCount() const
 {
-    uint32_t c = 0;
-
-    for (uint32_t i = 0; i < m_profile.count; ++i)
-    {
-        if (m_profile.items[i].state == SRS_STATE_NEW)
-            ++c;
-    }
-
-    return c;
+    return m_newQueue.size();
 }
 
 uint32_t SrsService::lapsedCount() const
