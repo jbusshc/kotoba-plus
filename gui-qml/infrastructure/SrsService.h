@@ -2,6 +2,7 @@
 #include <optional>
 #include <cstdint>
 #include <vector>
+#include <string>
 
 extern "C" {
 #include <srs.h>
@@ -43,4 +44,11 @@ private:
 
     // entryId → index in heap
     std::vector<int32_t> m_idIndex;
+
+    // path used when loading / saving profile (base path without extensions)
+    std::string m_profilePath;
+
+    // helper
+    void rebuildIndex();
+    void applySyncEventsToProfile();
 };

@@ -9,8 +9,8 @@
 
 static int srs_event_compare(const void *a, const void *b)
 {
-    const SrsEvent *ea = a;
-    const SrsEvent *eb = b;
+    const SrsEvent *ea = (const SrsEvent*)a;
+    const SrsEvent *eb = (const SrsEvent*)b;
 
     if (ea->timestamp != eb->timestamp)
         return (ea->timestamp < eb->timestamp) ? -1 : 1;
@@ -151,10 +151,52 @@ void srs_sync_add_local_review(SrsSync *s,
     SrsEvent *ev = &s->events[s->event_count++];
 
     ev->device_id = s->device_id;
-    ev->seq       = s->next_seq++;
+    ev->seq = s->next_seq++;
     ev->timestamp = timestamp;
-    ev->card_id   = card_id;
-    ev->grade     = grade;
+    ev->card_id = card_id;
+
+    ev->type = SRS_EVENT_REVIEW;
+    ev->grade = grade;
+}
+
+/* Nuevas funciones: ADD / REMOVE locales.
+   Usan valores especiales de 'grade' para distinguirse:
+     250 -> ADD
+     251 -> REMOVE
+   (no cambiamos la estructura SrsEvent para mantener compatibilidad)
+*/
+void srs_sync_add_local_add(SrsSync *s,
+                            uint32_t card_id,
+                            uint64_t timestamp)
+{
+    srs_ensure_capacity(s);
+
+    SrsEvent *ev = &s->events[s->event_count++];
+
+    ev->device_id = s->device_id;
+    ev->seq = s->next_seq++;
+    ev->timestamp = timestamp;
+    ev->card_id = card_id;
+
+    ev->type = SRS_EVENT_ADD;
+    ev->grade = 0;
+}
+
+void srs_sync_add_local_remove(SrsSync *s,
+                               uint32_t card_id,
+                               uint64_t timestamp)
+{
+    srs_ensure_capacity(s);
+
+    SrsEvent *ev = &s->events[s->event_count++];
+
+    ev->device_id = s->device_id;
+    ev->seq = s->next_seq++;
+    ev->timestamp = timestamp;
+    ev->card_id = card_id;
+
+    ev->type = SRS_EVENT_REMOVE;
+    ev->grade = 0;
 }
 
 void srs_sync_merge_events(SrsSync *s,
@@ -200,9 +242,14 @@ void srs_sync_rebuild(SrsSync *s)
         if (ev->card_id >= s->card_count)
             continue;
 
-        srs_apply_event_lww(
-            &s->cards[ev->card_id],
-            ev);
+        /* Sólo aplicamos como LWW si el evento es review (0..5).
+           ADD/REMOVE son manejados fuera (pues afectan existencia en profile).
+        */
+        if (ev->grade <= 5) {
+            srs_apply_event_lww(
+                &s->cards[ev->card_id],
+                ev);
+        }
     }
 
     s->next_seq = srs_compute_next_seq(s);
@@ -291,11 +338,12 @@ int srs_log_save(SrsSync *s, const char *path)
     FILE *f = fopen(path, "wb");
     if (!f) return 0;
 
-    fwrite(&s->event_count, sizeof(size_t), 1, f);
-    fwrite(s->events,
-           sizeof(SrsEvent),
-           s->event_count,
-           f);
+    if (s->event_count > 0) {
+        if (fwrite(s->events, sizeof(SrsEvent), s->event_count, f) != s->event_count) {
+            fclose(f);
+            return 0;
+        }
+    }
 
     fclose(f);
     return 1;
@@ -310,41 +358,51 @@ int srs_log_load(SrsSync *s, const char *path)
     long size = ftell(f);
     rewind(f);
 
-    size_t count = size / sizeof(SrsEvent);
+    if (size == 0) { fclose(f); return 1; }
 
-    s->event_capacity = count;
-    s->event_count = count;
+    /* Caso 1: archivo es un stream puro de SrsEvent (nuevo formato esperado) */
+    if (size % sizeof(SrsEvent) == 0) {
+        size_t count = size / sizeof(SrsEvent);
+        SrsEvent *tmp = realloc(s->events, count * sizeof(SrsEvent));
+        if (!tmp) { fclose(f); return 0; }
+        s->events = tmp;
+        s->event_capacity = count;
+        s->event_count = count;
 
-    SrsEvent *tmp = realloc(s->events,
-                            count * sizeof(SrsEvent));
+        if (fread(s->events, sizeof(SrsEvent), count, f) != count) { fclose(f); return 0; }
 
-    if (!tmp) {
         fclose(f);
-        return 0;
+        s->next_seq = srs_compute_next_seq(s);
+        return 1;
     }
 
-    s->events = tmp;
+    /* Caso 2: formato antiguo con encabezado count (compatibilidad) */
+    if (size > (long)sizeof(size_t)) {
+        size_t count = 0;
+        if (fread(&count, sizeof(size_t), 1, f) != 1) { fclose(f); return 0; }
+        if ((long)(size - sizeof(size_t)) != (long)count * (long)sizeof(SrsEvent)) { fclose(f); return 0; }
 
-    fread(s->events,
-          sizeof(SrsEvent),
-          count,
-          f);
+        SrsEvent *tmp = realloc(s->events, count * sizeof(SrsEvent));
+        if (!tmp) { fclose(f); return 0; }
+        s->events = tmp;
+        s->event_capacity = count;
+        s->event_count = count;
+
+        if (fread(s->events, sizeof(SrsEvent), count, f) != count) { fclose(f); return 0; }
+
+        fclose(f);
+        s->next_seq = srs_compute_next_seq(s);
+        return 1;
+    }
 
     fclose(f);
-
-    s->next_seq = srs_compute_next_seq(s);
-
-    return 1;
+    return 0;
 }
 
 int srs_log_truncate(const char *path)
 {
     FILE *f = fopen(path, "wb");
     if (!f) return 0;
-
-    size_t zero = 0;
-    fwrite(&zero, sizeof(size_t), 1, f);
-
     fclose(f);
     return 1;
 }
@@ -373,12 +431,16 @@ int srs_compact(SrsSync *s,
     return 1;
 }
 
+
 int srs_log_append(const char *path, const SrsEvent *e)
 {
     FILE *f = fopen(path, "ab");
     if (!f) return 0;
 
-    fwrite(e, sizeof(SrsEvent), 1, f);
+    if (fwrite(e, sizeof(SrsEvent), 1, f) != 1) {
+        fclose(f);
+        return 0;
+    }
 
     fclose(f);
     return 1;

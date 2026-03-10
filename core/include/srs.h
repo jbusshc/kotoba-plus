@@ -131,6 +131,9 @@ KOTOBA_API bool srs_save(const srs_profile *p, const char *path);
 
 static inline bool srs_contains(const srs_profile *p, uint32_t entry_id)
 {
+    if (entry_id >= p->dict_size)
+        return false;
+
     return (p->bitmap[entry_id >> 3] >> (entry_id & 7)) & 1;
 }
 

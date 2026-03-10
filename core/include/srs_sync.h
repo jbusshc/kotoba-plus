@@ -14,15 +14,24 @@ extern "C" {
    EVENTO
    ========================= */
 
+typedef enum {
+    SRS_EVENT_ADD = 0,
+    SRS_EVENT_REVIEW = 1,
+    SRS_EVENT_REMOVE = 2
+} SrsEventType;
+
 typedef struct {
+
     uint64_t device_id;
     uint64_t seq;
     uint64_t timestamp;
 
     uint32_t card_id;
-    uint8_t  grade;
-} SrsEvent;
 
+    uint8_t  type;   // SrsEventType
+    uint8_t  grade;  // solo válido si type == REVIEW
+
+} SrsEvent;
 /* =========================
    ESTADO DE CARTA (LWW)
    ========================= */
@@ -66,6 +75,15 @@ void srs_sync_free(SrsSync *s);
 void srs_sync_add_local_review(SrsSync *s,
                                uint32_t card_id,
                                uint8_t grade,
+                               uint64_t timestamp);
+
+/* Nuevo: eventos add/remove locales */
+void srs_sync_add_local_add(SrsSync *s,
+                            uint32_t card_id,
+                            uint64_t timestamp);
+
+void srs_sync_add_local_remove(SrsSync *s,
+                               uint32_t card_id,
                                uint64_t timestamp);
 
 void srs_sync_merge_events(SrsSync *s,

@@ -3,17 +3,20 @@
 
 #include <QObject>
 #include <QString>
+#include <stdint.h>
+
 #include "../../core/include/types.h"
 
 struct Configuration {
-    // General
+
+    // ---------------- General ----------------
     bool firstRun = true;
     QString appVersion = "1.0";
     bool autoSave = true;
     bool checkUpdates = false;
-    int deviceId = 0;
+    uint64_t deviceId = 0;
 
-    // UI
+    // ---------------- UI ----------------
     QString theme = "dark";
     QString primaryColor = "indigo";
     QString accentColor = "blue";
@@ -23,13 +26,13 @@ struct Configuration {
     bool compactMode = false;
     bool animations = true;
 
-    // Language
+    // ---------------- Language ----------------
     QString interface = "en";
     QString glossLanguages = "en";
     QString fallbackLanguage = "en";
     bool languages[KOTOBA_LANG_COUNT] = {false};
 
-    // Dictionary
+    // ---------------- Dictionary ----------------
     int maxResults = 50;
     bool searchOnTyping = true;
     int searchDelayMs = 150;
@@ -37,7 +40,7 @@ struct Configuration {
     bool highlightMatches = true;
     int searchPageSize = 20;
 
-    // SRS
+    // ---------------- SRS ----------------
     int dailyNewCards = 20;
     int dailyReviewLimit = 200;
     QString learningSteps = "1,10";
@@ -47,24 +50,28 @@ struct Configuration {
     bool buryRelated = true;
     bool showAnswerAuto = false;
 
-    // Audio
+    // ---------------- Audio ----------------
     bool audioEnabled = false;
     int volume = 80;
     bool autoPlay = false;
 
-    // Data
+    // ---------------- Data ----------------
     QString dictPath = "dict.kotoba";
     QString dictIndexPath = "dict.kotoba.idx";
-    QString srsPath = "profile.dat";
+    QString srsPath = "profile.srs";
     QString jpPath = "jp.invx";
     QString glossEnPath = "gloss_en.invx";
     QString glossEsPath = "gloss_es.invx";
+
     bool backupEnabled = true;
     int backupIntervalDays = 7;
 };
 
-// QObject wrapper para exponerlo a QML
-class ConfigWrapper : public QObject {
+
+// ---------------- QML wrapper ----------------
+
+class ConfigWrapper : public QObject
+{
     Q_OBJECT
 
     Q_PROPERTY(QString theme READ theme WRITE setTheme NOTIFY themeChanged)
@@ -74,12 +81,12 @@ class ConfigWrapper : public QObject {
     Q_PROPERTY(int fontSize READ fontSize WRITE setFontSize NOTIFY fontSizeChanged)
     Q_PROPERTY(bool compactMode READ compactMode WRITE setCompactMode NOTIFY compactModeChanged)
     Q_PROPERTY(bool animations READ animations WRITE setAnimations NOTIFY animationsChanged)
-    // puedes agregar más propiedades si QML las necesita
 
 public:
-    explicit ConfigWrapper(QObject* parent = nullptr) : QObject(parent) {}
+    explicit ConfigWrapper(QObject *parent = nullptr) : QObject(parent) {}
 
-    // getters
+    Configuration m_config;
+
     QString theme() const { return m_config.theme; }
     QString primaryColor() const { return m_config.primaryColor; }
     QString accentColor() const { return m_config.accentColor; }
@@ -88,16 +95,57 @@ public:
     bool compactMode() const { return m_config.compactMode; }
     bool animations() const { return m_config.animations; }
 
-    // setters
-    void setTheme(const QString &v) { if (v != m_config.theme) { m_config.theme = v; emit themeChanged(); } }
-    void setPrimaryColor(const QString &v) { if (v != m_config.primaryColor) { m_config.primaryColor = v; emit primaryColorChanged(); } }
-    void setAccentColor(const QString &v) { if (v != m_config.accentColor) { m_config.accentColor = v; emit accentColorChanged(); } }
-    void setShowFurigana(bool v) { if (v != m_config.showFurigana) { m_config.showFurigana = v; emit showFuriganaChanged(); } }
-    void setFontSize(int v) { if (v != m_config.fontSize) { m_config.fontSize = v; emit fontSizeChanged(); } }
-    void setCompactMode(bool v) { if (v != m_config.compactMode) { m_config.compactMode = v; emit compactModeChanged(); } }
-    void setAnimations(bool v) { if (v != m_config.animations) { m_config.animations = v; emit animationsChanged(); } }
+    void setTheme(const QString &v) {
+        if (v != m_config.theme) {
+            m_config.theme = v;
+            emit themeChanged();
+        }
+    }
+
+    void setPrimaryColor(const QString &v) {
+        if (v != m_config.primaryColor) {
+            m_config.primaryColor = v;
+            emit primaryColorChanged();
+        }
+    }
+
+    void setAccentColor(const QString &v) {
+        if (v != m_config.accentColor) {
+            m_config.accentColor = v;
+            emit accentColorChanged();
+        }
+    }
+
+    void setShowFurigana(bool v) {
+        if (v != m_config.showFurigana) {
+            m_config.showFurigana = v;
+            emit showFuriganaChanged();
+        }
+    }
+
+    void setFontSize(int v) {
+        if (v != m_config.fontSize) {
+            m_config.fontSize = v;
+            emit fontSizeChanged();
+        }
+    }
+
+    void setCompactMode(bool v) {
+        if (v != m_config.compactMode) {
+            m_config.compactMode = v;
+            emit compactModeChanged();
+        }
+    }
+
+    void setAnimations(bool v) {
+        if (v != m_config.animations) {
+            m_config.animations = v;
+            emit animationsChanged();
+        }
+    }
 
 signals:
+
     void themeChanged();
     void primaryColorChanged();
     void accentColorChanged();
@@ -105,18 +153,13 @@ signals:
     void fontSizeChanged();
     void compactModeChanged();
     void animationsChanged();
-
-public:
-    Configuration m_config;
 };
 
-void saveConfiguration(const Configuration &config, const QString &filePath);
-inline static void _saveConfiguration(Configuration &config, const QString &filePath, uint64_t deviceId) {
-    config.deviceId = deviceId;
-    saveConfiguration(config, filePath);
-}
-bool loadConfiguration(Configuration &config, const QString &filePath);
 
+// API
+
+void saveConfiguration(const Configuration &config, const QString &filePath);
+bool loadConfiguration(Configuration &config, const QString &filePath);
 uint64_t generateDeviceId();
 
-#endif // CONFIGURATION_H
+#endif

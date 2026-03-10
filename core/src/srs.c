@@ -95,13 +95,25 @@ bool srs_init(srs_profile *p, uint32_t dict_size)
     memset(p, 0, sizeof(*p));
 
     p->dict_size = dict_size;
-    p->bitmap = calloc((dict_size + 7)/8, 1);
+    uint32_t bitmap_size = (dict_size + 7) / 8;
+    p->bitmap = calloc(bitmap_size, 1);
 
     p->capacity = 1024;
     p->items = malloc(p->capacity * sizeof(srs_item));
     p->heap  = malloc(p->capacity * sizeof(uint32_t));
 
-    return p->bitmap && p->items && p->heap;
+    if (!p->bitmap || !p->items || !p->heap) {
+        free(p->bitmap);
+        free(p->items);
+        free(p->heap);
+        memset(p, 0, sizeof(*p));
+        return false;
+    }
+
+    p->count = 0;
+    p->heap_size = 0;
+
+    return true;
 }
 
 void srs_free(srs_profile *p)

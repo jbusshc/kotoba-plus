@@ -85,15 +85,22 @@ int main(int argc, char **argv)
     engine.load(QUrl(QStringLiteral("qrc:/qml/Main.qml")));
     if (engine.rootObjects().isEmpty()) return -1;
 
-    const char* srsProfilePath = configWrapper.m_config.srsPath.toStdString().c_str();
+    std::string srsProfilePath = configWrapper.m_config.srsPath.toStdString();
+
     printf("Loading SRS profile...\n");
-    srsSvc->load(srsProfilePath);
+    srsSvc->load(srsProfilePath.c_str());
 
      // Ensure profile is saved on exit (persisting any sync state)
     QObject::connect(&app, &QCoreApplication::aboutToQuit, [&]() {
+
         printf("Saving SRS profile...\n");
-        srsSvc->save(srsProfilePath);
-        saveConfiguration(configWrapper.m_config, configPath.toStdString().c_str());
+
+        srsSvc->save(srsProfilePath.c_str());
+
+        saveConfiguration(
+            configWrapper.m_config,
+            configPath
+        );
     });
     
     int result = app.exec();
