@@ -23,6 +23,7 @@ void saveConfiguration(const Configuration &config, const QString &filePath)
     settings.setValue("app_version", config.appVersion);
     settings.setValue("auto_save", config.autoSave);
     settings.setValue("check_updates", config.checkUpdates);
+    settings.setValue("device_id", config.deviceId);
     settings.endGroup();
     
     // UI
@@ -104,6 +105,7 @@ bool loadConfiguration(Configuration &config, const QString &filePath)
     config.appVersion = settings.value("app_version", config.appVersion).toString();
     config.autoSave = settings.value("auto_save", config.autoSave).toBool();
     config.checkUpdates = settings.value("check_updates", config.checkUpdates).toBool();
+    config.deviceId = settings.value("device_id", config.deviceId).toULongLong();
     settings.endGroup();
 
     // ----------------- UI -----------------
