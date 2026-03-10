@@ -4,7 +4,14 @@
 #include <QStandardPaths>
 #include <QDir>
 
+#include <random>
 
+uint64_t generateDeviceId() {
+    std::random_device rd;
+    std::mt19937_64 gen(rd());
+    std::uniform_int_distribution<uint64_t> dis;
+    return dis(gen);
+}
 
 void saveConfiguration(const Configuration &config, const QString &filePath)
 {
@@ -71,7 +78,6 @@ void saveConfiguration(const Configuration &config, const QString &filePath)
     settings.setValue("dict_path", config.dictPath);
     settings.setValue("dict_index_path", config.dictIndexPath);
     settings.setValue("srs_path", config.srsPath);
-    settings.setValue("srs_event_log_path", config.srsEventLogPath);
     settings.setValue("jp_path", config.jpPath);
     settings.setValue("gloss_en_path", config.glossEnPath);
     settings.setValue("gloss_es_path", config.glossEsPath);
@@ -85,7 +91,8 @@ void saveConfiguration(const Configuration &config, const QString &filePath)
 bool loadConfiguration(Configuration &config, const QString &filePath)
 {
     if (!QFile::exists(filePath)) {
-        saveConfiguration(config, filePath);
+        uint64_t deviceId = generateDeviceId();
+        _saveConfiguration(config, filePath, deviceId);
         return false;
     }
 
@@ -152,7 +159,6 @@ bool loadConfiguration(Configuration &config, const QString &filePath)
     config.dictPath = settings.value("dict_path", config.dictPath).toString();
     config.dictIndexPath = settings.value("dict_index_path", config.dictIndexPath).toString();
     config.srsPath = settings.value("srs_path", config.srsPath).toString();
-    config.srsEventLogPath = settings.value("srs_event_log_path", config.srsEventLogPath).toString();
     config.jpPath = settings.value("jp_path", config.jpPath).toString();
     config.glossEnPath = settings.value("gloss_en_path", config.glossEnPath).toString();
     config.glossEsPath = settings.value("gloss_es_path", config.glossEsPath).toString();

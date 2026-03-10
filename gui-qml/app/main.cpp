@@ -7,6 +7,7 @@
 #include <QDebug>
 #include <QQuickStyle>
 
+
 #include "../infrastructure/DictionaryRepository.h"
 #include "../infrastructure/SearchService.h"
 #include "../infrastructure/SrsService.h"

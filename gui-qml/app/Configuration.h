@@ -11,6 +11,7 @@ struct Configuration {
     QString appVersion = "1.0";
     bool autoSave = true;
     bool checkUpdates = false;
+    uint64_t deviceId = 0;
 
     // UI
     QString theme = "dark";
@@ -110,6 +111,12 @@ public:
 };
 
 void saveConfiguration(const Configuration &config, const QString &filePath);
+inline static void _saveConfiguration(Configuration &config, const QString &filePath, uint64_t deviceId) {
+    config.deviceId = deviceId;
+    saveConfiguration(config, filePath);
+}
 bool loadConfiguration(Configuration &config, const QString &filePath);
+
+uint64_t generateDeviceId();
 
 #endif // CONFIGURATION_H

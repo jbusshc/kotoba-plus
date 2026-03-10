@@ -1,4 +1,5 @@
 #include "SrsService.h"
+#include "../app/Configuration.h"
 #include <cstring>
 #include <string>
 #include <sstream>
@@ -12,7 +13,7 @@ SrsService::SrsService(uint32_t dictSize, Configuration *config)
     srs_heapify(&m_profile);
 
     // generate a decent device id if config doesn't provide one
-    uint64_t device_id = ((uint64_t)time(nullptr) << 32) ^ (uint64_t)(uintptr_t)this;
+    uint64_t device_id =  config->deviceId;
     srs_sync_init(&m_sync, device_id, dictSize);
 }
 
