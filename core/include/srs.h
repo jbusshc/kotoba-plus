@@ -9,6 +9,7 @@ extern "C" {
 #include <stdbool.h>
 #include <time.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 /* ─────────────────────────────────────────────────────────────
  *  Time model
@@ -30,6 +31,15 @@ static inline uint64_t srs_day_to_unix(uint64_t day)
 {
     return day * SRS_DAY + SRS_DAY_START_OFFSET;
 }
+
+/* ─────────────────────────────────────────────────────────────
+ *  Spaced Repetition Algorithm, adapted from SM-2 and FSRS
+ * ───────────────────────────────────────────────────────────── */
+
+typedef enum {
+    SRS_MODE_SM2 = 0,
+    SRS_MODE_FSRS
+} srs_mode;
 
 /* ─────────────────────────────────────────────────────────────
  *  Review quality
@@ -80,6 +90,12 @@ typedef struct {
     uint8_t step;
     uint8_t flags;
     uint8_t reserved;
+
+
+    // Campos FSRS
+    float retention;    // retención percibida (0..1)
+    float stability;   // cuánto tiempo el item “sobrevive”
+    float difficulty;  // dificultad percibida (0.3–1.8 típicamente)
 } srs_item;
 
 /* ─────────────────────────────────────────────────────────────
@@ -123,6 +139,8 @@ typedef struct {
     /* learning steps (configurable) */
     uint64_t *learning_steps;
     uint32_t  learning_steps_count;
+
+    srs_mode mode;
 } srs_profile;
 
 /* ───────────────────────────────────────────────────────────── */
@@ -145,6 +163,13 @@ typedef struct {
     uint32_t leech_count;
     uint32_t due_now;
 } srs_stats;
+
+static inline void srs_set_mode(srs_profile *p, srs_mode mode)
+{
+    if (!p) return;
+    p->mode = mode;
+}
+
 
 /* ─────────────────────────────────────────────────────────────
  *  API
@@ -184,6 +209,9 @@ void srs_requeue(srs_profile *p, uint32_t index);
 
 /* answer a card (updates fields, but doesn't requeue automatically) */
 void srs_answer(srs_profile *p, srs_item *it, srs_quality q, uint64_t now);
+// Implementaciones internas separadas
+void srs_answer_sm2(srs_profile *p, srs_item *it, srs_quality q, uint64_t now);
+void srs_answer_fsrs(srs_profile *p, srs_item *it, srs_quality q, uint64_t now);
 /* stats */
 void srs_compute_stats(const srs_profile *p,
                        uint64_t now,
