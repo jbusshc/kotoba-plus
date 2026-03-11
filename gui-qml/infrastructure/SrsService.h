@@ -14,6 +14,7 @@ class Configuration;
 class SrsService
 {
 public:
+
     explicit SrsService(uint32_t dictSize, Configuration *config);
     ~SrsService();
 
@@ -35,30 +36,16 @@ public:
 private:
 
     int32_t indexOf(uint32_t entryId) const;
+    void rebuildIndex();
+    void applySyncEventsToProfile();
 
     srs_profile m_profile;
+    SrsSync m_sync;
+
     uint32_t m_dictSize;
     Configuration *m_config;
-
-    SrsSync m_sync;
 
     std::vector<int32_t> m_idIndex;
 
     std::string m_profilePath;
-
-    void rebuildIndex();
-    void applySyncEventsToProfile();
-
-    // ---- scheduler helpers ----
-
-    void rebuildNewQueue();
-    void resetDailyLimits();
-
-    std::vector<uint32_t> m_newQueue;
-    std::vector<uint32_t> m_dueQueue;
-
-    uint32_t m_newToday = 0;
-    uint32_t m_newLimit = 20;
-
-    uint64_t m_dayStamp = 0;
 };

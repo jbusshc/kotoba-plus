@@ -118,6 +118,23 @@ static void heap_push(srs_profile *p, uint32_t *heap, uint32_t *heap_size, uint3
     heap_sift_up(p, heap, *heap_size, *heap_size - 1);
 }
 
+/* wrappers específicos para cada cola */
+
+static inline void heap_push_learning(srs_profile *p, uint32_t idx)
+{
+    heap_push(p, p->learning_heap, &p->learning_heap_size, idx);
+}
+
+static inline void heap_push_review(srs_profile *p, uint32_t idx)
+{
+    heap_push(p, p->review_heap, &p->review_heap_size, idx);
+}
+
+static inline void heap_push_day_learning(srs_profile *p, uint32_t idx)
+{
+    heap_push(p, p->day_learning_heap, &p->day_learning_heap_size, idx);
+}
+
 
 static uint32_t heap_pop(srs_profile *p, uint32_t *heap, uint32_t *heap_size)
 {
@@ -147,6 +164,23 @@ static void shuffle_new_stack(srs_profile *p)
     }
 }
 
+static void srs_promote_day_learning(srs_profile *p, uint64_t now)
+{
+    uint64_t today = srs_today(now);
+
+    while (p->day_learning_heap_size > 0)
+    {
+        uint32_t idx = p->day_learning_heap[0];
+        srs_item *it = &p->items[idx];
+
+        if (srs_today(it->due) > today)
+            break;
+
+        heap_pop(p, p->day_learning_heap, &p->day_learning_heap_size);
+        heap_push_learning(p, idx);
+    }
+}
+
 /* ───────────────────────────────────────────── */
 /* Lifecycle */
 
@@ -165,7 +199,8 @@ bool srs_init(srs_profile *p, uint32_t dict_size)
     p->review_heap = malloc(p->capacity * sizeof(uint32_t));
     p->learning_heap = malloc(p->capacity * sizeof(uint32_t));
     p->new_stack = malloc(p->capacity * sizeof(uint32_t));
-    if (!p->items || !p->review_heap || !p->learning_heap || !p->new_stack) {
+    p->day_learning_heap = malloc(sizeof(uint32_t) * p->capacity);
+    if (!p->items || !p->review_heap || !p->learning_heap || !p->new_stack || !p->day_learning_heap) {
         srs_free(p);
         return false;
     }
@@ -174,6 +209,7 @@ bool srs_init(srs_profile *p, uint32_t dict_size)
     p->review_heap_size = 0;
     p->learning_heap_size = 0;
     p->new_stack_size = 0;
+    p->day_learning_heap_size = 0;
 
     /* defaults */
     p->daily_new_limit = 20;
@@ -182,6 +218,10 @@ bool srs_init(srs_profile *p, uint32_t dict_size)
     /* copy default learning steps */
     p->learning_steps_count = DEFAULT_LEARNING_STEPS_COUNT;
     p->learning_steps = malloc(sizeof(uint64_t) * p->learning_steps_count);
+    if (!p->learning_steps) {
+        srs_free(p);
+        return false;
+    }
     for (uint32_t i = 0; i < p->learning_steps_count; ++i)
         p->learning_steps[i] = default_learning_steps[i];
 
@@ -201,6 +241,7 @@ void srs_free(srs_profile *p)
     free(p->new_stack);
     free(p->bitmap);
     free(p->learning_steps);
+    free(p->day_learning_heap);
     memset(p, 0, sizeof(*p));
 }
 
@@ -217,7 +258,6 @@ static void srs_update_day_if_needed(srs_profile *p, uint64_t now)
         p->review_served_today = 0;
     }
 }
-
 /* Rebuild queues (from items[]). Called after load or structural changes. */
 void srs_heapify(srs_profile *p)
 {
@@ -234,42 +274,44 @@ void srs_heapify(srs_profile *p)
         p->review_heap = realloc(p->review_heap, sizeof(uint32_t) * p->count);
         p->learning_heap = realloc(p->learning_heap, sizeof(uint32_t) * p->count);
         p->new_stack = realloc(p->new_stack, sizeof(uint32_t) * p->count);
+        p->day_learning_heap = realloc(p->day_learning_heap, sizeof(uint32_t) * p->count);
+
         p->capacity = p->count;
     }
 
-    p->review_heap_size = 0;
     p->learning_heap_size = 0;
+    p->day_learning_heap_size = 0;
+    p->review_heap_size = 0;
     p->new_stack_size = 0;
+
+    uint64_t now = srs_now();
+    uint64_t today = srs_today(now);
 
     for (uint32_t i = 0; i < p->count; ++i) {
         uint32_t id = p->items[i].entry_id;
         if (id < p->dict_size)
             bitmap_set(p->bitmap, id);
 
-        if (p->items[i].state == SRS_STATE_LEARNING ||
-            p->items[i].state == SRS_STATE_RELEARNING)
-        {
-            p->learning_heap[p->learning_heap_size++] = i;
-        }
-        else if (p->items[i].state == SRS_STATE_REVIEW)
-        {
-            p->review_heap[p->review_heap_size++] = i;
-        }
-        else if (p->items[i].state == SRS_STATE_NEW)
-        {
+        srs_item *it = &p->items[i];
+
+        if (it->state == SRS_STATE_NEW) {
             p->new_stack[p->new_stack_size++] = i;
+            continue;
         }
-    }
 
-    /* heapify learning & review bottom-up (min-heap by due) */
-    if (p->learning_heap_size > 0) {
-        for (int32_t i = (int32_t)p->learning_heap_size / 2 - 1; i >= 0; --i)
-            heap_sift_down(p, p->learning_heap, p->learning_heap_size, (uint32_t)i);
-    }
+        if (it->state == SRS_STATE_LEARNING || it->state == SRS_STATE_RELEARNING) {
+            uint64_t due_day = srs_today(it->due);
+            if (due_day == today) {
+                heap_push_learning(p, i);
+            } else {
+                heap_push_day_learning(p, i);
+            }
+            continue;
+        }
 
-    if (p->review_heap_size > 0) {
-        for (int32_t i = (int32_t)p->review_heap_size / 2 - 1; i >= 0; --i)
-            heap_sift_down(p, p->review_heap, p->review_heap_size, (uint32_t)i);
+        if (it->state == SRS_STATE_REVIEW) {
+            heap_push_review(p, i);
+        }
     }
 
     /* shuffle new_stack for randomized new order */
@@ -286,6 +328,7 @@ srs_item *srs_peek_due(srs_profile *p, uint64_t now)
     if (!p) return NULL;
 
     srs_update_day_if_needed(p, now);
+    srs_promote_day_learning(p, now);
 
     /* learning due first */
     if (p->learning_heap_size > 0) {
@@ -322,7 +365,7 @@ bool srs_pop_due_review(srs_profile *p, srs_review *out)
 
     uint64_t now = srs_now();
     srs_update_day_if_needed(p, now);
-
+    srs_promote_day_learning(p, now);
     /* learning due first */
     if (p->learning_heap_size > 0) {
         uint32_t idx = p->learning_heap[0];
@@ -396,13 +439,13 @@ void srs_requeue(srs_profile *p, uint32_t index)
         }
     }
 
-    else if (it->state == SRS_STATE_LEARNING || it->state == SRS_STATE_RELEARNING) {
-        heap_push(p, p->learning_heap, &p->learning_heap_size, index);
-    }
+else if (it->state == SRS_STATE_LEARNING || it->state == SRS_STATE_RELEARNING) {
+    heap_push_learning(p, index);
+}
 
-    else if (it->state == SRS_STATE_REVIEW) {
-        heap_push(p, p->review_heap, &p->review_heap_size, index);
-    }
+else if (it->state == SRS_STATE_REVIEW) {
+    heap_push_review(p, index);
+}
 }
 
 /* ───────────────────────────────────────────── */
@@ -420,8 +463,7 @@ static uint32_t apply_interval_fuzz(uint32_t interval_days)
     if (out == 0) out = 1;
     return out;
 }
-void srs_answer(srs_item *it, srs_quality q, uint64_t now)
-{
+void srs_answer(srs_profile *p, srs_item *it, srs_quality q, uint64_t now){
     if (!it) return;
     if (it->state == SRS_STATE_SUSPENDED)
         return;
@@ -430,7 +472,7 @@ void srs_answer(srs_item *it, srs_quality q, uint64_t now)
     if (it->state == SRS_STATE_NEW) {
         it->state = SRS_STATE_LEARNING;
         it->step = 0;
-        it->due = now + default_learning_steps[0];
+        it->due = now + p->learning_steps[0];
         return;
     }
 
@@ -439,14 +481,14 @@ void srs_answer(srs_item *it, srs_quality q, uint64_t now)
     {
         if (q < SRS_HARD) {
             it->step = 0;
-            it->due = now + default_learning_steps[0];
+            it->due = now + p->learning_steps[0];
             return;
         }
 
         it->step++;
 
-        if (it->step < DEFAULT_LEARNING_STEPS_COUNT) {
-            it->due = now + default_learning_steps[it->step];
+        if (it->step < p->learning_steps_count) {
+            it->due = now + p->learning_steps[it->step];
             return;
         }
 
@@ -484,7 +526,7 @@ void srs_answer(srs_item *it, srs_quality q, uint64_t now)
             if (it->ease > 1.3f)
                 it->ease -= 0.2f;
 
-            it->due = now + default_learning_steps[0];
+            it->due = now + p->learning_steps[0];
             return;
         }
 
@@ -515,8 +557,8 @@ void srs_answer(srs_item *it, srs_quality q, uint64_t now)
             it->interval = next;
         }
 
-        if (it->ease < 1.3f)
-            it->ease = 1.3f;
+        if (it->ease < 1.3f) it->ease = 1.3f;
+        if (it->ease > 2.5f) it->ease = 2.5f;
 
         it->reps++;
 
@@ -544,6 +586,7 @@ bool srs_add(srs_profile *p, uint32_t entry_id, uint64_t now)
         p->review_heap = realloc(p->review_heap, p->capacity * sizeof(uint32_t));
         p->learning_heap = realloc(p->learning_heap, p->capacity * sizeof(uint32_t));
         p->new_stack = realloc(p->new_stack, p->capacity * sizeof(uint32_t));
+        p->day_learning_heap = realloc(p->day_learning_heap, p->capacity * sizeof(uint32_t));
     }
 
     uint32_t idx = p->count++;
@@ -658,6 +701,7 @@ bool srs_load(srs_profile *p, const char *path, uint32_t expected_dict_size)
             p->review_heap = realloc(p->review_heap, sizeof(uint32_t) * count);
             p->learning_heap = realloc(p->learning_heap, sizeof(uint32_t) * count);
             p->new_stack = realloc(p->new_stack, sizeof(uint32_t) * count);
+            p->day_learning_heap = realloc(p->day_learning_heap, sizeof(uint32_t) * count);
             p->capacity = count;
         }
 
@@ -754,3 +798,4 @@ bool srs_set_learning_steps(srs_profile *p,
 
     return true;
 }
+

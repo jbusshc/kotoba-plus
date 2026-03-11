@@ -99,6 +99,11 @@ typedef struct {
     uint32_t *learning_heap;
     uint32_t  learning_heap_size;
 
+    /* interday learning heap (due by day) */
+    uint32_t *day_learning_heap;
+    uint32_t  day_learning_heap_size;
+
+
     /* new queue (randomized stack) - stores indices into items[] */
     uint32_t *new_stack;
     uint32_t  new_stack_size;
@@ -178,8 +183,7 @@ bool srs_pop_due_review(srs_profile *p, srs_review *out);
 void srs_requeue(srs_profile *p, uint32_t index);
 
 /* answer a card (updates fields, but doesn't requeue automatically) */
-void srs_answer(srs_item *item, srs_quality q, uint64_t now);
-
+void srs_answer(srs_profile *p, srs_item *it, srs_quality q, uint64_t now);
 /* stats */
 void srs_compute_stats(const srs_profile *p,
                        uint64_t now,
@@ -213,6 +217,8 @@ bool srs_set_learning_steps(srs_profile *p,
 
 /* random seed control (optional) */
 void srs_seed_random(uint32_t seed);
+
+bool srs_pop_due_review(srs_profile *p, srs_review *out);
 
 #ifdef __cplusplus
 } /* extern "C" */
