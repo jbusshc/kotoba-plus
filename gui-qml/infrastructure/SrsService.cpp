@@ -27,7 +27,7 @@ SrsService::SrsService(uint32_t dictSize, Configuration *config)
     m_idIndex.resize(dictSize, -1);
 
     // default to FSRS for now
-    setButtonMode(SRS_BUTTONS_6);
+    srs_set_mode(&m_profile, SRS_MODE_FSRS);
 }
 
 SrsService::~SrsService()
@@ -301,9 +301,9 @@ uint32_t SrsService::lapsedCount() const
     return c;
 }
 
-void SrsService::setButtonMode(srs_button_mode mode)
+void SrsService::setMode(srs_mode mode)
 {
-    srs_set_button_mode(&m_profile, mode);
+    m_profile.mode = mode;
 }
 
 std::string SrsService::predictInterval(uint32_t entryId, srs_quality q)
@@ -322,8 +322,3 @@ std::string SrsService::predictInterval(uint32_t entryId, srs_quality q)
 
     return std::string(buf);
 }
-
-int SrsService::sixButtons() const
-{
-    return (int)m_profile.button_mode == SRS_BUTTONS_6;
-}   

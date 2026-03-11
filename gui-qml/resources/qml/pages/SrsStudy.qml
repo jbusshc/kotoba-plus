@@ -73,15 +73,15 @@ Page {
             }
         }
 
-        // Bloque de 4 botones
         RowLayout {
             Layout.alignment: Qt.AlignHCenter
             spacing: 12
-            visible: page.answerShown && srsVM.sixButtons === 0
+            visible: page.answerShown
 
             Button {
                 text: "Again\n" + srsVM.againInterval
                 Material.background: "#D32F2F"
+
                 onClicked: {
                     page.answerShown = false
                     if (srsVM) srsVM.answerAgain()
@@ -91,6 +91,7 @@ Page {
             Button {
                 text: "Hard\n" + srsVM.hardInterval
                 Material.background: "#F57C00"
+
                 onClicked: {
                     page.answerShown = false
                     if (srsVM) srsVM.answerHard()
@@ -100,6 +101,7 @@ Page {
             Button {
                 text: "Good\n" + srsVM.goodInterval
                 Material.background: "#388E3C"
+
                 onClicked: {
                     page.answerShown = false
                     if (srsVM) srsVM.answerGood()
@@ -109,6 +111,7 @@ Page {
             Button {
                 text: "Easy\n" + srsVM.easyInterval
                 Material.background: "#1976D2"
+
                 onClicked: {
                     page.answerShown = false
                     if (srsVM) srsVM.answerEasy()
@@ -116,62 +119,6 @@ Page {
             }
         }
 
-        // Bloque de 6 botones (solo se muestra si srsVM.sixButtons != 0)
-        RowLayout {
-            Layout.alignment: Qt.AlignHCenter
-            spacing: 12
-            visible: page.answerShown && srsVM.sixButtons !== 0
-
-            // Pon aquí tus 6 botones
-            Button {
-                text: "Again\n" + srsVM.againInterval
-                Material.background: "#D32F2F"
-                onClicked: {
-                    page.answerShown = false
-                    if (srsVM) srsVM.answerAgain()
-                }
-            }
-            Button {
-                text: "Barely\n" + srsVM.barelyInterval
-                Material.background: "#E64A19"
-                onClicked: {
-                    page.answerShown = false
-                    if (srsVM) srsVM.answerBarely()
-                }
-            }
-            Button {
-                text: "Hard\n" + srsVM.hardInterval
-                Material.background: "#F57C00"
-                onClicked: {
-                    page.answerShown = false
-                    if (srsVM) srsVM.answerHard()
-                }
-            }
-            Button {
-                text: "Good\n" + srsVM.goodInterval
-                Material.background: "#388E3C"
-                onClicked: {
-                    page.answerShown = false
-                    if (srsVM) srsVM.answerGood()
-                }
-            }
-            Button {
-                text: "Easy\n" + srsVM.easyInterval
-                Material.background: "#1976D2"
-                onClicked: {
-                    page.answerShown = false
-                    if (srsVM) srsVM.answerEasy()
-                }
-            }
-            Button {
-                text: "Perfect\n" + srsVM.perfectInterval
-                Material.background: "#7B1FA2"
-                onClicked: {
-                    page.answerShown = false
-                    if (srsVM) srsVM.answerPerfect()
-                }
-            }
-        }
         Item { Layout.fillHeight: true }
     }
 

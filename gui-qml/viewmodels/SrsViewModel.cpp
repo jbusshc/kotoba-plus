@@ -39,15 +39,6 @@ void SrsViewModel::startSession()
 
 void SrsViewModel::loadNext()
 {
-
-    if (m_service->dueCount(srs_now()) == 0) // guard
-    {
-        m_hasCard = false;
-        emit noMoreCards();
-        updateStats();
-        return;
-    }
-
     auto maybe = m_service->nextDue();
 
     if (!maybe.has_value())
@@ -69,13 +60,15 @@ void SrsViewModel::loadNext()
         return;
     }
 
-    m_hasCard = true;
+    m_hasCard        = true;
     m_currentEntryId = it->entry_id;
+    m_currentIndex   = rev.index;
 
     const entry_bin *entry = kotoba_dict_get_entry(m_dict, m_currentEntryId);
 
     if (!entry)
     {
+        m_hasCard = false;
         emit noMoreCards();
         return;
     }
@@ -114,7 +107,7 @@ void SrsViewModel::loadNext()
     m_currentMeaning = meaning;
 
     emit showQuestion(word);
-    emit statsChanged();
+    updateStats(); // dispara los *Interval() con la carta ya cargada
 }
 
 void SrsViewModel::revealAnswer()
@@ -130,27 +123,16 @@ void SrsViewModel::handleAnswer(int quality)
     if (!m_hasCard)
         return;
 
-    srs_quality q = (srs_quality)quality;
+    m_service->answer(m_currentEntryId, (srs_quality)quality);
 
-    m_service->answer(m_currentEntryId, q);
-
-    updateStats();
-
-    if (m_service->dueCount(srs_now()) == 0)
-    {
-        m_hasCard = false;
-        emit noMoreCards();
-        return;
-    }
-
-    loadNext();
+    loadNext(); // updateStats() se llama dentro de loadNext()
 }
 
-void SrsViewModel::answerAgain() { handleAnswer(SRS_AGAIN); }
-void SrsViewModel::answerHard() { handleAnswer(SRS_HARD); }
-void SrsViewModel::answerGood() { handleAnswer(SRS_GOOD); }
-void SrsViewModel::answerEasy() { handleAnswer(SRS_EASY); }
-void SrsViewModel::answerBarely() { handleAnswer(SRS_BARELY); }
+void SrsViewModel::answerAgain()   { handleAnswer(SRS_AGAIN);   }
+void SrsViewModel::answerBarely()  { handleAnswer(SRS_BARELY);  }
+void SrsViewModel::answerHard()    { handleAnswer(SRS_HARD);    }
+void SrsViewModel::answerGood()    { handleAnswer(SRS_GOOD);    }
+void SrsViewModel::answerEasy()    { handleAnswer(SRS_EASY);    }
 void SrsViewModel::answerPerfect() { handleAnswer(SRS_PERFECT); }
 
 bool SrsViewModel::contains(int entryId)
@@ -161,9 +143,7 @@ bool SrsViewModel::contains(int entryId)
 void SrsViewModel::add(int entryId)
 {
     if (m_service->add(entryId))
-    {
         updateStats();
-    }
 }
 
 QString SrsViewModel::againInterval() const

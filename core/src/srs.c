@@ -665,9 +665,15 @@ void srs_answer(srs_profile *p, srs_item *it,
               it->reps, it->stability, it->difficulty);
 
     for (int qual = 0; qual <= 5; ++qual) {
-        LOG_DEBUG("  predict q%d → %.2f days\n", qual,
-            (double)(srs_predict_due(p, it, (srs_quality)qual, now) - now)
-            / 86400.0);
+        uint64_t due_q = srs_predict_due(p, it, (srs_quality)qual, now);
+        uint64_t delta = (due_q > now) ? (due_q - now) : 0;
+        if (delta < FSRS_DAY_SEC)
+            LOG_DEBUG("  predict q%d → %llus (%.4fd)\n", qual,
+                      (unsigned long long)delta,
+                      (double)delta / 86400.0);
+        else
+            LOG_DEBUG("  predict q%d → %.2fd\n", qual,
+                      (double)delta / 86400.0);
     }
 
     srs_answer_fsrs(p, it, q_eff, now);
@@ -913,6 +919,7 @@ uint64_t srs_predict_due(const srs_profile *p,
                          uint64_t           now)
 {
     if (!p || !it) return now;
+    if (!p->learning_steps || p->learning_steps_count == 0) return now;
 
     srs_item tmp = *it;
 
@@ -921,5 +928,7 @@ uint64_t srs_predict_due(const srs_profile *p,
                         : q;
 
     srs_answer_fsrs_nofuzz((srs_profile *)p, &tmp, q_eff, now);
-    return tmp.due;
+
+    /* Guardia: nunca devolver menos que now */
+    return (tmp.due >= now) ? tmp.due : now;
 }
