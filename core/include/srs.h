@@ -77,6 +77,10 @@ typedef enum {
 
 typedef struct {
     uint32_t entry_id;
+    uint8_t state;
+    uint8_t step;
+    uint8_t flags;
+    uint8_t reserved;
 
     uint64_t due;      /* unix seconds */
 
@@ -85,17 +89,9 @@ typedef struct {
     uint16_t lapses;
 
     float ease;
-
-    uint8_t state;
-    uint8_t step;
-    uint8_t flags;
-    uint8_t reserved;
-
-
-    // Campos FSRS
-    float retention;    // retención percibida (0..1)
-    float stability;   // cuánto tiempo el item “sobrevive”
-    float difficulty;  // dificultad percibida (0.3–1.8 típicamente)
+    float retention;    /* retención percibida (0..1) */
+    float stability;    /* cuánto tiempo el item "sobrevive" */
+    float difficulty;   /* dificultad percibida (0.3–1.8 típicamente) */
 } srs_item;
 
 /* ─────────────────────────────────────────────────────────────
