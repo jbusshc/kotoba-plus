@@ -25,6 +25,9 @@ SrsService::SrsService(uint32_t dictSize, Configuration *config)
     srs_sync_init(&m_sync, device_id, dictSize);
 
     m_idIndex.resize(dictSize, -1);
+
+    // default to FSRS for now
+    setButtonMode(SRS_BUTTONS_6);
 }
 
 SrsService::~SrsService()
@@ -297,3 +300,30 @@ uint32_t SrsService::lapsedCount() const
 
     return c;
 }
+
+void SrsService::setButtonMode(srs_button_mode mode)
+{
+    srs_set_button_mode(&m_profile, mode);
+}
+
+std::string SrsService::predictInterval(uint32_t entryId, srs_quality q)
+{
+    int32_t idx = indexOf(entryId);
+    if (idx < 0) return "";
+
+    srs_item *it = &m_profile.items[idx];
+
+    uint64_t now = srs_now();
+
+    uint64_t due = srs_predict_due(&m_profile, it, q, now);
+
+    char buf[32];
+    srs_format_interval(due - now, buf, sizeof(buf));
+
+    return std::string(buf);
+}
+
+int SrsService::sixButtons() const
+{
+    return (int)m_profile.button_mode == SRS_BUTTONS_6;
+}   

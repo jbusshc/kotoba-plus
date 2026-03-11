@@ -42,7 +42,7 @@ int main(int argc, char **argv)
     // create app-data folder
     QString appData = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
     if (appData.isEmpty()) appData = QDir::currentPath();
-    QDir().mkpath(appData);
+    //QDir().mkpath(appData); // No need to create: AppDataLocation
 
     QString base = QCoreApplication::applicationDirPath();
 

@@ -32,6 +32,9 @@ public:
     uint32_t learningCount() const;
     uint32_t newCount() const;
     uint32_t lapsedCount() const;
+    void setButtonMode(srs_button_mode mode);
+    int sixButtons() const;
+    std::string predictInterval(uint32_t entryId, srs_quality q);
 
 private:
 

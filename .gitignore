@@ -34,3 +34,4 @@ tsv/
 *.invx
 *.ignore
 contextDumper.py
+*.out

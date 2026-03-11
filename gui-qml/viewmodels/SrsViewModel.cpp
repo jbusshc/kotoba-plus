@@ -114,6 +114,7 @@ void SrsViewModel::loadNext()
     m_currentMeaning = meaning;
 
     emit showQuestion(word);
+    emit statsChanged();
 }
 
 void SrsViewModel::revealAnswer()
@@ -149,6 +150,8 @@ void SrsViewModel::answerAgain() { handleAnswer(SRS_AGAIN); }
 void SrsViewModel::answerHard() { handleAnswer(SRS_HARD); }
 void SrsViewModel::answerGood() { handleAnswer(SRS_GOOD); }
 void SrsViewModel::answerEasy() { handleAnswer(SRS_EASY); }
+void SrsViewModel::answerBarely() { handleAnswer(SRS_BARELY); }
+void SrsViewModel::answerPerfect() { handleAnswer(SRS_PERFECT); }
 
 bool SrsViewModel::contains(int entryId)
 {
@@ -161,4 +164,51 @@ void SrsViewModel::add(int entryId)
     {
         updateStats();
     }
+}
+
+QString SrsViewModel::againInterval() const
+{
+    if (!m_hasCard) return "";
+    return QString::fromStdString(
+        m_service->predictInterval(m_currentEntryId, SRS_AGAIN));
+}
+
+QString SrsViewModel::barelyInterval() const
+{
+    if (!m_hasCard) return "";
+    return QString::fromStdString(
+        m_service->predictInterval(m_currentEntryId, SRS_BARELY));
+}
+
+QString SrsViewModel::hardInterval() const
+{
+    if (!m_hasCard) return "";
+    return QString::fromStdString(
+        m_service->predictInterval(m_currentEntryId, SRS_HARD));
+}
+
+QString SrsViewModel::goodInterval() const
+{
+    if (!m_hasCard) return "";
+    return QString::fromStdString(
+        m_service->predictInterval(m_currentEntryId, SRS_GOOD));
+}
+
+QString SrsViewModel::easyInterval() const
+{
+    if (!m_hasCard) return "";
+    return QString::fromStdString(
+        m_service->predictInterval(m_currentEntryId, SRS_EASY));
+}
+
+QString SrsViewModel::perfectInterval() const
+{
+    if (!m_hasCard) return "";
+    return QString::fromStdString(
+        m_service->predictInterval(m_currentEntryId, SRS_PERFECT));
+}
+
+int SrsViewModel::sixButtons() const
+{
+    return m_service->sixButtons();
 }
