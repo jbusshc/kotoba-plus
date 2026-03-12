@@ -4,7 +4,6 @@ import QtQuick.Layouts
 import QtQuick.Controls.Material
 
 Page {
-
     id: page
     padding: 32
 
@@ -12,7 +11,6 @@ Page {
     property color textColor: darkTheme ? "white" : "black"
 
     component DashboardCard: Rectangle {
-
         property string label
         property int value
         property color accent
@@ -26,7 +24,6 @@ Page {
         Layout.preferredHeight: 140
 
         Column {
-
             anchors.centerIn: parent
             width: parent.width
             spacing: 8
@@ -52,12 +49,10 @@ Page {
     }
 
     ColumnLayout {
-
         anchors.fill: parent
         spacing: 28
 
         GridLayout {
-
             columns: 3
             columnSpacing: 20
             rowSpacing: 20
@@ -84,36 +79,45 @@ Page {
 
         Item { Layout.fillHeight: true }
 
-        Button {
-
-            id: studyButton
-
-            text: enabled ? "Start Study" : "Nothing to study"
-
-            enabled: srsVM && srsVM.dueCount > 0
-
+        // Botones
+        RowLayout {
             Layout.alignment: Qt.AlignHCenter
+            spacing: 16
 
-            font.pixelSize: 20
-            padding: 16
+            Button {
+                text: enabled ? "Start Study" : "Nothing to study"
+                enabled: srsVM && srsVM.dueCount > 0
+                font.pixelSize: 20
+                padding: 16
+                Material.background: Material.Blue
+                Material.foreground: "white"
 
-            Material.background: Material.Blue
-            Material.foreground: "white"
+                onClicked: {
+                    if (stack && srsVM && srsVM.dueCount > 0) {
+                        stack.push("qrc:/qml/pages/SrsStudy.qml")
+                        srsVM.startSession()
+                    }
+                }
+            }
 
-            onClicked: {
-                if (stack && srsVM && srsVM.dueCount > 0) {
-                    stack.push("qrc:/qml/pages/SrsStudy.qml")
-                    srsVM.startSession()
+            Button {
+                text: "Library"
+                font.pixelSize: 20
+                padding: 16
+                Material.background: Material.Gray
+                Material.foreground: "white"
+
+                onClicked: {
+                    if (stack) {
+                        stack.push("qrc:/qml/pages/SrsLibrary.qml")
+                    }
                 }
             }
         }
 
         Text {
-
             visible: srsVM && srsVM.dueCount === 0
-
             Layout.alignment: Qt.AlignHCenter
-
             text: {
                 if (!srsVM) return ""
 
@@ -122,7 +126,6 @@ Page {
 
                 return "No reviews available right now. New cards will appear later."
             }
-
             color: Material.hintTextColor
             font.pixelSize: 14
             horizontalAlignment: Text.AlignHCenter

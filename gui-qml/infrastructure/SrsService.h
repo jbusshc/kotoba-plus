@@ -47,6 +47,7 @@ public:
     /* Predecir intervalo (texto formateado) */
     std::string predictInterval(uint32_t entryId, fsrs_rating rating);
 
+    fsrs_deck* getDeck() const { return m_deck; }
 private:
     fsrs_card* getCard(uint32_t entryId) const;
 

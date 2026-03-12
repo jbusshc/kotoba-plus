@@ -1,9 +1,10 @@
 <RCC>
-  <qresource prefix="/">
-    <file>qml/Main.qml</file>
-    <file>qml/pages/DictionaryPage.qml</file>
-    <file>qml/pages/DetailsPage.qml</file>
-    <file>qml/pages/SrsDashboard.qml</file>
-    <file>qml/pages/SrsStudy.qml</file>
-  </qresource>
+    <qresource prefix="/">
+        <file>qml/Main.qml</file>
+        <file>qml/pages/DictionaryPage.qml</file>
+        <file>qml/pages/DetailsPage.qml</file>
+        <file>qml/pages/SrsDashboard.qml</file>
+        <file>qml/pages/SrsStudy.qml</file>
+        <file>qml/pages/SrsLibrary.qml</file>
+    </qresource>
 </RCC>

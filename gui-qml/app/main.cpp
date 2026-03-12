@@ -16,6 +16,7 @@
 #include "../viewmodels/SearchViewModel.h"
 #include "../viewmodels/EntryDetailsViewModel.h"
 #include "../viewmodels/SrsViewModel.h"
+#include "../viewmodels/SrsLibraryViewModel.h"
 
 #include "Configuration.h"
 
@@ -73,14 +74,18 @@ int main(int argc, char **argv)
     EntryDetailsViewModel *detailsVM = new EntryDetailsViewModel(dict, &configWrapper.m_config);
     SrsViewModel *srsVM = new SrsViewModel(srsSvc, dict);
 
+    SrsLibraryViewModel* libVM = new SrsLibraryViewModel(srsSvc, dict);
+
     QQmlApplicationEngine engine;
 
     engine.rootContext()->setContextProperty("searchVM", searchVM);
     engine.rootContext()->setContextProperty("searchModel", searchModel);
     engine.rootContext()->setContextProperty("detailsVM", detailsVM);
     engine.rootContext()->setContextProperty("srsVM", srsVM);
-    engine.rootContext()->setContextProperty("appDataPath", appData);
+    engine.rootContext()->setContextProperty("appDataPath", appData);   
     engine.rootContext()->setContextProperty("appConfig", &configWrapper);
+    engine.rootContext()->setContextProperty("srsLibraryVM", libVM);
+
 
     engine.load(QUrl(QStringLiteral("qrc:/qml/Main.qml")));
     if (engine.rootObjects().isEmpty()) return -1;
