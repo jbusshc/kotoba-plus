@@ -290,9 +290,76 @@ void parse_jmdict(xmlNodePtr root, kotoba_writer *writer)
                         xmlFree(content);
                     }
                 }
+
+                // check if common word (priority "news1", "news2", "ichi1", "ichi2", "spec1", "spec2", "gai1", "gai2")
+                bool is_common = false;
+                for (int i = 0; i < e.k_elements_count; i++) {
+                    for (int j = 0; j < e.k_elements[i].ke_pri_count; j++) {
+                        const char *pri = e.k_elements[i].ke_pri[j];
+                        if (strncmp(pri, "news1", MAX_KE_PRI_LEN) == 0 ||
+                            strncmp(pri, "news2", MAX_KE_PRI_LEN) == 0 ||
+                            strncmp(pri, "ichi1", MAX_KE_PRI_LEN) == 0 ||
+                            strncmp(pri, "ichi2", MAX_KE_PRI_LEN) == 0 ||
+                            strncmp(pri, "spec1", MAX_KE_PRI_LEN) == 0 ||
+                            strncmp(pri, "spec2", MAX_KE_PRI_LEN) == 0 ||
+                            strncmp(pri, "gai1", MAX_KE_PRI_LEN) == 0 ||
+                            strncmp(pri, "gai2", MAX_KE_PRI_LEN) == 0 ||
+                            strncmp(pri, "nf", 2) == 0) {
+                            is_common = true;
+                            break;
+                        }
+                    }
+                    if (is_common) break;
+                }
+                for (int i = 0; i < e.r_elements_count && !is_common; i++) {
+                    for (int j = 0; j < e.r_elements[i].re_pri_count; j++) {
+                        const char *pri = e.r_elements[i].re_pri[j];
+                        if (strncmp(pri, "news1", MAX_RE_PRI_LEN) == 0 ||
+                            strncmp(pri, "news2", MAX_RE_PRI_LEN) == 0 ||
+                            strncmp(pri, "ichi1", MAX_RE_PRI_LEN) == 0 ||
+                            strncmp(pri, "ichi2", MAX_RE_PRI_LEN) == 0 ||
+                            strncmp(pri, "spec1", MAX_RE_PRI_LEN) == 0 ||
+                            strncmp(pri, "spec2", MAX_RE_PRI_LEN) == 0 ||
+                            strncmp(pri, "gai1", MAX_RE_PRI_LEN) == 0 ||
+                            strncmp(pri, "gai2", MAX_RE_PRI_LEN) == 0 ||
+                            strncmp(pri, "nf", 2) == 0) {
+                            is_common = true;
+                            break;
+                        }
+                    }
+                }
+                if (is_common) {
+                    e.priority = 1; // common word
+                } else {
+                    e.priority = 0; // not common
+                }
                 // write_entry_with_index(output_filename, idx_filename, &e);
                 kotoba_writer_write_entry(writer, &e);
             }
         }
     }
+}
+
+void build_dict() {
+    kotoba_writer writer;
+    if (!kotoba_writer_open(&writer, "dict.kotoba", "dict.kotoba.idx"))
+    {
+        fprintf(stderr, "Failed to open writer\n");
+        return;
+    }
+
+    for (int i = 0; i < routes_count; ++i)
+    {
+        xmlDocPtr doc = xmlReadFile(routes[i], NULL, 0);
+        if (doc == NULL)
+        {
+            fprintf(stderr, "Failed to parse %s\n", routes[i]);
+            continue;
+        }
+        xmlNodePtr root = xmlDocGetRootElement(doc);
+        parse_jmdict(root, &writer);
+        xmlFreeDoc(doc);
+    }
+
+    kotoba_writer_close(&writer);
 }

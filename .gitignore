@@ -35,3 +35,5 @@ tsv/
 *.ignore
 contextDumper.py
 *.out
+kotoba-cli
+*.so

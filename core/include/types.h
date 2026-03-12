@@ -159,7 +159,7 @@ typedef struct
     uint8_t k_elements_count;
     uint8_t r_elements_count;
     uint8_t senses_count;
-    uint8_t priority; /* score placeholder (0–255) */
+    uint8_t priority; /* score placeholder (0–1) | has ke_pri or re_pri or nfxx*/
 } entry_bin;
 
 /* -------------------------

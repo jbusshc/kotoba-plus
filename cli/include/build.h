@@ -3,9 +3,9 @@
 #include <string.h>
 #include <stdint.h>
 #include <stdbool.h>
-#include "../../kotoba-core/include/types.h"
-#include "../../kotoba-core/include/viewer.h"
-#include "../../kotoba-core/include/loader.h"
+#include "../../core/include/types.h"
+#include "../../core/include/viewer.h"
+#include "../../core/include/loader.h"
 
 /* strsep implementation for Windows */
 char *strsep(char **stringp, const char *delim)

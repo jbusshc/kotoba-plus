@@ -6,28 +6,30 @@
 #include <windows.h>
 #endif
 
-#include "../../kotoba-core/include/types.h"
-#include "../../kotoba-core/include/writer.h"
-#include "../../kotoba-core/include/loader.h"
-#include "../../kotoba-core/include/viewer.h"
-#include "../../kotoba-core/include/kana.h"
-#include "../../kotoba-core/include/index.h"
-#include "../../kotoba-core/include/index_search.h"
-#include "../../kotoba-core/include/srs.h"
-#include "../../kotoba-core/include/srs_sync.h"
+#include "../../core/include/types.h"
+#include "../../core/include/writer.h"
+#include "../../core/include/loader.h"
+#include "../../core/include/viewer.h"
+#include "../../core/include/kana.h"
+#include "../../core/include/index.h"
+#include "../../core/include/index_search.h"
 
-#include "../../cli/include/build.h"
+#include "../include/build.h"
+
+#include "../include/parser.h"
 
 const char *dict_path = "dict.kotoba";
 const char *idx_path = "dict.kotoba.idx";
 
-#define _POSIX_C_SOURCE 200809L
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
 
 #ifdef _WIN32
+#define _POSIX_C_SOURCE 200809L
+
 #include <windows.h>
 #include <io.h>
 #include <fcntl.h>
@@ -71,8 +73,8 @@ int main(int argc, char **argv)
         fprintf(stderr,
                 "Usage:  build-invx <tsv> out.invx\n"
                 "        search <index.invx> <query>\n"
-                "        srs\n"
-                "        build-tsv\n");
+                "        build-tsv\n"
+                "        build-dict\n");
         return 1;
     }
 
@@ -140,6 +142,11 @@ int main(int argc, char **argv)
 
         free_pairs(texts, ids, meta1, meta2, n);
         return rc == 0 ? 0 : 1;
+    } else if (strcmp(argv[1], "build-dict") == 0)
+    {
+
+        build_dict();
+        return 0;
     }
 
     /* ---------- search ---------- */
@@ -183,198 +190,12 @@ int main(int argc, char **argv)
         printf("results left: %u\n", ctx.results_left);
         query_next_page(&ctx);
 
-        printf("Results:\n");
-        for (uint32_t i = 0; i < ctx.page_result_count; ++i)
-        {
-            print_entry(&d, ctx.results_doc_ids[i]);
-        }
 
         printf("Results left: %u\n", ctx.results_left);
         deep(1, &base); // estimar uso de stack para index_build_from_pairs
 
         return 0;
-    }
-    else if (strcmp(argv[1], "srs") == 0)
-    {
-        srs_profile srs;
-        srs_sync sync;
-
-        kotoba_dict d;
-        kotoba_dict_open(&d, dict_path, idx_path);
-        const uint32_t DICT_SIZE = d.entry_count;
-
-        /* ───────────── sync init ───────────── */
-
-        if (!srs_sync_open(&sync,
-                           "events.dat",
-                           "snapshot.dat",
-                           1, /* device_id */
-                           DICT_SIZE))
-        {
-            fprintf(stderr, "failed to init sync\n");
-            return 1;
-        }
-
-        /* reconstruir estado desde snapshot + eventos */
-        if (!srs_sync_rebuild(&sync, &srs, DICT_SIZE))
-        {
-            fprintf(stderr, "failed to rebuild srs\n");
-            return 1;
-        }
-
-        char cmd[64];
-        srs_prompt();
-
-        uint64_t now = srs_now(); /* tiempo lógico */
-
-        while (1)
-        {
-            printf("\n[now=%llu] ", (unsigned long long)now);
-            srs_print_time(now);
-            printf(" > ");
-
-            if (scanf("%63s", cmd) != 1)
-                break;
-
-            /* ───────────── add ───────────── */
-            if (strcmp(cmd, "add") == 0)
-            {
-                uint32_t id;
-                scanf("%u", &id);
-
-                if (id >= DICT_SIZE)
-                {
-                    printf("invalid id\n");
-                    continue;
-                }
-
-                if (srs_sync_add(&sync, &srs, id, now))
-                    printf("added entry %u\n", id);
-                else
-                    printf("already in SRS\n");
-            }
-
-            /* ───────────── study ───────────── */
-            else if (strcmp(cmd, "study") == 0)
-            {
-                srs_review r;
-
-                while (srs_peek_due(&srs, now))
-                {
-                    srs_pop_due_review(&srs, &r);
-
-                    printf("\nEntry ID: %u\n", r.item->entry_id);
-                    printf("State: %s\n",
-                           r.item->state == SRS_LEARNING ? "LEARNING" : "REVIEW");
-                    printf("Interval: %u days\n", r.item->interval);
-                    printf("Ease: %.2f\n", r.item->ease);
-
-                    printf("Quality (0=again,3=hard,4=good,5=easy): ");
-                    int q;
-                    scanf("%d", &q);
-
-                    srs_quality quality;
-                    switch (q)
-                    {
-                    case 3:
-                        quality = SRS_HARD;
-                        break;
-                    case 4:
-                        quality = SRS_GOOD;
-                        break;
-                    case 5:
-                        quality = SRS_EASY;
-                        break;
-                    default:
-                        quality = SRS_AGAIN;
-                        break;
-                    }
-
-                    /* ⚠️ ahora pasa por sync */
-                    srs_sync_review(&sync,
-                                    &srs,
-                                    r.item->entry_id,
-                                    quality,
-                                    now);
-
-                    /* reinsertar en heap */
-                    srs_requeue(&srs, r.index);
-                }
-            }
-
-            /* ───────────── advance ───────────── */
-            else if (strcmp(cmd, "advance") == 0)
-            {
-                char unit[16];
-                uint32_t n;
-                scanf("%u %15s", &n, unit);
-
-                if (strcmp(unit, "min") == 0)
-                    now += n * 60;
-                else if (strcmp(unit, "hour") == 0)
-                    now += n * 3600;
-                else if (strcmp(unit, "day") == 0)
-                    now += n * 86400;
-                else
-                    printf("unknown unit (min|hour|day)\n");
-            }
-
-            /* ───────────── due ───────────── */
-            else if (strcmp(cmd, "due") == 0)
-            {
-                for (uint32_t i = 0; i < srs.count; ++i)
-                {
-                    if (srs.items[i].due <= now)
-                    {
-                        printf("entry %u due now\n",
-                               srs.items[i].entry_id);
-                    }
-                }
-            }
-
-            /* ───────────── to-review ───────────── */
-            else if (strcmp(cmd, "to-review") == 0)
-            {
-                for (uint32_t i = 0; i < srs.count; ++i)
-                {
-                    uint64_t due = srs.items[i].due;
-                    if (due > now)
-                    {
-                        uint64_t seconds_left = due - now;
-                        uint32_t days_left =
-                            (seconds_left + 86399) / 86400;
-
-                        printf("entry %u: %u days left\n",
-                               srs.items[i].entry_id,
-                               days_left);
-                    }
-                }
-            }
-
-            /* ───────────── rebuild (debug) ───────────── */
-            else if (strcmp(cmd, "rebuild") == 0)
-            {
-                srs_free(&srs);
-                srs_sync_rebuild(&sync, &srs, DICT_SIZE);
-                printf("rebuilt from events\n");
-            }
-
-            /* ───────────── quit ───────────── */
-            else if (strcmp(cmd, "quit") == 0)
-                break;
-
-            else
-            {
-                printf("unknown command\n");
-                srs_prompt();
-            }
-        }
-
-        srs_free(&srs);
-        srs_sync_close(&sync);
-        return 0;
-    }
-    else if (strcmp(argv[1], "build-tsv") == 0)
+    } else if (strcmp(argv[1], "build-tsv") == 0)
     { // generate all tsv
 
         kotoba_dict d;
