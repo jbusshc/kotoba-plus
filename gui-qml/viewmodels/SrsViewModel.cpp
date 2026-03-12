@@ -145,3 +145,10 @@ void SrsViewModel::updateStats()
 {
     emit statsChanged(); // 🔹 esto refresca todos los bindings QML (contadores e intervalos)
 }
+
+int SrsViewModel::reviewTodayCount() const {
+    if (!m_service) return 0;
+    fsrs_stats st;
+    fsrs_compute_stats(m_service->getDeck(), fsrs_now(), &st);
+    return st.due_today;
+}

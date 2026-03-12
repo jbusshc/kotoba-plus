@@ -45,8 +45,7 @@ Page {
         }
 
         delegate: Rectangle {
-            id: cardRect
-            width: cardList.width   // <- usar el ancho del ListView
+            width: ListView.view.width
             height: 80
             radius: 12
             color: cardColor
@@ -58,18 +57,17 @@ Page {
                 anchors.margins: 12
                 spacing: 12
 
+                // Columna principal
                 ColumnLayout {
                     Layout.fillWidth: true
-                    Layout.alignment: Qt.AlignLeft
-
                     Text { text: word; font.pixelSize: 18; color: textColor; elide: Text.ElideRight }
                     Text { text: meaning; font.pixelSize: 12; color: "#AAA"; wrapMode: Text.WordWrap }
                 }
 
+                // Columna secundaria
                 ColumnLayout {
-                    Layout.alignment: Qt.AlignRight
                     spacing: 2
-
+                    Layout.alignment: Qt.AlignRight
                     Text { text: state; font.pixelSize: 12; color: "#FF9800" }
                     Text { text: "Next: " + interval; font.pixelSize: 12; color: "#4CAF50" }
                     Text { text: "Reps: " + reps + " / Lapses: " + lapses; font.pixelSize: 12; color: "#9E9E9E" }

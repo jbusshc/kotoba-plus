@@ -20,6 +20,8 @@ class SrsViewModel : public QObject
     Q_PROPERTY(QString hardInterval READ hardInterval NOTIFY statsChanged)
     Q_PROPERTY(QString goodInterval READ goodInterval NOTIFY statsChanged)
     Q_PROPERTY(QString easyInterval READ easyInterval NOTIFY statsChanged)
+    Q_PROPERTY(int reviewTodayCount READ reviewTodayCount NOTIFY statsChanged)
+
 
 public:
     explicit SrsViewModel(SrsService *service, kotoba_dict *dict, QObject *parent = nullptr);
@@ -45,6 +47,7 @@ public:
     QString hardInterval() const;
     QString goodInterval() const;
     QString easyInterval() const;
+    int reviewTodayCount() const;
 
 signals:
     void showQuestion(QString word);
