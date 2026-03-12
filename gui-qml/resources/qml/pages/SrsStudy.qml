@@ -81,9 +81,7 @@ Page {
             Button {
                 text: "Again\n" + srsVM.againInterval
                 Material.background: "#D32F2F"
-
                 onClicked: {
-                    page.answerShown = false
                     if (srsVM) srsVM.answerAgain()
                 }
             }
@@ -91,9 +89,7 @@ Page {
             Button {
                 text: "Hard\n" + srsVM.hardInterval
                 Material.background: "#F57C00"
-
                 onClicked: {
-                    page.answerShown = false
                     if (srsVM) srsVM.answerHard()
                 }
             }
@@ -101,9 +97,7 @@ Page {
             Button {
                 text: "Good\n" + srsVM.goodInterval
                 Material.background: "#388E3C"
-
                 onClicked: {
-                    page.answerShown = false
                     if (srsVM) srsVM.answerGood()
                 }
             }
@@ -111,9 +105,7 @@ Page {
             Button {
                 text: "Easy\n" + srsVM.easyInterval
                 Material.background: "#1976D2"
-
                 onClicked: {
-                    page.answerShown = false
                     if (srsVM) srsVM.answerEasy()
                 }
             }
@@ -122,6 +114,7 @@ Page {
         Item { Layout.fillHeight: true }
     }
 
+    /* ---- sincronización automática con SrsViewModel ---- */
     Connections {
         target: srsVM
 
@@ -133,6 +126,7 @@ Page {
 
         function onShowAnswer(ans) {
             answerText.text = ans || ""
+            page.answerShown = true
         }
 
         function onNoMoreCards() {
@@ -141,6 +135,7 @@ Page {
         }
     }
 
+    /* Cada vez que la página se hace visible, limpiamos la carta anterior */
     onVisibleChanged: if (visible) {
         questionText.text = ""
         answerText.text = ""

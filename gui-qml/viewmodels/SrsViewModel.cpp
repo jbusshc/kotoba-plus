@@ -1,47 +1,40 @@
 #include "SrsViewModel.h"
 #include "../infrastructure/SrsService.h"
+
+extern "C" {
 #include "../../core/include/viewer.h"
+}
+
+#include <QStringList>
 
 SrsViewModel::SrsViewModel(SrsService *service, kotoba_dict *dict, QObject *parent)
     : QObject(parent), m_service(service), m_dict(dict)
 {
 }
 
-int SrsViewModel::dueCount() const
-{
-    return m_service->dueCount(srs_now());
-}
+/* ---- properties ---- */
+int SrsViewModel::dueCount() const        { return m_service ? static_cast<int>(m_service->dueCount()) : 0; }
+int SrsViewModel::learningCount() const   { return m_service ? static_cast<int>(m_service->learningCount()) : 0; }
+int SrsViewModel::newCount() const        { return m_service ? static_cast<int>(m_service->newCount()) : 0; }
+int SrsViewModel::lapsedCount() const     { return m_service ? static_cast<int>(m_service->lapsedCount()) : 0; }
 
-int SrsViewModel::learningCount() const
-{
-    return m_service->learningCount();
-}
+QString SrsViewModel::againInterval() const { return m_hasCard && m_service ? QString::fromStdString(m_service->predictInterval(m_currentEntryId, FSRS_AGAIN)) : ""; }
+QString SrsViewModel::hardInterval() const  { return m_hasCard && m_service ? QString::fromStdString(m_service->predictInterval(m_currentEntryId, FSRS_HARD)) : ""; }
+QString SrsViewModel::goodInterval() const  { return m_hasCard && m_service ? QString::fromStdString(m_service->predictInterval(m_currentEntryId, FSRS_GOOD)) : ""; }
+QString SrsViewModel::easyInterval() const  { return m_hasCard && m_service ? QString::fromStdString(m_service->predictInterval(m_currentEntryId, FSRS_EASY)) : ""; }
 
-int SrsViewModel::newCount() const
-{
-    return m_service->newCount();
-}
-
-int SrsViewModel::lapsedCount() const
-{
-    return m_service->lapsedCount();
-}
-
-void SrsViewModel::updateStats()
-{
-    emit statsChanged();
-}
-
+/* ---- session control ---- */
 void SrsViewModel::startSession()
 {
+    if (m_service)
+        m_service->startSession();
     loadNext();
 }
 
+/* ---- main: cargar siguiente carta y emitir señales ---- */
 void SrsViewModel::loadNext()
 {
-    auto maybe = m_service->nextDue();
-
-    if (!maybe.has_value())
+    if (!m_service)
     {
         m_hasCard = false;
         emit noMoreCards();
@@ -49,10 +42,8 @@ void SrsViewModel::loadNext()
         return;
     }
 
-    srs_review rev = *maybe;
-    const srs_item *it = rev.item;
-
-    if (!it)
+    fsrs_card *card = m_service->nextCard();
+    if (!card)
     {
         m_hasCard = false;
         emit noMoreCards();
@@ -60,22 +51,22 @@ void SrsViewModel::loadNext()
         return;
     }
 
-    m_hasCard        = true;
-    m_currentEntryId = it->entry_id;
-    m_currentIndex   = rev.index;
+    m_hasCard = true;
+    m_currentEntryId = card->id;
 
     const entry_bin *entry = kotoba_dict_get_entry(m_dict, m_currentEntryId);
-
     if (!entry)
     {
         m_hasCard = false;
         emit noMoreCards();
+        updateStats();
         return;
     }
 
     QString word;
     QString meaning;
 
+    /* WORD: preferir keb (kanji) y si no, reb (reading) */
     if (entry->k_elements_count > 0)
     {
         const k_ele_bin *k = kotoba_k_ele(m_dict, entry, 0);
@@ -88,107 +79,69 @@ void SrsViewModel::loadNext()
         kotoba_str s = kotoba_reb(m_dict, r);
         word = QString::fromUtf8(s.ptr, s.len);
     }
+    if (word.isEmpty()) word = "[unknown]";
 
+    /* MEANING: unir glosses de la primera sense */
     if (entry->senses_count > 0)
     {
         const sense_bin *sense = kotoba_sense(m_dict, entry, 0);
-
         QStringList parts;
-
         for (uint32_t g = 0; g < sense->gloss_count; ++g)
         {
             kotoba_str gs = kotoba_gloss(m_dict, sense, g);
             parts << QString::fromUtf8(gs.ptr, gs.len);
         }
-
         meaning = parts.join("; ");
     }
 
     m_currentMeaning = meaning;
 
+    // 🔹 Emitir carta nueva
     emit showQuestion(word);
-    updateStats(); // dispara los *Interval() con la carta ya cargada
+
+    // 🔹 Actualizar stats e intervalos
+    updateStats();
 }
 
+/* ---- reveal / answer ---- */
 void SrsViewModel::revealAnswer()
 {
-    if (!m_hasCard)
-        return;
+    if (!m_hasCard) return;
 
     emit showAnswer(m_currentMeaning);
+    updateStats(); // 🔹 refrescar intervalos en QML
 }
 
+/* ---- handle answer ---- */
 void SrsViewModel::handleAnswer(int quality)
 {
-    if (!m_hasCard)
-        return;
+    if (!m_hasCard || !m_service) return;
 
-    m_service->answer(m_currentEntryId, (srs_quality)quality);
+    fsrs_rating r = static_cast<fsrs_rating>(quality);
+    m_service->answer(m_currentEntryId, r);
 
-    loadNext(); // updateStats() se llama dentro de loadNext()
+    // cargar siguiente carta
+    loadNext();
 }
 
-void SrsViewModel::answerAgain()   { handleAnswer(SRS_AGAIN);   }
-void SrsViewModel::answerBarely()  { handleAnswer(SRS_BARELY);  }
-void SrsViewModel::answerHard()    { handleAnswer(SRS_HARD);    }
-void SrsViewModel::answerGood()    { handleAnswer(SRS_GOOD);    }
-void SrsViewModel::answerEasy()    { handleAnswer(SRS_EASY);    }
-void SrsViewModel::answerPerfect() { handleAnswer(SRS_PERFECT); }
+/* ---- helpers para botones ---- */
+void SrsViewModel::answerAgain() { handleAnswer(FSRS_AGAIN); }
+void SrsViewModel::answerHard()  { handleAnswer(FSRS_HARD);  }
+void SrsViewModel::answerGood()  { handleAnswer(FSRS_GOOD);  }
+void SrsViewModel::answerEasy()  { handleAnswer(FSRS_EASY);  }
 
-bool SrsViewModel::contains(int entryId)
-{
-    return m_service->contains(entryId);
-}
+/* ---- add / contains ---- */
+bool SrsViewModel::contains(int entryId) { return m_service ? m_service->contains(static_cast<uint32_t>(entryId)) : false; }
 
 void SrsViewModel::add(int entryId)
 {
-    if (m_service->add(entryId))
+    if (!m_service) return;
+    if (m_service->add(static_cast<uint32_t>(entryId)))
         updateStats();
 }
 
-QString SrsViewModel::againInterval() const
+/* ---- actualizar stats / intervalos ---- */
+void SrsViewModel::updateStats()
 {
-    if (!m_hasCard) return "";
-    return QString::fromStdString(
-        m_service->predictInterval(m_currentEntryId, SRS_AGAIN));
-}
-
-QString SrsViewModel::barelyInterval() const
-{
-    if (!m_hasCard) return "";
-    return QString::fromStdString(
-        m_service->predictInterval(m_currentEntryId, SRS_BARELY));
-}
-
-QString SrsViewModel::hardInterval() const
-{
-    if (!m_hasCard) return "";
-    return QString::fromStdString(
-        m_service->predictInterval(m_currentEntryId, SRS_HARD));
-}
-
-QString SrsViewModel::goodInterval() const
-{
-    if (!m_hasCard) return "";
-    return QString::fromStdString(
-        m_service->predictInterval(m_currentEntryId, SRS_GOOD));
-}
-
-QString SrsViewModel::easyInterval() const
-{
-    if (!m_hasCard) return "";
-    return QString::fromStdString(
-        m_service->predictInterval(m_currentEntryId, SRS_EASY));
-}
-
-QString SrsViewModel::perfectInterval() const
-{
-    if (!m_hasCard) return "";
-    return QString::fromStdString(
-        m_service->predictInterval(m_currentEntryId, SRS_PERFECT));
-}
-
-int SrsViewModel::sixButtons() const
-{
-    return m_service->sixButtons();
+    emit statsChanged(); // 🔹 esto refresca todos los bindings QML (contadores e intervalos)
 }

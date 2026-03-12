@@ -1,7 +1,6 @@
 #include "SrsService.h"
 #include "../app/Configuration.h"
 
-#include <algorithm>
 #include <string>
 
 static inline std::string snapshot_path_for(const char* base)
@@ -17,308 +16,271 @@ static inline std::string log_path_for(const char* base)
 SrsService::SrsService(uint32_t dictSize, Configuration *config)
     : m_dictSize(dictSize), m_config(config)
 {
-    srs_init(&m_profile, dictSize);
-    srs_heapify(&m_profile);
+    fsrs_params params = fsrs_default_params();
 
-    uint64_t device_id = config->deviceId;
+    /* crear deck vacío */
+    m_deck = fsrs_deck_create(dictSize, &params);
 
-    srs_sync_init(&m_sync, device_id, dictSize);
+    /* inicializar RNG con deviceId (si existe) */
+    if (m_config)
+        fsrs_seed(m_config->deviceId);
 
-    m_idIndex.resize(dictSize, -1);
+    /* init sync */
+    uint64_t device_id = m_config ? m_config->deviceId : 0;
+    fsrs_sync_init(&m_sync, device_id);
 
-    // default to FSRS for now
-    srs_set_mode(&m_profile, SRS_MODE_FSRS);
+    /* sesión por defecto */
+    fsrs_session_start(&m_session, fsrs_now(), 0);
 }
 
 SrsService::~SrsService()
 {
-    srs_sync_free(&m_sync);
-    srs_free(&m_profile);
+    fsrs_sync_free(&m_sync);
+
+    if (m_deck)
+        fsrs_deck_free(m_deck);
 }
 
-int32_t SrsService::indexOf(uint32_t entryId) const
+/* ---- helpers ---- */
+fsrs_card* SrsService::getCard(uint32_t entryId) const
 {
-    if (entryId >= m_idIndex.size())
-        return -1;
-
-    return m_idIndex[entryId];
+    if (!m_deck) return nullptr;
+    return fsrs_get_card(m_deck, entryId);
 }
 
-void SrsService::rebuildIndex()
-{
-    std::fill(m_idIndex.begin(), m_idIndex.end(), -1);
-
-    for (uint32_t i = 0; i < m_profile.count; ++i)
-    {
-        uint32_t id = m_profile.items[i].entry_id;
-
-        if (id < m_idIndex.size())
-            m_idIndex[id] = i;
-    }
-}
-
-void SrsService::applySyncEventsToProfile()
-{
-    rebuildIndex();
-
-    for (size_t i = 0; i < m_sync.event_count; ++i)
-    {
-        const SrsEvent *ev = &m_sync.events[i];
-
-        uint32_t id = ev->card_id;
-
-        if (id >= m_dictSize)
-            continue;
-
-        switch (ev->type)
-        {
-
-        case SRS_EVENT_ADD:
-        {
-            if (!srs_contains(&m_profile, id))
-            {
-                if (srs_add(&m_profile, id, ev->timestamp))
-                    m_idIndex[id] = m_profile.count - 1;
-            }
-            break;
-        }
-
-        case SRS_EVENT_REMOVE:
-        {
-            if (indexOf(id) >= 0)
-            {
-                srs_remove(&m_profile, id);
-                rebuildIndex();
-            }
-            break;
-        }
-
-        case SRS_EVENT_REVIEW:
-        {
-            int32_t idx = indexOf(id);
-
-            if (idx < 0)
-                break;
-
-            srs_item *it = &m_profile.items[idx];
-
-            srs_answer(&m_profile, it, (srs_quality)ev->grade, ev->timestamp);
-            srs_requeue(&m_profile, idx);
-
-            break;
-        }
-
-        default:
-            break;
-        }
-    }
-
-    srs_heapify(&m_profile);
-    rebuildIndex();
-}
-
+/* ---- persistence ---- */
 bool SrsService::load(const char *path)
 {
-    if (!srs_load(&m_profile, path, m_dictSize))
+    if (!path) return false;
+
+    fsrs_params params = fsrs_default_params();
+
+    fsrs_deck *deck = fsrs_load(path, &params);
+    if (!deck)
         return false;
 
+    m_deck = deck;
     m_profilePath = path;
 
     std::string snap = snapshot_path_for(path);
     std::string log = log_path_for(path);
 
-    (void)srs_snapshot_load(&m_sync, snap.c_str());
-    (void)srs_log_load(&m_sync, log.c_str());
+    /* cargar snapshot (si existe) */
+    (void)fsrs_sync_snapshot_load(m_deck, snap.c_str(), fsrs_now());
 
-    srs_sync_rebuild(&m_sync);
+    /* cargar log de eventos y proyectar */
+    (void)fsrs_sync_log_load(&m_sync, log.c_str());
 
-    applySyncEventsToProfile();
+    fsrs_sync_rebuild(&m_sync, m_deck, fsrs_now());
 
-    (void)srs_save(&m_profile, path);
+    /* reconstruir colas (seguridad) */
+    fsrs_rebuild_queues(m_deck, fsrs_now());
 
     return true;
 }
 
 bool SrsService::save(const char *path)
 {
-    if (!srs_save(&m_profile, path))
+    if (!m_deck || !path) return false;
+
+    if (!fsrs_save(m_deck, path))
         return false;
 
     std::string snap = snapshot_path_for(path);
     std::string log = log_path_for(path);
 
-    return srs_compact(&m_sync, snap.c_str(), log.c_str());
+    return fsrs_sync_compact(&m_sync, m_deck, snap.c_str(), log.c_str(), fsrs_now());
 }
 
+/* ---- manipulation ---- */
 bool SrsService::add(uint32_t entryId)
 {
-    uint64_t now = srs_now();
+    if (!m_deck) return false;
 
-    if (!srs_add(&m_profile, entryId, now))
+    uint64_t now = fsrs_now();
+
+    fsrs_card *card = fsrs_add_card(m_deck, entryId, now);
+    if (!card)
         return false;
 
-    rebuildIndex();
+    /* registrar evento local */
+    FsrsEvent *ev = fsrs_sync_record_add(&m_sync, card, now);
 
-    srs_sync_add_local_add(&m_sync, entryId, now);
-
-    std::string base = m_profilePath.empty()
-        ? m_config->srsPath.toStdString()
-        : m_profilePath;
-
+    std::string base = m_profilePath.empty() && m_config ? m_config->srsPath.toStdString() : m_profilePath;
     std::string log = log_path_for(base.c_str());
 
-    (void)srs_log_append(
-        log.c_str(),
-        &m_sync.events[m_sync.event_count - 1]);
+    (void)fsrs_sync_log_append(log.c_str(), ev);
 
-    srs_heapify(&m_profile);
+    /* rebuild queues (opcional) */
+    fsrs_rebuild_queues(m_deck, now);
 
     return true;
 }
 
 bool SrsService::remove(uint32_t entryId)
 {
-    int32_t idx = indexOf(entryId);
+    if (!m_deck) return false;
 
-    if (idx < 0)
+    uint64_t now = fsrs_now();
+
+    if (!fsrs_remove_card(m_deck, entryId))
         return false;
 
-    if (!srs_remove(&m_profile, entryId))
-        return false;
+    FsrsEvent *ev = fsrs_sync_record_remove(&m_sync, entryId, now);
 
-    uint64_t now = srs_now();
-
-    srs_sync_add_local_remove(&m_sync, entryId, now);
-
-    std::string base = m_profilePath.empty()
-        ? m_config->srsPath.toStdString()
-        : m_profilePath;
-
+    std::string base = m_profilePath.empty() && m_config ? m_config->srsPath.toStdString() : m_profilePath;
     std::string log = log_path_for(base.c_str());
 
-    (void)srs_log_append(
-        log.c_str(),
-        &m_sync.events[m_sync.event_count - 1]);
+    (void)fsrs_sync_log_append(log.c_str(), ev);
 
-    rebuildIndex();
+    fsrs_rebuild_queues(m_deck, now);
 
     return true;
 }
 
 bool SrsService::contains(uint32_t entryId) const
 {
-    return indexOf(entryId) >= 0;
+    return getCard(entryId) != nullptr;
 }
 
-std::optional<srs_review> SrsService::nextDue()
+/* ---- session / scheduling ---- */
+void SrsService::startSession(uint32_t limit)
 {
-    uint64_t now = srs_now();
-
-    srs_review out;
-
-    if (!srs_pop_due_review(&m_profile, &out))
-        return std::nullopt;
-
-    return out;
+    fsrs_session_start(&m_session, fsrs_now(), limit);
 }
 
-void SrsService::answer(uint32_t entryId, srs_quality q)
+inline bool card_is_due(const fsrs_card* card, uint64_t now)
 {
-    uint64_t now = srs_now();
+    if (!card) return false;
+    uint64_t today = now / FSRS_SEC_PER_DAY;
+    return !(card->state == FSRS_STATE_SUSPENDED) && (card->due_day <= today);
+}
 
-    int32_t idx = indexOf(entryId);
+fsrs_card* SrsService::nextCard()
+{
+    if (!m_deck) return nullptr;
 
-    if (idx < 0)
-        return;
+    uint64_t now = fsrs_now();
 
-    srs_item *item = &m_profile.items[idx];
+    // reiniciar sesión si cambió el día lógico
+    uint64_t session_day = fsrs_current_day(m_deck, m_session.session_start);
+    uint64_t current_day = fsrs_current_day(m_deck, now);
+    if (session_day != current_day) {
+        uint32_t limit = m_session.session_limit;
+        fsrs_session_start(&m_session, now, limit);
+    }
 
-    srs_answer(&m_profile, item, q, now);
+    // obtener la siguiente carta de la sesión
+    fsrs_card* card = fsrs_next_for_session(m_deck, &m_session, now);
 
-    srs_requeue(&m_profile, idx);
+    // verificar si realmente está debida hoy
+    if (card && !card_is_due(card, now))
+        return nullptr;
 
-    srs_sync_add_local_review(&m_sync, entryId, (uint8_t)q, now);
+    return card;
+}
 
-    std::string base = m_profilePath.empty()
-        ? m_config->srsPath.toStdString()
-        : m_profilePath;
+void SrsService::answer(uint32_t entryId, fsrs_rating rating)
+{
+    if (!m_deck) return;
 
+    uint64_t now = fsrs_now();
+
+    fsrs_card *card = getCard(entryId);
+    if (!card) return;
+
+    // Guardar el estado previo para contabilizar correctamente la respuesta
+    uint8_t prev_state = card->state;
+
+    // Aplicar la respuesta (actualiza estabilidad, due, etc.)
+    fsrs_answer(m_deck, card, rating, now);
+
+    // Actualizar contadores de sesión manualmente para que la sesión avance.
+    // Nota: fsrs_next_for_session usa estos contadores para respetar limits/mix.
+    m_session.cards_done += 1;
+    if (prev_state == FSRS_STATE_NEW) {
+        m_session.new_done += 1;
+    } else if (prev_state == FSRS_STATE_LEARNING || prev_state == FSRS_STATE_RELEARNING) {
+        m_session.learn_done += 1;
+    } else if (prev_state == FSRS_STATE_REVIEW) {
+        m_session.review_done += 1;
+    }
+
+    // Reconstruir colas para que los cambios de 'due' / estado se reflejen inmediatamente.
+    fsrs_rebuild_queues(m_deck, now);
+
+    // Registrar evento de sync (snapshot resultante)
+    FsrsEvent *ev = fsrs_sync_record_answer(&m_sync, card, rating, now);
+
+    std::string base = m_profilePath.empty() && m_config ? m_config->srsPath.toStdString() : m_profilePath;
     std::string log = log_path_for(base.c_str());
 
-    (void)srs_log_append(
-        log.c_str(),
-        &m_sync.events[m_sync.event_count - 1]);
+    (void)fsrs_sync_log_append(log.c_str(), ev);
 }
 
-uint32_t SrsService::dueCount(uint64_t now) const
+/* ---- stats ---- */
+uint32_t SrsService::dueCount() const
 {
-    srs_stats st;
-
-    srs_compute_stats(&m_profile, now, &st);
-
+    if (!m_deck) return 0;
+    fsrs_stats st;
+    fsrs_compute_stats(m_deck, fsrs_now(), &st);
     return st.due_now;
 }
 
 uint32_t SrsService::learningCount() const
 {
-    uint32_t c = 0;
-
-    for (uint32_t i = 0; i < m_profile.count; ++i)
-    {
-        uint8_t s = m_profile.items[i].state;
-
-        if (s == SRS_STATE_LEARNING ||
-            s == SRS_STATE_RELEARNING)
-            ++c;
-    }
-
-    return c;
+    if (!m_deck) return 0;
+    fsrs_stats st;
+    fsrs_compute_stats(m_deck, fsrs_now(), &st);
+    return st.learning_count + st.relearning_count;
 }
 
 uint32_t SrsService::newCount() const
 {
-    uint32_t c = 0;
-
-    for (uint32_t i = 0; i < m_profile.count; ++i)
-    {
-        if (m_profile.items[i].state == SRS_STATE_NEW)
-            ++c;
-    }
-
-    return c;
+    if (!m_deck) return 0;
+    fsrs_stats st;
+    fsrs_compute_stats(m_deck, fsrs_now(), &st);
+    return st.new_count;
 }
 
 uint32_t SrsService::lapsedCount() const
 {
-    uint32_t c = 0;
-
-    for (uint32_t i = 0; i < m_profile.count; ++i)
-    {
-        if (m_profile.items[i].lapses > 0)
-            ++c;
-    }
-
-    return c;
+    if (!m_deck) return 0;
+    fsrs_stats st;
+    fsrs_compute_stats(m_deck, fsrs_now(), &st);
+    return st.cards_with_lapses;
 }
 
-void SrsService::setMode(srs_mode mode)
+uint64_t SrsService::waitSeconds() const
 {
-    m_profile.mode = mode;
+    if (!m_deck) return 0;
+    return fsrs_wait_seconds(m_deck, fsrs_now());
 }
 
-std::string SrsService::predictInterval(uint32_t entryId, srs_quality q)
+/* ---- preview intervals ---- */
+std::string SrsService::predictInterval(uint32_t entryId, fsrs_rating rating)
 {
-    int32_t idx = indexOf(entryId);
-    if (idx < 0) return "";
+    fsrs_card *card = getCard(entryId);
+    if (!card) return std::string();
 
-    srs_item *it = &m_profile.items[idx];
+    uint64_t now = fsrs_now();
+    uint64_t out[4] = {0,0,0,0};
 
-    uint64_t now = srs_now();
+    fsrs_preview(m_deck, card, now, out);
 
-    uint64_t due = srs_predict_due(&m_profile, it, q, now);
+    int idx = (int)rating - 1;
+    if (idx < 0) idx = 0;
+    if (idx > 3) idx = 3;
 
-    char buf[32];
-    srs_format_interval(due - now, buf, sizeof(buf));
+    uint64_t due_ts = out[idx];
+
+    // Si fsrs_preview devolvió 0 (no previsto), o due <= now, mostrar "0s" o "now"
+    uint64_t delta = 0;
+    if (due_ts > now) delta = due_ts - now;
+    else delta = 0;
+
+    char buf[64] = {0};
+    fsrs_format_interval(delta, buf, sizeof(buf));
 
     return std::string(buf);
 }
