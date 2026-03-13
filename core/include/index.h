@@ -48,7 +48,7 @@ typedef struct {
     uint8_t  meta1;
     uint8_t  meta2;
     uint8_t  len; // byte length of the indexed string (for quick pruning at query time)
-    uint8_t  reserved;
+    uint8_t  common;
 } __attribute__((packed)) Posting;
 
 /* runtime mmap view */
@@ -103,6 +103,7 @@ KOTOBA_API int index_build_from_pairs(
     const uint32_t *doc_ids,
     const uint8_t  *meta1,    /* optional */
     const uint8_t  *meta2,    /* optional */
+    const uint8_t  *common,   /* optional */
     size_t          count,
     GramMode        gram_mode
 );

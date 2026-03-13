@@ -97,6 +97,7 @@ int main(int argc, char **argv)
         uint32_t *ids = NULL;
         uint8_t *meta1 = NULL;
         uint8_t *meta2 = NULL;
+        uint8_t *common = NULL;
         size_t n = 0;
 
         GramMode gram_mode;
@@ -126,7 +127,8 @@ int main(int argc, char **argv)
                 &meta1,
                 &meta2,
                 &n,
-                read_fourth_col) != 0)
+                read_fourth_col,
+                &common) != 0)
         {
             return 1;
         }
@@ -137,10 +139,11 @@ int main(int argc, char **argv)
             ids,
             meta1,
             meta2,
+            common,
             n,
             gram_mode);
 
-        free_pairs(texts, ids, meta1, meta2, n);
+        free_pairs(texts, ids, meta1, meta2, common, n);
         return rc == 0 ? 0 : 1;
     } else if (strcmp(argv[1], "build-dict") == 0)
     {
@@ -196,38 +199,61 @@ int main(int argc, char **argv)
 
         return 0;
     } else if (strcmp(argv[1], "build-tsv") == 0)
-    { // generate all tsv
-
+    {
         kotoba_dict d;
         kotoba_dict_open(&d, dict_path, idx_path);
         TrieContext ctx;
         build_trie(&ctx);
 
-        const char *jp_out = "tsv/jp.tsv";
-        char **glosses_out;
-        glosses_out = malloc(sizeof(char *) * KOTOBA_LANG_COUNT);
-        const char *lang_names[] = {
-            "en", "fr", "de", "ru", "es", "pt", "it", "nl", "hu", "sv",
-            "cs", "pl", "ro", "he", "ar", "tr", "th", "vi", "id", "ms",
-            "ko", "zh", "zh_cn", "zh_tw", "fa", "eo", "slv", "unk"};
-        for (int i = 0; i < KOTOBA_LANG_COUNT - 1; ++i)
-        {
-            glosses_out[i] = malloc(64);
-            snprintf(glosses_out[i], 64, "tsv/gloss_%s.tsv", lang_names[i]);
-        }
+        char* lang_fnames[KOTOBA_LANG_COUNT] = {
+            "gloss_en.tsv",     // KOTOBA_LANG_EN
+            "gloss_fr.tsv",     // KOTOBA_LANG_FR
+            "gloss_de.tsv",     // KOTOBA_LANG_DE
+            "gloss_ru.tsv",     // KOTOBA_LANG_RU
+            "gloss_es.tsv",     // KOTOBA_LANG_ES
+            "gloss_pt.tsv",     // KOTOBA_LANG_PT
+            "gloss_it.tsv",     // KOTOBA_LANG_IT
+            "gloss_nl.tsv",     // KOTOBA_LANG_NL
+            "gloss_hu.tsv",     // KOTOBA_LANG_HU
+            "gloss_sv.tsv",     // KOTOBA_LANG_SV
+            "gloss_cs.tsv",     // KOTOBA_LANG_CS
+            "gloss_pl.tsv",     // KOTOBA_LANG_PL
+            "gloss_ro.tsv",     // KOTOBA_LANG_RO
+            "gloss_he.tsv",     // KOTOBA_LANG_HE
+            "gloss_ar.tsv",     // KOTOBA_LANG_AR
+            "gloss_tr.tsv",     // KOTOBA_LANG_TR
+            "gloss_th.tsv",     // KOTOBA_LANG_TH
+            "gloss_vi.tsv",     // KOTOBA_LANG_VI
+            "gloss_id.tsv",     // KOTOBA_LANG_ID
+            "gloss_ms.tsv",     // KOTOBA_LANG_MS
+            "gloss_ko.tsv",     // KOTOBA_LANG_KO
+            "gloss_zh.tsv",     // KOTOBA_LANG_ZH
+            "gloss_zh_cn.tsv",  // KOTOBA_LANG_ZH_CN
+            "gloss_zh_tw.tsv",  // KOTOBA_LANG_ZH_TW
+            "gloss_fa.tsv",     // KOTOBA_LANG_FA
+            "gloss_eo.tsv",     // KOTOBA_LANG_EO
+            "gloss_slv.tsv",    // KOTOBA_LANG_SLV
+            "gloss_unk.tsv"     // KOTOBA_LANG_UNK
+        };
+
+        char* jp_out = "jp.tsv";
 
         FILE *jp_fp = fopen(jp_out, "w");
-        FILE *gloss_fps[KOTOBA_LANG_COUNT - 1];
-        for (int i = 0; i < KOTOBA_LANG_COUNT - 1; ++i)
+        FILE *gloss_fps[KOTOBA_LANG_COUNT];
+        for (int i = 0; i < KOTOBA_LANG_COUNT; ++i)
         {
-            gloss_fps[i] = fopen(glosses_out[i], "w");
+            gloss_fps[i] = fopen(lang_fnames[i], "w");
         }
-
+    
+        printf("Total entries: %u\n", d.entry_count);
         for (uint32_t i = 0; i < d.entry_count; ++i)
         {
-            const entry_bin *e = kotoba_entry(&d, i);
             char str[64][1024];
             int str_count = 0;
+            if (i % 1000 == 0)
+                printf("Processing entry %u/%u\n", i, d.entry_count);
+            
+            const entry_bin *e = kotoba_entry(&d, i);
 
             if (e->k_elements_count > 0)
             {
@@ -235,9 +261,10 @@ int main(int argc, char **argv)
                 for (int j = 0; j < e->k_elements_count; ++j)
                 {
                     kotoba_str keb = kotoba_keb(&d, &k_ele[j]);
-                    fprintf(jp_fp, "%u\t%.*s\t%u\t%u\t%u\n", i, (int)keb.len, keb.ptr, j, TYPE_KANJI, keb.len);
+                    fprintf(jp_fp, "%u\t%.*s\t%u\t%u\t%u\t%u\n", i, (int)keb.len, keb.ptr, j, TYPE_KANJI, keb.len, e->priority);
                 }
             }
+
             if (e->r_elements_count > 0)
             {
                 const r_ele_bin *r_ele = kotoba_r_ele(&d, e, 0);
@@ -266,35 +293,27 @@ int main(int argc, char **argv)
                     }
                     if (!is_duplicate)
                     {
-                        fprintf(jp_fp, "%u\t%s\t%u\t%u\t%u\n", i, str[j], j, TYPE_READING, strlen(str[j]));
+                        fprintf(jp_fp, "%u\t%s\t%u\t%u\t%u\t%u\n", i, str[j], j, TYPE_READING, strlen(str[j]), e->priority);
                     }
                 }
             }
+
             for (int s = 0; s < e->senses_count; ++s)
             {
                 const sense_bin *sense = kotoba_sense(&d, e, s);
                 for (int g = 0; g < sense->gloss_count; ++g)
                 {
                     kotoba_str gloss = kotoba_gloss(&d, sense, g);
-                    for (int lang = 0; lang < KOTOBA_LANG_COUNT - 1; ++lang)
-                    {
-                        if (sense->lang == lang)
-                        {
-                            fprintf(gloss_fps[lang], "%u\t%.*s\t%u\t%u\t%u\n", i, (int)gloss.len, gloss.ptr, s, g, gloss.len);
-                        }
-                    }
+                    int lang = sense->lang < KOTOBA_LANG_COUNT ? sense->lang : KOTOBA_LANG_UNK;
+                    fprintf( gloss_fps[lang], "%u\t%.*s\t%u\t%u\t%u\t%u\n", i, (int)gloss.len, gloss.ptr, s, g, gloss.len, e->priority);
                 }
             }
         }
 
-        printf("TSV files generated successfully.\n");
-        fclose(jp_fp);
-        for (int i = 0; i < KOTOBA_LANG_COUNT - 1; ++i)
-        {
-            fclose(gloss_fps[i]);
-        }
+        printf("Iteration complete\n");
+        kotoba_dict_close(&d);
+        
 
-        return 0;
     }
     else if (strcmp(argv[1], "test") == 0)
     {

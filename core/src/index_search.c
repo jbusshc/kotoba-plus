@@ -248,10 +248,9 @@ static inline uint32_t vowel_to_hiragana(int vowel)
     }
 }
 
-static inline void scoring(query_t *query, uint8_t *out_score, uint8_t is_jp, uint8_t len)
+static inline void scoring(query_t *query, uint8_t *out_score, uint8_t is_jp, uint8_t len, uint8_t common)
 {
     uint8_t exact = (query->len == len) ? 1 : 0; // false positive check in further stage.
-    uint8_t common = 0; // TODO: implement common word detection
 
     uint8_t diff = (len > query->len)
                        ? (len - query->len)
@@ -317,7 +316,8 @@ static int search_jp_query(
 
         ctx->results.results_idx[write] = write;
         ctx->results.type[write] = (type == TYPE_KANJI) ? TYPE_KANJI : TYPE_READING;
-        scoring(&q, &ctx->results.score[write], 1, len); // 1 for JP type, results.score
+        uint8_t is_common = pr->p->common; // 0 or 1
+        scoring(&q, &ctx->results.score[write], 1, len, is_common); // 1 for JP type, results.score
 
         write++;
     }
@@ -421,7 +421,8 @@ void query_results(struct SearchContext *ctx, const char *query)
 
                     ctx->results.results_idx[write] = write;
                     ctx->results.type[write] = TYPE_GLOSS;
-                    scoring(&q, &ctx->results.score[write], 0, len); // 0 for not is_jp, results.score
+                    uint8_t is_common = pr->p->common; // 0 or 1
+                    scoring(&q, &ctx->results.score[write], 0, len, is_common); // 0 for not is_jp, results.score
 
                     write++;
                 }
@@ -475,7 +476,8 @@ void query_results(struct SearchContext *ctx, const char *query)
 
                     ctx->results.results_idx[write] = write;
                     ctx->results.type[write] = TYPE_GLOSS;
-                    scoring(&q, &ctx->results.score[write], 0, len); // 0 for not is_jp, results.score
+                    uint8_t is_common = pr->p->common; // 0 or 1
+                    scoring(&q, &ctx->results.score[write], 0, len, is_common); // 0 for not is_jp, results.score
 
                     write++;
                 }
