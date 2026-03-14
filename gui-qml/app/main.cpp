@@ -77,7 +77,7 @@ int main(int argc, char **argv)
     EntryDetailsViewModel *detailsVM = new EntryDetailsViewModel(dict, &configWrapper.m_config);
     SrsViewModel *srsVM = new SrsViewModel(srsSvc, dict);
 
-    SrsLibraryViewModel* libVM = new SrsLibraryViewModel(srsSvc, dict);
+    SrsLibraryViewModel* libVM = new SrsLibraryViewModel(srsSvc, dict, searchSvc);
 
     QQmlApplicationEngine engine;
 

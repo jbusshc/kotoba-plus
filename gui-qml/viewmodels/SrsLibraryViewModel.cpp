@@ -1,13 +1,15 @@
 #include "SrsLibraryViewModel.h"
 #include "../infrastructure/SrsService.h"
+#include "../infrastructure/SearchService.h"
 #include <QDebug>
 
 extern "C" {
 #include "../../core/include/viewer.h"
+#include "../../core/include/index_search.h"
 }
 
-SrsLibraryViewModel::SrsLibraryViewModel(SrsService* service, kotoba_dict* dict, QObject* parent)
-    : QAbstractListModel(parent), m_service(service), m_dict(dict)
+SrsLibraryViewModel::SrsLibraryViewModel(SrsService* service, kotoba_dict* dict,SearchService* searchService, QObject* parent)
+    : QAbstractListModel(parent), m_service(service), m_dict(dict), m_searchService(searchService)
 {
     loadAllCards();
     rebuildFiltered();
@@ -57,6 +59,20 @@ void SrsLibraryViewModel::loadAllCards()
             item.word = QStringLiteral("[unknown]");
         }
 
+
+        /* variants (kanji + readings) */
+
+        for (uint32_t k = 0; k < entry->k_elements_count; ++k) {
+            const k_ele_bin* ke = kotoba_k_ele(m_dict, entry, k);
+            kotoba_str s = kotoba_keb(m_dict, ke);
+            item.variants.append(QString::fromUtf8(s.ptr, s.len));
+        }
+
+        for (uint32_t r = 0; r < entry->r_elements_count; ++r) {
+            const r_ele_bin* re = kotoba_r_ele(m_dict, entry, r);
+            kotoba_str s = kotoba_reb(m_dict, re);
+            item.variants.append(QString::fromUtf8(s.ptr, s.len));
+        }
         /* meaning */
         if (entry->senses_count > 0) {
             const sense_bin* sense = kotoba_sense(m_dict, entry, 0);
@@ -87,20 +103,99 @@ void SrsLibraryViewModel::rebuildFiltered()
 {
     m_filtered.clear();
 
+    const QString s = m_search.trimmed();
+    const bool hasSearch = !s.isEmpty();
+
+    QString queryMixedStr;
+    QString queryVariantStr;
+
+    bool sameMixed = true;
+    uint8_t variant_flag = 0;
+
+    QByteArray sUtf8;
+
+    if (hasSearch) {
+
+        sUtf8 = s.toUtf8();
+
+        static char query_mixed[MAX_QUERY_LEN];
+        static char query_variant[MAX_QUERY_LEN];
+
+        mixed_to_hiragana(
+            m_searchService->searchCtx()->trie_ctx,
+            sUtf8.constData(),
+            query_mixed,
+            MAX_QUERY_LEN
+        );
+
+        queryMixedStr = QString::fromUtf8(query_mixed);
+
+        sameMixed = strcmp(query_mixed, sUtf8.constData()) == 0;
+
+        if (!sameMixed) {
+            vowel_prolongation_mark(
+                query_mixed,
+                query_variant,
+                MAX_QUERY_LEN,
+                &variant_flag
+            );
+
+            queryVariantStr = QString::fromUtf8(query_variant);
+        }
+    }
+
+    /* micro-opt: detectar si la búsqueda es numérica */
+    bool searchIsNumeric = false;
+    uint32_t searchId = 0;
+
+    if (hasSearch) {
+        bool ok = false;
+        searchId = s.toUInt(&ok);
+        searchIsNumeric = ok;
+    }
+
     for (const SrsCardItem &it : m_allCards) {
+
         bool matchSearch = true;
-        if (!m_search.trimmed().isEmpty()) {
-            const QString s = m_search.trimmed();
-            matchSearch = it.word.contains(s, Qt::CaseInsensitive) ||
-                          it.meaning.contains(s, Qt::CaseInsensitive) ||
-                          QString::number(it.id) == s;
+
+        if (hasSearch) {
+
+            if (sameMixed) {
+
+                matchSearch =
+                    variantMatch(it, s) ||
+                    it.meaning.contains(s, Qt::CaseInsensitive) ||
+                    (searchIsNumeric && it.id == searchId);
+
+            }
+            else if (variant_flag) {
+
+                matchSearch =
+                    variantMatch(it, s) ||
+                    variantMatch(it, queryMixedStr) ||
+                    variantMatch(it, queryVariantStr) ||
+                    it.meaning.contains(s, Qt::CaseInsensitive) ||
+                    (searchIsNumeric && it.id == searchId);
+
+            }
+            else {
+
+                matchSearch =
+                    variantMatch(it, s) ||
+                    variantMatch(it, queryMixedStr) ||
+                    it.meaning.contains(s, Qt::CaseInsensitive) ||
+                    (searchIsNumeric && it.id == searchId);
+
+            }
         }
 
         bool matchFilter = true;
+
         if (m_filter == QLatin1String("New"))
             matchFilter = (it.state == QLatin1String("New"));
         else if (m_filter == QLatin1String("Learning"))
-            matchFilter = (it.state == QLatin1String("Learning") || it.state == QLatin1String("Relearning"));
+            matchFilter = (it.state == QLatin1String("Learning") ||
+                           it.state == QLatin1String("Relearning"));
         else if (m_filter == QLatin1String("Review"))
             matchFilter = (it.state == QLatin1String("Review"));
         else if (m_filter == QLatin1String("Suspended"))
@@ -265,4 +360,13 @@ void SrsLibraryViewModel::fetchMore(const QModelIndex &parent)
     for (int i = 0; i < itemsToFetch; ++i)
         m_visible.append(m_filtered.at(begin + i));
     endInsertRows();
+}
+
+bool SrsLibraryViewModel::variantMatch(const SrsCardItem& it, const QString& q) const
+{
+    for (const QString& v : it.variants)
+        if (v.contains(q, Qt::CaseInsensitive))
+            return true;
+
+    return false;
 }

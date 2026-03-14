@@ -22,7 +22,7 @@ int get_input_type(const char *query)
             { // Katakana
                 type = type | INPUT_TYPE_KANA;
             }
-        } else { // si no es un caracter de 3 bytes, asumimos que es romaji (o al menos no kanji/kana)
+        } else { // Non-japanese
             type = type | INPUT_TYPE_ROMAJI;
         }
         p += len;
