@@ -4,7 +4,7 @@ int get_input_type(const char *query)
 {
     if (!query || *query == '\0')
         return INPUT_TYPE_NONE;
-    int type = INPUT_TYPE_ROMAJI;
+    int type = 0;
     const uint8_t *p = (const uint8_t *)query;
     while (*p)
     {
@@ -22,6 +22,8 @@ int get_input_type(const char *query)
             { // Katakana
                 type = type | INPUT_TYPE_KANA;
             }
+        } else { // si no es un caracter de 3 bytes, asumimos que es romaji (o al menos no kanji/kana)
+            type = type | INPUT_TYPE_ROMAJI;
         }
         p += len;
     }
