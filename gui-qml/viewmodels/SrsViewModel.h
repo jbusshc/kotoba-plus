@@ -12,16 +12,17 @@ class SrsViewModel : public QObject
 {
     Q_OBJECT
 
-    Q_PROPERTY(int dueCount READ dueCount NOTIFY statsChanged)
-    Q_PROPERTY(int learningCount READ learningCount NOTIFY statsChanged)
-    Q_PROPERTY(int newCount READ newCount NOTIFY statsChanged)
-    Q_PROPERTY(int lapsedCount READ lapsedCount NOTIFY statsChanged)
-    Q_PROPERTY(QString againInterval READ againInterval NOTIFY statsChanged)
-    Q_PROPERTY(QString hardInterval READ hardInterval NOTIFY statsChanged)
-    Q_PROPERTY(QString goodInterval READ goodInterval NOTIFY statsChanged)
-    Q_PROPERTY(QString easyInterval READ easyInterval NOTIFY statsChanged)
+    Q_PROPERTY(int totalCount      READ totalCount      NOTIFY statsChanged)
+    Q_PROPERTY(int dueCount        READ dueCount        NOTIFY statsChanged)
+    Q_PROPERTY(int learningCount   READ learningCount   NOTIFY statsChanged)
+    Q_PROPERTY(int newCount        READ newCount        NOTIFY statsChanged)
+    Q_PROPERTY(int lapsedCount     READ lapsedCount     NOTIFY statsChanged)
     Q_PROPERTY(int reviewTodayCount READ reviewTodayCount NOTIFY statsChanged)
 
+    Q_PROPERTY(QString againInterval READ againInterval NOTIFY statsChanged)
+    Q_PROPERTY(QString hardInterval  READ hardInterval  NOTIFY statsChanged)
+    Q_PROPERTY(QString goodInterval  READ goodInterval  NOTIFY statsChanged)
+    Q_PROPERTY(QString easyInterval  READ easyInterval  NOTIFY statsChanged)
 
 public:
     explicit SrsViewModel(SrsService *service, kotoba_dict *dict, QObject *parent = nullptr);
@@ -39,32 +40,35 @@ public:
     Q_INVOKABLE bool contains(int entryId);
     Q_INVOKABLE void add(int entryId);
 
-    int dueCount() const;
-    int learningCount() const;
-    int newCount() const;
-    int lapsedCount() const;
-    QString againInterval() const;
-    QString hardInterval() const;
-    QString goodInterval() const;
-    QString easyInterval() const;
-    int reviewTodayCount() const;
+    /* Guardar el perfil explícitamente (llamado desde QML al salir de estudio) */
+    Q_INVOKABLE bool saveProfile();
+
+    int     totalCount()       const;
+    int     dueCount()         const;
+    int     learningCount()    const;
+    int     newCount()         const;
+    int     lapsedCount()      const;
+    int     reviewTodayCount() const;
+
+    QString againInterval()    const;
+    QString hardInterval()     const;
+    QString goodInterval()     const;
+    QString easyInterval()     const;
 
 signals:
     void showQuestion(QString word);
     void showAnswer(QString meaning);
     void noMoreCards();
-
     void statsChanged();
 
 private:
-    SrsService *m_service;
-    kotoba_dict *m_dict;
-
-    uint32_t m_currentEntryId = 0;
-    QString m_currentMeaning;
-
-    bool m_hasCard = false;
-
     void loadNext();
     void updateStats();
+
+    SrsService   *m_service;
+    kotoba_dict  *m_dict;
+
+    uint32_t m_currentEntryId = 0;
+    QString  m_currentMeaning;
+    bool     m_hasCard = false;
 };

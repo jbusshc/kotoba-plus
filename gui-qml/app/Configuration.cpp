@@ -144,7 +144,7 @@ bool loadConfiguration(Configuration &config, const QString &filePath)
     QStringList langs = config.glossLanguages.split(",", Qt::SkipEmptyParts);
 
 
-    for (int i = 0; i < KOTOBA_LANG_COUNT; ++i)
+    for (int i = 0; i < KOTOBA_LANG_COUNT+1; ++i)
         config.languages[i] = false;
 
 

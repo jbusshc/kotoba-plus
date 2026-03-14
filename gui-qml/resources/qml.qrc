@@ -6,5 +6,7 @@
         <file>qml/pages/SrsDashboard.qml</file>
         <file>qml/pages/SrsStudy.qml</file>
         <file>qml/pages/SrsLibrary.qml</file>
+        <file>qml/pages/SrsCardDetails.qml</file>
+        <file>qml/components/SrsCardDelegate.qml</file>
     </qresource>
 </RCC>

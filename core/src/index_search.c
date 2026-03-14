@@ -94,6 +94,7 @@ void init_search_context(struct SearchContext *ctx,
     ctx->mixed_query   = ctx->queries_buffer;
     ctx->variant_query = ctx->queries_buffer + MAX_QUERY_LEN;
 
+    memset(ctx->is_gloss_active, 0, sizeof(ctx->is_gloss_active));
     // ---- Gloss flags ----
     if (glosses_active)
     {

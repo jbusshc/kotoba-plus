@@ -7,16 +7,14 @@ Page {
     id: page
     padding: 32
 
-    // Tema oscuro/claro
     property bool darkTheme: appConfig && appConfig.config ? appConfig.config.theme === "dark" : true
     property color textColor: darkTheme ? "white" : "black"
     property color cardBackground: darkTheme ? "#222222" : "#ffffff"
 
-    // Componente de tarjeta del dashboard
     component DashboardCard: Rectangle {
         property string label
-        property int value
-        property color accent
+        property int    value
+        property color  accent
 
         radius: 12
         color: cardBackground
@@ -61,7 +59,6 @@ Page {
             rowSpacing: 20
             Layout.fillWidth: true
 
-            // Dashboard cards con colores Material reales
             DashboardCard {
                 label: "Due"
                 value: srsVM ? srsVM.dueCount : 0
@@ -70,12 +67,12 @@ Page {
 
             DashboardCard {
                 label: "Total Cards"
-                value: srsVM ? (srsVM.dueCount + srsVM.learningCount + srsVM.newCount + srsVM.lapsedCount) : 0
+                value: srsVM ? srsVM.totalCount : 0
                 accent: Material.color(Material.Blue)
             }
 
             DashboardCard {
-                label: "Repassed Today"
+                label: "Reviewed Today"
                 value: srsVM ? srsVM.reviewTodayCount : 0
                 accent: Material.color(Material.Green)
             }
@@ -83,12 +80,11 @@ Page {
 
         Item { Layout.fillHeight: true }
 
-        // Reemplaza los dos botones individuales por esto
         RowLayout {
             Layout.alignment: Qt.AlignHCenter
-            spacing: 16   // espacio entre botones
+            spacing: 16
 
-            // Botón Start Study
+            /* ---- Start Study ---- */
             Button {
                 id: studyButton
                 text: srsVM && srsVM.dueCount > 0 ? "Start Study" : "Nothing to study"
@@ -98,7 +94,9 @@ Page {
                 Layout.preferredWidth: 180
 
                 background: Rectangle {
-                    color: studyButton.enabled ? Material.color(Material.Blue) : "#888"
+                    color: studyButton.enabled
+                           ? Material.color(Material.Blue)
+                           : (page.darkTheme ? "#555" : "#aaa")
                     radius: 8
                 }
 
@@ -112,13 +110,16 @@ Page {
 
                 onClicked: {
                     if (stack && srsVM && srsVM.dueCount > 0) {
-                        stack.push("qrc:/qml/pages/SrsStudy.qml")
                         srsVM.startSession()
+                        stack.push("qrc:/qml/pages/SrsStudy.qml")
                     }
                 }
             }
 
-            // Botón Cards List / SrsLibrary
+            /* ---- Cards List ----
+             * BUG FIX: el color antes dependía de studyButton.enabled,
+             * así que se ponía gris cuando no había cartas pendientes aunque
+             * el botón siempre esté habilitado. Ahora tiene su propio color. */
             Button {
                 id: libraryButton
                 text: "Cards list"
@@ -127,28 +128,25 @@ Page {
                 Layout.preferredWidth: 180
 
                 background: Rectangle {
-                    color: studyButton.enabled ? Material.color(Material.Blue) : "#888"
+                    color: Material.color(Material.BlueGrey)
                     radius: 8
                 }
 
                 contentItem: Text {
                     text: parent.text
-                    color: darkTheme ? "white" : "black"
+                    color: "white"
                     font.pixelSize: 20
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                 }
 
                 onClicked: {
-                    if (stack) {
+                    if (stack)
                         stack.push("qrc:/qml/pages/SrsLibrary.qml")
-                    }
                 }
             }
         }
 
         Item { Layout.fillHeight: true }
     }
-
-
 }

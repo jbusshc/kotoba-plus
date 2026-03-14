@@ -13,6 +13,15 @@ Page {
 
     property bool answerShown: false
 
+    /* Limpiar estado al entrar a la pantalla */
+    onVisibleChanged: {
+        if (visible) {
+            questionText.text  = ""
+            answerText.text    = ""
+            page.answerShown   = false
+        }
+    }
+
     ColumnLayout {
         anchors.fill: parent
         spacing: 20
@@ -64,7 +73,7 @@ Page {
         Button {
             id: revealButton
             Layout.alignment: Qt.AlignHCenter
-            enabled: questionText.text !== "No more cards 🎉"
+            enabled: questionText.text !== ""
             text: "Show Answer"
 
             onClicked: {
@@ -79,66 +88,55 @@ Page {
             visible: page.answerShown
 
             Button {
-                text: "Again\n" + srsVM.againInterval
+                text: "Again\n" + (srsVM ? srsVM.againInterval : "")
                 Material.background: "#D32F2F"
-                onClicked: {
-                    if (srsVM) srsVM.answerAgain()
-                }
+                onClicked: { if (srsVM) srsVM.answerAgain() }
             }
 
             Button {
-                text: "Hard\n" + srsVM.hardInterval
+                text: "Hard\n" + (srsVM ? srsVM.hardInterval : "")
                 Material.background: "#F57C00"
-                onClicked: {
-                    if (srsVM) srsVM.answerHard()
-                }
+                onClicked: { if (srsVM) srsVM.answerHard() }
             }
 
             Button {
-                text: "Good\n" + srsVM.goodInterval
+                text: "Good\n" + (srsVM ? srsVM.goodInterval : "")
                 Material.background: "#388E3C"
-                onClicked: {
-                    if (srsVM) srsVM.answerGood()
-                }
+                onClicked: { if (srsVM) srsVM.answerGood() }
             }
 
             Button {
-                text: "Easy\n" + srsVM.easyInterval
+                text: "Easy\n" + (srsVM ? srsVM.easyInterval : "")
                 Material.background: "#1976D2"
-                onClicked: {
-                    if (srsVM) srsVM.answerEasy()
-                }
+                onClicked: { if (srsVM) srsVM.answerEasy() }
             }
         }
 
         Item { Layout.fillHeight: true }
     }
 
-    /* ---- sincronización automática con SrsViewModel ---- */
     Connections {
         target: srsVM
 
         function onShowQuestion(word) {
             questionText.text = word || ""
-            answerText.text = ""
-            page.answerShown = false
+            answerText.text   = ""
+            page.answerShown  = false
         }
 
         function onShowAnswer(ans) {
-            answerText.text = ans || ""
+            answerText.text  = ans || ""
             page.answerShown = true
         }
 
+        /*
+         * BUG FIX: antes se hacía stack.pop() directamente sin guardar.
+         * Ahora llamamos saveProfile() para que el progreso de la sesión
+         * quede persistido antes de salir de la pantalla de estudio.
+         */
         function onNoMoreCards() {
-            if (stack)
-                stack.pop()
+            if (srsVM) srsVM.saveProfile()
+            if (stack) stack.pop()
         }
-    }
-
-    /* Cada vez que la página se hace visible, limpiamos la carta anterior */
-    onVisibleChanged: if (visible) {
-        questionText.text = ""
-        answerText.text = ""
-        page.answerShown = false
     }
 }

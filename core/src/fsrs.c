@@ -973,6 +973,7 @@ void fsrs_answer(fsrs_deck *d, fsrs_card *card, fsrs_rating rating, uint64_t now
 /* preview produces absolute unix timestamps (due_ts) for each rating */
 void fsrs_preview(const fsrs_deck *deck, const fsrs_card *card, uint64_t now, uint64_t out[4]) {
     if (!deck || !card || !out) return;
+
     const fsrs_deck *d = deck;
     const float *w = d->params.w;
     uint64_t today = (uint64_t)fsrs_current_day((fsrs_deck*)d, now);
@@ -982,7 +983,8 @@ void fsrs_preview(const fsrs_deck *deck, const fsrs_card *card, uint64_t now, ui
     float r_val = fsrs_retrievability(card->stability, elapsed_secs);
 
     static const fsrs_rating ratings[4] = { FSRS_AGAIN, FSRS_HARD, FSRS_GOOD, FSRS_EASY };
-
+    // rng preserve
+    uint64_t rng_state_backup = d->rng_state;
     /* 1) Generate raw timestamps as before */
     for (int ri = 0; ri < 4; ++ri) {
         fsrs_rating rating = ratings[ri];
@@ -1122,6 +1124,8 @@ void fsrs_preview(const fsrs_deck *deck, const fsrs_card *card, uint64_t now, ui
     for (int i = 0; i < 4; ++i) {
         out[i] = now + secs[i];
     }
+    // restore rng state
+    ((fsrs_deck*)d)->rng_state = rng_state_backup;
 }
 
 /* ==================== Statistics / misc ==================== */
@@ -1147,8 +1151,13 @@ void fsrs_compute_stats(const fsrs_deck *d, uint64_t now, fsrs_stats *out) {
         }
         if (c->flags & FSRS_FLAG_LEECH) out->leech_count++;
         if (c->lapses > 0) out->cards_with_lapses++;
-        if (c->due_day <= today) out->due_now++;
-        if (c->due_day <= today + 1) out->due_today++;
+        //if (c->due_day <= today) out->due_now++;
+        //if (c->due_day <= today + 1) out->due_today++;
+        if (c->due_day <= today)
+            out->due_now++;
+
+        if (c->due_day == today)
+            out->due_today++;
 
         if (c->stability > 0.0f && c->state != FSRS_STATE_SUSPENDED) {
             sum_s += c->stability;
