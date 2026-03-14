@@ -62,7 +62,15 @@ ssize_t getline(char **lineptr, size_t *n, FILE *stream)
 }
 
 /* ---------- TSV reader ---------- */
-static int read_tsv_pairs(const char *tsv, const char ***texts_out, uint32_t **ids_out, uint8_t **ids2_out, uint8_t **ids3_out, size_t *count_out, bool read_fourth_col, uint8_t **common_out)
+static int read_tsv_pairs(
+    const char *tsv,
+    const char ***texts_out,
+    uint32_t **ids_out,
+    uint8_t **ids2_out,
+    uint8_t **ids3_out,
+    size_t *count_out,
+    bool read_fourth_col,
+    uint8_t **common_out)
 {
     FILE *f = fopen(tsv, "r");
     if (!f)
@@ -70,67 +78,121 @@ static int read_tsv_pairs(const char *tsv, const char ***texts_out, uint32_t **i
         perror("fopen tsv");
         return -1;
     }
+
     char *line = NULL;
     size_t lcap = 0;
-    size_t cap = 0, cnt = 0;
+
+    size_t cap = 0;
+    size_t cnt = 0;
+
     const char **texts = NULL;
     uint32_t *ids = NULL;
-    uint8_t *ids2 = NULL, *ids3 = NULL;
+    uint8_t *ids2 = NULL;
+    uint8_t *ids3 = NULL;
     uint8_t *common = NULL;
+
     while (getline(&line, &lcap, f) != -1)
     {
         if (line[0] == '#' || line[0] == '\n')
             continue;
+
         char *p = line;
-        char *id_s = strsep(&p, "\t\n");
-        char *txt = strsep(&p, "\t\n");
-        char *id2_s = strsep(&p, "\t\n");
-        char *id3_s = NULL;
-        if (read_fourth_col)
-            id3_s = strsep(&p, "\t\n");
-        char *common_s = NULL;
-        if (common_out)
-            common_s = strsep(&p, "\t\n");
-        if (!id_s || !txt)
+
+        /* leer columnas */
+        char *cols[8];
+        int ncols = 0;
+
+        while (ncols < 8)
+        {
+            cols[ncols] = strsep(&p, "\t\n");
+            if (!cols[ncols])
+                break;
+            ncols++;
+        }
+
+        if (ncols < 2)
             continue;
+
+        char *id_s = cols[0];
+        char *txt = cols[1];
+        char *id2_s = (ncols > 2) ? cols[2] : NULL;
+        char *id3_s = (ncols > 3) ? cols[3] : NULL;
+        char *common_s = (ncols > 4) ? cols[4] : NULL;
+
+        /* saltar header tipo "id text ..." */
+        if (!isdigit(id_s[0]))
+            continue;
+
         if (cnt == cap)
         {
-            cap = cap ? cap * 2 : 1024;
-            texts = realloc(texts, cap * sizeof(char *));
-            ids = realloc(ids, cap * sizeof(uint32_t));
-            ids2 = realloc(ids2, cap * sizeof(uint8_t));
-            if (read_fourth_col)
-                ids3 = realloc(ids3, cap * sizeof(uint8_t));
-            if (common_out)
-                common = realloc(common, cap * sizeof(uint8_t));
-            if (!texts || !ids || !ids2 || (read_fourth_col && !ids3) || (common_out && !common))
+            size_t newcap = cap ? cap * 2 : 1024;
+
+            const char **new_texts = realloc(texts, newcap * sizeof(char *));
+            uint32_t *new_ids = realloc(ids, newcap * sizeof(uint32_t));
+            uint8_t *new_ids2 = realloc(ids2, newcap * sizeof(uint8_t));
+            uint8_t *new_ids3 = read_fourth_col ? realloc(ids3, newcap * sizeof(uint8_t)) : ids3;
+            uint8_t *new_common = common_out ? realloc(common, newcap * sizeof(uint8_t)) : common;
+
+            if (!new_texts || !new_ids || !new_ids2 ||
+                (read_fourth_col && !new_ids3) ||
+                (common_out && !new_common))
             {
                 perror("realloc");
+                fclose(f);
+                free(line);
                 return -1;
             }
+
+            texts = new_texts;
+            ids = new_ids;
+            ids2 = new_ids2;
+            ids3 = new_ids3;
+            common = new_common;
+
+            cap = newcap;
         }
-        ids[cnt] = (uint32_t)atoi(id_s);
+
+        ids[cnt] = (uint32_t)strtoul(id_s, NULL, 10);
         texts[cnt] = strdup(txt);
-        ids2[cnt] = id2_s ? (uint8_t)atoi(id2_s) : 0;
+
+        ids2[cnt] = id2_s ? (uint8_t)strtoul(id2_s, NULL, 10) : 0;
+
         if (read_fourth_col)
-            ids3[cnt] = id3_s ? (uint8_t)atoi(id3_s) : 0;
+            ids3[cnt] = id3_s ? (uint8_t)strtoul(id3_s, NULL, 10) : 0;
+
         if (common_out)
-            common[cnt] = common_s ? (uint8_t)atoi(common_s) : 0;
+            common[cnt] = (common_s && common_s[0] == '1') ? 1 : 0;
+
+        uint8_t meta2 = 0;
+        if (read_fourth_col)
+            meta2 = ids3[cnt];
+
+        uint8_t cm = 0;
+        if (common_out)
+            cm = common[cnt];
+
         cnt++;
     }
+
     free(line);
     fclose(f);
+
     *texts_out = texts;
     *ids_out = ids;
     *ids2_out = ids2;
+
     if (read_fourth_col)
         *ids3_out = ids3;
+
     if (common_out)
         *common_out = common;
+
     if (count_out)
         *count_out = cnt;
+
     return 0;
 }
+
 
 static void free_pairs(const char **texts, uint32_t *ids, uint8_t *ids2, uint8_t *ids3, uint8_t *common, size_t n)
 {

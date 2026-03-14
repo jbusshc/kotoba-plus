@@ -48,7 +48,7 @@ typedef struct {
     uint8_t  meta1;
     uint8_t  meta2;
     uint8_t  len; // byte length of the indexed string (for quick pruning at query time)
-    uint8_t  common;
+    uint8_t  common; // 0 or 1, indicates if the entry is common (for scoring boost)
 } __attribute__((packed)) Posting;
 
 /* runtime mmap view */

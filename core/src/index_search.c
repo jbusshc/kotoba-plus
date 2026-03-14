@@ -262,7 +262,7 @@ static inline void scoring(query_t *query, uint8_t *out_score, uint8_t is_jp, ui
 
     uint8_t proximity = 31 - diff;
 
-    *out_score = (exact << 7) | (is_jp << 6) | (common << 5) | proximity;
+    *out_score = (exact << 7) | (is_jp << 6) | (proximity << 1) | common;
 }
 
 static int search_jp_query(
@@ -318,6 +318,7 @@ static int search_jp_query(
         ctx->results.results_idx[write] = write;
         ctx->results.type[write] = (type == TYPE_KANJI) ? TYPE_KANJI : TYPE_READING;
         uint8_t is_common = pr->p->common; // 0 or 1
+
         scoring(&q, &ctx->results.score[write], 1, len, is_common); // 1 for JP type, results.score
 
         write++;
