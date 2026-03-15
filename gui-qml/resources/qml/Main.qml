@@ -4,6 +4,7 @@ import QtQuick.Layouts
 import QtQuick.Controls.Material
 import "pages"
 
+import Kotoba 1.0
 ApplicationWindow {
     id: root
     width: 900
@@ -11,6 +12,7 @@ ApplicationWindow {
     visible: true
     title: "Kotoba Plus"
 
+    color: Theme.background
     // tema dinámico
     Material.theme: appConfig.theme === "dark" ? Material.Dark : Material.Light
 

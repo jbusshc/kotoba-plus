@@ -14,7 +14,7 @@ class EntryDetailsViewModel : public QObject
 public:
     explicit EntryDetailsViewModel(kotoba_dict *dict, Configuration *config, QObject *parent = nullptr);
 
-    Q_INVOKABLE QVariantMap buildDetails(int docId);
+    Q_INVOKABLE QVariantMap mapEntry(int docId);
 
 private:
     kotoba_dict *m_dict;

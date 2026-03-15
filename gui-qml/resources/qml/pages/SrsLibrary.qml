@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import "../components"
+import Kotoba 1.0
 
 Page {
     title: "SRS Library"
@@ -14,6 +15,12 @@ Page {
         if (srsLibraryVM)
             srsLibraryVM.setFilter("All")
     }
+
+    property bool darkTheme: Theme.darkTheme
+    property color textColor: Theme.textColor
+    property color hintColor: Theme.hintColor
+    property color accentColor: Theme.accentColor
+    property color dividerColor: Theme.dividerColor
 
     ColumnLayout {
         anchors.fill: parent
@@ -28,6 +35,8 @@ Page {
                 id: searchField
                 Layout.fillWidth: true
                 placeholderText: "Search word or meaning..."
+                color: textColor
+                placeholderTextColor: hintColor
 
                 onTextChanged: {
                     if (srsLibraryVM)
@@ -58,7 +67,7 @@ Page {
         Rectangle {
             Layout.fillWidth: true
             height: 1
-            color: "#444"
+            color: dividerColor
         }
 
         Item {

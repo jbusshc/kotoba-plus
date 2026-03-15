@@ -3,15 +3,24 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Controls.Material
 
+import Kotoba 1.0
+
 Page {
     id: page
     padding: 24
 
-    property bool darkTheme: appConfig && appConfig.config ? appConfig.config.theme === "dark" : true
-    property color textColor: darkTheme ? "white" : "black"
-    property color hintColor: darkTheme ? "#B0BEC5" : "#757575"
-
+    property bool darkTheme: Theme.darkTheme
+    property color textColor: Theme.textColor
+    property color hintColor: Theme.hintColor
+    property color accentColor: Theme.accentColor
+    property color dividerColor: Theme.dividerColor
+    property color cardBackground: Theme.cardBackground
     property bool answerShown: false
+
+    property color againColor: Theme.againColor
+    property color hardColor: Theme.hardColor
+    property color goodColor: Theme.goodColor
+    property color easyColor: Theme.easyColor
 
     /* Limpiar estado al entrar a la pantalla */
     onVisibleChanged: {
@@ -35,8 +44,8 @@ Page {
 
             background: Rectangle {
                 radius: 14
-                color: darkTheme ? "#1E1E1E" : "#FAFAFA"
-                border.color: darkTheme ? "#333" : "#DDD"
+                color: cardBackground
+                border.color: dividerColor
             }
 
             ColumnLayout {
@@ -89,25 +98,25 @@ Page {
 
             Button {
                 text: "Again\n" + (srsVM ? srsVM.againInterval : "")
-                Material.background: "#D32F2F"
+                Material.background: page.againColor
                 onClicked: { if (srsVM) srsVM.answerAgain() }
             }
 
             Button {
                 text: "Hard\n" + (srsVM ? srsVM.hardInterval : "")
-                Material.background: "#F57C00"
+                Material.background: page.hardColor
                 onClicked: { if (srsVM) srsVM.answerHard() }
             }
 
             Button {
                 text: "Good\n" + (srsVM ? srsVM.goodInterval : "")
-                Material.background: "#388E3C"
+                Material.background: page.goodColor
                 onClicked: { if (srsVM) srsVM.answerGood() }
             }
 
             Button {
                 text: "Easy\n" + (srsVM ? srsVM.easyInterval : "")
-                Material.background: "#1976D2"
+                Material.background: page.easyColor
                 onClicked: { if (srsVM) srsVM.answerEasy() }
             }
         }

@@ -2,24 +2,17 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Controls.Material
+import Kotoba 1.0
 
 Page {
     id: page
     padding: 12
 
-    property bool darkTheme: appConfig.theme === "dark"
-    property color textColor: darkTheme ? "white" : "black"
-    property color hintColor: darkTheme ? "#B0BEC5" : "#757575"
-    property color accentColor: {
-        switch (appConfig.accentColor.toLowerCase()) {
-            case "blue": return Material.Blue
-            case "red": return Material.Red
-            case "green": return Material.Green
-            case "indigo": return Material.Indigo
-            default: return Material.Blue
-        }
-    }
-    property color dividerColor: Material.dividerColor
+    property bool darkTheme: Theme.darkTheme
+    property color textColor: Theme.textColor
+    property color hintColor: Theme.hintColor
+    property color accentColor: Theme.accentColor
+    property color dividerColor: Theme.dividerColor
 
     ColumnLayout {
         anchors.fill: parent

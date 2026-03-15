@@ -2,22 +2,25 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Controls.Material
+import Kotoba 1.0
 
 Page {
     id: page
     padding: 32
 
-    property bool darkTheme: appConfig && appConfig.config ? appConfig.config.theme === "dark" : true
-    property color textColor: darkTheme ? "white" : "black"
-    property color cardBackground: darkTheme ? "#222222" : "#ffffff"
+    property bool darkTheme: Theme.darkTheme
+    property color textColor: Theme.textColor
+    property color hintColor: Theme.hintColor
+    property color accentColor: Theme.accentColor
+    property color dividerColor: Theme.dividerColor
 
     component DashboardCard: Rectangle {
         property string label
-        property int    value
-        property color  accent
+        property int value
+        property color accent
 
         radius: 12
-        color: cardBackground
+        color: Theme.cardBackground
         border.color: accent
         border.width: 2
 
@@ -84,7 +87,6 @@ Page {
             Layout.alignment: Qt.AlignHCenter
             spacing: 16
 
-            /* ---- Start Study ---- */
             Button {
                 id: studyButton
                 text: srsVM && srsVM.dueCount > 0 ? "Start Study" : "Nothing to study"
@@ -96,7 +98,7 @@ Page {
                 background: Rectangle {
                     color: studyButton.enabled
                            ? Material.color(Material.Blue)
-                           : (page.darkTheme ? "#555" : "#aaa")
+                           : (Theme.darkTheme ? "#555" : "#aaa")
                     radius: 8
                 }
 
@@ -116,10 +118,6 @@ Page {
                 }
             }
 
-            /* ---- Cards List ----
-             * BUG FIX: el color antes dependía de studyButton.enabled,
-             * así que se ponía gris cuando no había cartas pendientes aunque
-             * el botón siempre esté habilitado. Ahora tiene su propio color. */
             Button {
                 id: libraryButton
                 text: "Cards list"
