@@ -9,5 +9,7 @@
         <file>qml/pages/SrsCardDetails.qml</file>
         <file>qml/components/SrsCardDelegate.qml</file>
         <file>qml/theme/Theme.qml</file>
+        <file>qml/components/EntryView.qml</file>
+        <file>qml/components/SenseItem.qml</file>
     </qresource>
 </RCC>
