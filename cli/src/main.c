@@ -317,6 +317,16 @@ int main(int argc, char **argv)
     }
     else if (strcmp(argv[1], "test") == 0)
     {
+        kotoba_dict d;
+        kotoba_dict_open(&d, dict_path, idx_path);
+
+        kotoba_writer w;
+        kotoba_writer_open_patch(&w, dict_path, idx_path, &d);
+
+        //kotoba_writer_patch_entries(&w, &d); // 10 min, N² complexity, should be optimized 
+
+        print_entry(&d, 5);
+        kotoba_dict_close(&d);
         return 0;
     }
 

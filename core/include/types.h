@@ -144,6 +144,10 @@ typedef struct
 
 */
 
+/*
+    TOKENS INFO IN DICT_TOKENS.H/DICT_TOKENS.C 
+*/
+
 /* -------------------------
  * Entry (unidad principal)
  * -------------------------
@@ -168,9 +172,9 @@ typedef struct
  */
 typedef struct
 {
-    uint32_t keb_off;
-    uint32_t ke_inf_off;
-    uint32_t ke_pri_off;
+    uint32_t keb_off; // offset a string codificada como [uint8_t len][bytes]
+    uint32_t ke_inf_off; // offset a array de tokens
+    uint32_t ke_pri_off; // offset a array de tokens
 
     uint8_t ke_inf_count;
     uint8_t ke_pri_count;
@@ -183,15 +187,15 @@ typedef struct
  */
 typedef struct
 {
-    uint32_t reb_off;
-    uint32_t re_restr_off;
-    uint32_t re_inf_off;
-    uint32_t re_pri_off;
+    uint32_t reb_off; // offset a string codificada como [uint8_t len][bytes]
+    uint32_t re_restr_off; // offset a array uint8_t de índices de kebs; ausencia índica que aplica a todos
+    uint32_t re_inf_off; // offset a array de tokens
+    uint32_t re_pri_off; // offset a array de tokens
 
     uint8_t re_restr_count;
     uint8_t re_inf_count;
     uint8_t re_pri_count;
-    uint8_t reserved;
+    uint8_t re_nokanji; /* boolean */ // indicates that the reb, while associated with the keb, cannot be regarded as a true reading of the kanji
 } r_ele_bin;
 
 /* -------------------------
@@ -200,19 +204,19 @@ typedef struct
  */
 typedef struct
 {
-    uint32_t stagk_off;
-    uint32_t stagr_off;
-    uint32_t pos_off;
-    uint32_t xref_off;
-    uint32_t ant_off;
-    uint32_t field_off;
-    uint32_t misc_off;
-    uint32_t s_inf_off;
-    uint32_t lsource_off;
-    uint32_t dial_off;
-    uint32_t gloss_off;
+    uint32_t stagk_off; // offset a array de índices de kebs; ausencia índica que aplica a todos
+    uint32_t stagr_off; // offset a array de índices de rebs; ausencia índica que aplica a todos
+    uint32_t pos_off; // offset a array de tokens
+    uint32_t xref_off; // offset a array uint32_t de índices de entradas
+    uint32_t ant_off;  // offset a array uint32_t de índices de entradas
+    uint32_t field_off; // offset a array de tokens
+    uint32_t misc_off; // offset a array de tokens
+    uint32_t s_inf_off; // offset a array de strings codificados como [uint8_t len][bytes]
+    uint32_t lsource_off; // offset a array de strings codificados como [uint8_t lang][uint8_t len][bytes]
+    uint32_t dial_off; // offset a array de tokens
+    uint32_t gloss_off; // offset a array de strings codificados como [uint8_t len][bytes], donde el primer char puede ser un token [g_type]
 
-    uint8_t stagk_count;
+    uint8_t stagk_count; 
     uint8_t stagr_count;
     uint8_t pos_count;
     uint8_t xref_count;

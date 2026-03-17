@@ -1,15 +1,28 @@
 #include <libxml2/libxml/parser.h>
 #include <libxml2/libxml/tree.h>
 
+#include "../../core/include/dict_tokens.h"
+#include <stdio.h>
+#include <stdlib.h>
+
 
 #define ROUTE_JMDICT_IDX 0
 #define MAX_ENTRIES 209000
 char *routes[] = {
     "../assets/JMdict",
 };
-int routes_count = sizeof(routes) / sizeof(routes[0]);
+int routes_count = sizeof(routes) / sizeof(routes[0]);  
+
+
 void parse_jmdict(xmlNodePtr root, kotoba_writer *writer)
 {
+
+    FILE *f = fopen("./patch.tsv", "w"); // COLUMNS: ID SENSE_ID XREF_COUNT [XREF_STRING1] [XREF_STRING2] ... ANT_COUNT [ANT_STRING1] [ANT_STRING2] ...
+    if (!f)
+    {
+        perror("fopen");
+        return;
+    }
     writer->entry_count = 0;
     entry e;
     for (xmlNodePtr cur_node = root->children; cur_node; cur_node = cur_node->next)
@@ -18,6 +31,8 @@ void parse_jmdict(xmlNodePtr root, kotoba_writer *writer)
         {
             if (xmlStrcmp(cur_node->name, (const xmlChar *)"entry") == 0)
             {
+                if (writer->entry_count % 10000 == 0)
+                    printf("Parsing entry %u\n", writer->entry_count);
                 memset(&e, 0, sizeof(entry));
                 for (xmlNodePtr child_node = cur_node->children; child_node; child_node = child_node->next)
                 {
@@ -152,15 +167,17 @@ void parse_jmdict(xmlNodePtr root, kotoba_writer *writer)
                                         }
                                         else if (xmlStrcmp(s_child->name, (const xmlChar *)"xref") == 0)
                                         {
-                                            if (s->xref_count < MAX_XREF)
+                                            if (s->xref_count < MAX_XREF) {
                                                 strncpy(s->xref[s->xref_count++], (const char *)s_content, MAX_XREF_LEN);
+                                            }
                                             else
                                                 printf("[WARN] ent_seq=%u: se excedió MAX_XREF (%d)\n", e.ent_seq, MAX_XREF);
                                         }
                                         else if (xmlStrcmp(s_child->name, (const xmlChar *)"ant") == 0)
                                         {
-                                            if (s->ant_count < MAX_ANT)
+                                            if (s->ant_count < MAX_ANT) {
                                                 strncpy(s->ant[s->ant_count++], (const char *)s_content, MAX_ANT_LEN);
+                                            }
                                             else
                                                 printf("[WARN] ent_seq=%u: se excedió MAX_ANT (%d)\n", e.ent_seq, MAX_ANT);
                                         }
@@ -187,8 +204,39 @@ void parse_jmdict(xmlNodePtr root, kotoba_writer *writer)
                                         }
                                         else if (xmlStrcmp(s_child->name, (const xmlChar *)"lsource") == 0)
                                         {
-                                            if (s->lsource_count < MAX_LSOURCE)
-                                                strncpy(s->lsource[s->lsource_count++], (const char *)s_content, MAX_LSOURCE_LEN);
+                                            if (s->lsource_count < MAX_LSOURCE) {
+                                                int ls_type_present = 0; // default
+                                                int ls_wasei_present = 0; // default
+
+                                                xmlChar *ls_type = xmlGetProp(s_child, (const xmlChar *)"ls_type");
+                                                if (ls_type) {
+                                                    if (xmlStrcmp(ls_type, (const xmlChar *)"part") == 0) {
+                                                        s->lsource[s->lsource_count][0] = LS_TYPE_PART;
+                                                        ls_type_present = 1;
+                                                    }
+                                                    else {
+                                                        printf("[WARN] ent_seq=%u: lsource con ls_type desconocido '%s'\n", e.ent_seq, (const char *)ls_type);
+                                                    }
+                                                    xmlFree(ls_type);
+                                                }
+                                                xmlChar *ls_wasei = xmlGetProp(s_child, (const xmlChar *)"ls_wasei");
+                                                if (ls_wasei) {
+                                                    if (xmlStrcmp(ls_wasei, (const xmlChar *)"y") == 0) {
+                                                        s->lsource[s->lsource_count][0] |= LS_WASEI; // set bit de wasei
+                                                        ls_wasei_present = 1;
+                                                    }
+                                                    else {
+                                                        printf("[WARN] ent_seq=%u: lsource con ls_wasei desconocido '%s'\n", e.ent_seq, (const char *)ls_wasei);
+                                                    }
+                                                    xmlFree(ls_wasei);
+                                                }
+                                                if (ls_type_present || ls_wasei_present) {
+                                                    // Si alguno de los atributos ya se guardó en el primer byte, guardamos el lsource a partir del segundo byte
+                                                    strncpy(s->lsource[s->lsource_count++] + 1, (const char *)s_content, MAX_LSOURCE_LEN - 1);    
+                                                } else {
+                                                    strncpy(s->lsource[s->lsource_count++], (const char *)s_content, MAX_LSOURCE_LEN);
+                                                }
+                                            }
                                             else
                                                 printf("[WARN] ent_seq=%u: se excedió MAX_LSOURCE (%d)\n", e.ent_seq, MAX_LSOURCE);
                                         }
@@ -201,9 +249,38 @@ void parse_jmdict(xmlNodePtr root, kotoba_writer *writer)
                                         }
                                         else if (xmlStrcmp(s_child->name, (const xmlChar *)"gloss") == 0)
                                         {
+                                            int g_type_present = 0; // default
                                             // Set lang if first gloss and lang attribute exists
                                             if (s->gloss_count == 0)
                                             {
+                                                xmlChar * g_type = xmlGetProp(s_child, (const xmlChar *)"g_type");
+                                                if (g_type) {
+                                                    if (xmlStrcmp(g_type, (const xmlChar *)"lit") == 0) {
+                                                        s->gloss[s->gloss_count][0] = LIT;
+                                                        g_type_present = 1;
+                                                    }
+                                                    else if (xmlStrcmp(g_type, (const xmlChar *)"fig") == 0) {
+                                                        s->gloss[s->gloss_count][0] = FIG;
+                                                        g_type_present = 1;
+                                                    }
+                                                    else if (xmlStrcmp(g_type, (const xmlChar *)"tm") == 0) {
+                                                        s->gloss[s->gloss_count][0] = TM;
+                                                        g_type_present = 1;
+                                                    }
+                                                    else if (xmlStrcmp(g_type, (const xmlChar *)"expl") == 0) {
+                                                        s->gloss[s->gloss_count][0] = EXPL;
+                                                        g_type_present = 1;
+                                                    }
+                                                    else if (xmlStrcmp(g_type, (const xmlChar *)"descr") == 0) {
+                                                        s->gloss[s->gloss_count][0] = DESCR;
+                                                        g_type_present = 1;
+                                                    }
+                                                    else {
+                                                        printf("[WARN] ent_seq=%u: gloss con g_type desconocido '%s'\n", e.ent_seq, (const char *)g_type);
+                                                    }
+                                                    xmlFree(g_type);
+                                                }
+
                                                 xmlChar *lang_attr = xmlGetProp(s_child, (const xmlChar *)"lang");
                                                 if (lang_attr)
                                                 {
@@ -273,7 +350,12 @@ void parse_jmdict(xmlNodePtr root, kotoba_writer *writer)
                                                 }
                                             }
                                             if (s->gloss_count < MAX_GLOSS)
-                                                strncpy(s->gloss[s->gloss_count++], (const char *)s_content, MAX_GLOSS_LEN);
+                                                if (g_type_present) {
+                                                    // Si g_type ya se guardó en el primer byte, guardamos el gloss a partir del segundo byt
+                                                    strncpy(s->gloss[s->gloss_count++] + 1, (const char *)s_content, MAX_GLOSS_LEN - 1);    
+                                                } else 
+                                                    strncpy(s->gloss[s->gloss_count++], (const char *)s_content, MAX_GLOSS_LEN);    
+                                                
                                             else
                                                 printf("[WARN] ent_seq=%u: se excedió MAX_GLOSS (%d)\n", e.ent_seq, MAX_GLOSS);
                                         }
@@ -333,8 +415,33 @@ void parse_jmdict(xmlNodePtr root, kotoba_writer *writer)
                 } else {
                     e.priority = 0; // not common
                 }
+
+
+
+
+
                 // write_entry_with_index(output_filename, idx_filename, &e);
                 kotoba_writer_write_entry(writer, &e);
+
+                // write patch info for xrefs and ants (which are resolved after all entries are written)
+                int idx = writer->entry_count - 1;
+                if (e.senses_count > 0) {
+                    for (uint32_t k = 0; k < e.senses_count; ++k) {
+                        sense *s = &e.senses[k];
+                        int sense_idx = k;
+                        if (s->xref_count > 0 || s->ant_count > 0) {
+                            fprintf(f, "%u\t%u\t%u", idx, sense_idx, s->xref_count);
+                            for (uint32_t j = 0; j < s->xref_count; ++j) {
+                                fprintf(f, "\t%s", s->xref[j]);
+                            }
+                            fprintf(f, "\t%u", s->ant_count);
+                            for (uint32_t j = 0; j < s->ant_count; ++j) {
+                                fprintf(f, "\t%s", s->ant[j]);
+                            }
+                            fprintf(f, "\n");
+                        }
+                    }
+                }
             }
         }
     }

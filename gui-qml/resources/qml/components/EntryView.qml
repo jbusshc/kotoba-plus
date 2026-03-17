@@ -84,4 +84,8 @@ Column {
             dividerColor: root.dividerColor
         }
     }
+
+    Component.onCompleted: {
+        console.log("ENTRY DATA:", JSON.stringify(entryData))
+    }
 }

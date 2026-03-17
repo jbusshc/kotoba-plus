@@ -264,6 +264,17 @@ void print_entry(const kotoba_dict *d, uint32_t i)
 
         printf("  kanji[%u]: %.*s\n",
                i, keb.len, keb.ptr);
+        for (uint32_t j = 0; j < k->ke_inf_count; ++j)
+        {
+            const char *ke_inf =  kotoba_ke_inf(d, k, j);
+            printf("    ke_inf: %s\n", ke_inf);
+        }
+
+        for (uint32_t j = 0; j < k->ke_pri_count; ++j)
+        {
+            const char *ke_pri = kotoba_ke_pri(d, k, j);
+            printf("    ke_pri: %s\n", ke_pri);
+        }
     }
 
     printf("  r_elements_count = %u\n", e->r_elements_count);
@@ -273,11 +284,26 @@ void print_entry(const kotoba_dict *d, uint32_t i)
     for (uint32_t i = 0; i < e->r_elements_count; ++i)
     {
         const r_ele_bin *r = kotoba_r_ele(d, e, i);
-        printf("  post kotoba_r_ele\n");
         kotoba_str reb = kotoba_reb(d, r);
 
         printf("  reading[%u]: %.*s\n",
                i, reb.len, reb.ptr);
+
+        for (uint32_t j = 0; j < r->re_inf_count; ++j)
+        {
+            const char *re_inf = kotoba_re_inf(d, r, j);
+            printf("    re_inf: %s\n", re_inf);
+        }
+
+        for (uint32_t j = 0; j < r->re_pri_count; ++j)
+        {
+            const char *re_pri = kotoba_re_pri(d, r, j);
+            printf("    re_pri: %s\n", re_pri);
+        }
+        if (r->re_nokanji)
+        {
+            printf("    no_kanji\n");
+        }
     }
 
     printf("  senses_count = %u\n", e->senses_count);
@@ -293,52 +319,70 @@ void print_entry(const kotoba_dict *d, uint32_t i)
         /* POS */
         for (uint32_t i = 0; i < s->pos_count; ++i)
         {
-            kotoba_str pos = kotoba_pos(d, s, i);
-            printf("    pos: %.*s\n", pos.len, pos.ptr);
+            const char *pos = kotoba_pos(d, s, i);
+            printf("    pos: %s\n", pos);
         }
 
         /* Gloss */
         for (uint32_t i = 0; i < s->gloss_count; ++i)
         {
             kotoba_str g = kotoba_gloss(d, s, i);
-            printf("    gloss: %.*s\n", g.len, g.ptr);
+            switch (g.ptr[0]) {
+                case LIT:
+                    printf("    gloss: lit: %.*s\n", g.len - 1, g.ptr + 1);
+                    break;
+                case FIG:
+                    printf("    gloss: fig: %.*s\n", g.len - 1, g.ptr + 1);
+                    break;
+                case TM:
+                    printf("    gloss: tm: %.*s\n", g.len - 1, g.ptr + 1);
+                    break;
+                case EXPL:
+                    printf("    gloss: expl: %.*s\n", g.len - 1, g.ptr + 1);
+                    break;
+                case DESCR:
+                    printf("    gloss: descr: %.*s\n", g.len - 1, g.ptr + 1);
+                    break;
+                default:
+                    printf("    gloss: %.*s\n", g.len, g.ptr);
+            }
         }
 
         /* Misc (ejemplo) */
         for (uint32_t i = 0; i < s->misc_count; ++i)
         {
-            kotoba_str m = kotoba_misc(d, s, i);
-            printf("    misc: %.*s\n", m.len, m.ptr);
+            const char *misc = kotoba_misc(d, s, i);
+            printf("    misc: %s\n", misc);
         }
 
         for (uint32_t i = 0; i < s->stagk_count; ++i)
         {
-            kotoba_str stg = kotoba_stagk(d, s, i);
+            kotoba_str stg = kotoba_stagk(d, e, si, i);
             printf("    stagk: %.*s\n", stg.len, stg.ptr);
         }
 
         for (uint32_t i = 0; i < s->stagr_count; ++i)
         {
-            kotoba_str stg = kotoba_stagr(d, s, i);
+            kotoba_str stg = kotoba_stagr(d, e, si, i);
             printf("    stagr: %.*s\n", stg.len, stg.ptr);
         }
 
         for (uint32_t i = 0; i < s->xref_count; ++i)
         {
-            kotoba_str xref = kotoba_xref(d, s, i);
-            printf("    xref: %.*s\n", xref.len, xref.ptr);
+            uint32_t xref_idx = kotoba_xref(d, s, i);
+            printf("    xref entry index: %u\n", xref_idx);
         }
 
         for (uint32_t i = 0; i < s->ant_count; ++i)
         {
-            kotoba_str ant = kotoba_ant(d, s, i);
-            printf("    ant: %.*s\n", ant.len, ant.ptr);
+            uint32_t ant_idx = kotoba_ant(d, s, i);
+            printf("    ant: %u\n", ant_idx);
         }
 
         for (uint32_t i = 0; i < s->field_count; ++i)
         {
-            kotoba_str field = kotoba_field(d, s, i);
-            printf("    field: %.*s\n", field.len, field.ptr);
+            const char *field = kotoba_field(d, s, i);
+            printf("    field: %s\n", field);
         }
 
         for (uint32_t i = 0; i < s->s_inf_count; ++i)
@@ -350,13 +394,22 @@ void print_entry(const kotoba_dict *d, uint32_t i)
         for (uint32_t i = 0; i < s->lsource_count; ++i)
         {
             kotoba_str lsource = kotoba_lsource(d, s, i);
-            printf("    lsource: %.*s\n", lsource.len, lsource.ptr);
+            switch (lsource.ptr[0]) {
+                case LS_WASEI|LS_TYPE_PART:
+                    printf("    lsource: wasei-part: %.*s\n", lsource.len - 1, lsource.ptr + 1);
+                    break;
+                case LS_WASEI:
+                    printf("    lsource: wasei: %.*s\n", lsource.len - 1, lsource.ptr + 1);
+                    break;
+                default:
+                    printf("    lsource: %.*s\n", lsource.len, lsource.ptr);
+            }
         }
 
         for (uint32_t i = 0; i < s->dial_count; ++i)
         {
-            kotoba_str dial = kotoba_dial(d, s, i);
-            printf("    dial: %.*s\n", dial.len, dial.ptr);
+            const char *dial = kotoba_dial(d, s, i);
+            printf("    dial: %s\n", dial);
         }
     }
 }

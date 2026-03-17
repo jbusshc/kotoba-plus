@@ -59,15 +59,15 @@ QVariantMap EntryDetailsViewModel::mapEntry(int docId)
 
         sMap["lang"] = sense->lang;
 
-        // POS
+        // POS (tokenizado)
         QStringList posList;
         for (uint32_t p = 0; p < sense->pos_count; ++p) {
-            kotoba_str pos = kotoba_pos(m_dict, sense, p);
-            posList << QString::fromUtf8(pos.ptr, pos.len);
+            const char* pos = kotoba_pos(m_dict, sense, p);
+            if (pos) posList << QString::fromUtf8(pos);
         }
         sMap["pos"] = posList;
 
-        // GLOSS
+        // GLOSS (texto libre)
         QStringList glossList;
         for (uint32_t g = 0; g < sense->gloss_count; ++g) {
             kotoba_str gl = kotoba_gloss(m_dict, sense, g);
@@ -75,7 +75,7 @@ QVariantMap EntryDetailsViewModel::mapEntry(int docId)
         }
         sMap["gloss"] = glossList;
 
-        // STAGK
+        // STAGK (texto libre)
         QStringList stagkList;
         for (uint32_t sk = 0; sk < sense->stagk_count; ++sk) {
             kotoba_str sks = kotoba_stagk(m_dict, sense, sk);
@@ -83,7 +83,7 @@ QVariantMap EntryDetailsViewModel::mapEntry(int docId)
         }
         sMap["stagk"] = stagkList;
 
-        // STAGR
+        // STAGR (texto libre)
         QStringList stagrList;
         for (uint32_t sr = 0; sr < sense->stagr_count; ++sr) {
             kotoba_str srs = kotoba_stagr(m_dict, sense, sr);
@@ -91,7 +91,7 @@ QVariantMap EntryDetailsViewModel::mapEntry(int docId)
         }
         sMap["stagr"] = stagrList;
 
-        // XREF
+        // XREF (texto libre)
         QStringList xrefList;
         for (uint32_t x = 0; x < sense->xref_count; ++x) {
             kotoba_str xr = kotoba_xref(m_dict, sense, x);
@@ -99,7 +99,7 @@ QVariantMap EntryDetailsViewModel::mapEntry(int docId)
         }
         sMap["xref"] = xrefList;
 
-        // ANT
+        // ANT (texto libre)
         QStringList antList;
         for (uint32_t a = 0; a < sense->ant_count; ++a) {
             kotoba_str an = kotoba_ant(m_dict, sense, a);
@@ -107,23 +107,23 @@ QVariantMap EntryDetailsViewModel::mapEntry(int docId)
         }
         sMap["ant"] = antList;
 
-        // FIELD
+        // FIELD (tokenizado)
         QStringList fieldList;
         for (uint32_t f = 0; f < sense->field_count; ++f) {
-            kotoba_str fld = kotoba_field(m_dict, sense, f);
-            fieldList << QString::fromUtf8(fld.ptr, fld.len);
+            const char* fld = kotoba_field(m_dict, sense, f);
+            if (fld) fieldList << QString::fromUtf8(fld);
         }
         sMap["field"] = fieldList;
 
-        // MISC
+        // MISC (tokenizado)
         QStringList miscList;
         for (uint32_t m = 0; m < sense->misc_count; ++m) {
-            kotoba_str misc = kotoba_misc(m_dict, sense, m);
-            miscList << QString::fromUtf8(misc.ptr, misc.len);
+            const char* misc = kotoba_misc(m_dict, sense, m);
+            if (misc) miscList << QString::fromUtf8(misc);
         }
         sMap["misc"] = miscList;
 
-        // S_INF
+        // S_INF (texto libre)
         QStringList sinfList;
         for (uint32_t si = 0; si < sense->s_inf_count; ++si) {
             kotoba_str sinf = kotoba_s_inf(m_dict, sense, si);
@@ -131,7 +131,7 @@ QVariantMap EntryDetailsViewModel::mapEntry(int docId)
         }
         sMap["s_inf"] = sinfList;
 
-        // LSOURCE
+        // LSOURCE (texto libre)
         QStringList lsourceList;
         for (uint32_t ls = 0; ls < sense->lsource_count; ++ls) {
             kotoba_str lsrc = kotoba_lsource(m_dict, sense, ls);
@@ -139,11 +139,11 @@ QVariantMap EntryDetailsViewModel::mapEntry(int docId)
         }
         sMap["lsource"] = lsourceList;
 
-        // DIAL
+        // DIAL (tokenizado)
         QStringList dialList;
         for (uint32_t d = 0; d < sense->dial_count; ++d) {
-            kotoba_str dial = kotoba_dial(m_dict, sense, d);
-            dialList << QString::fromUtf8(dial.ptr, dial.len);
+            const char* dial = kotoba_dial(m_dict, sense, d);
+            if (dial) dialList << QString::fromUtf8(dial);
         }
         sMap["dial"] = dialList;
 
