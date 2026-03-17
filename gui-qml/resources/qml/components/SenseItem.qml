@@ -1,6 +1,6 @@
 import QtQuick
 import QtQuick.Controls
-import "../components"   // 👈 importa Tag.qml
+import "../components"
 
 Column {
     id: root
@@ -9,7 +9,6 @@ Column {
     property int senseIndex: 0
     property string mode: "dictionary"
 
-    // 🔥 fallback a Theme (mejor práctica)
     property color textColor: Theme.textColor
     property color hintColor: Theme.hintColor
     property color accentColor: Theme.accentColor
@@ -41,7 +40,7 @@ Column {
 
                 delegate: Tag {
                     label: modelData
-                    color: root.hintColor
+                    tagColor: root.hintColor  // ✅
                 }
             }
         }
@@ -57,7 +56,7 @@ Column {
 
                 delegate: Tag {
                     label: modelData
-                    color: root.accentColor
+                    tagColor: root.hintColor  
                 }
             }
         }
@@ -76,7 +75,7 @@ Column {
 
             delegate: Tag {
                 label: modelData
-                color: root.hintColor
+                tagColor: root.hintColor  // ✅
             }
         }
     }
@@ -91,7 +90,7 @@ Column {
 
             delegate: Tag {
                 label: modelData
-                color: root.hintColor
+                tagColor: root.hintColor  // ✅
             }
         }
     }
@@ -128,7 +127,7 @@ Column {
 
                 delegate: Tag {
                     label: modelData
-                    color: root.hintColor
+                    tagColor: root.hintColor  // ✅
                 }
             }
         }
@@ -143,12 +142,12 @@ Column {
 
                 delegate: Tag {
                     label: modelData
-                    color: root.hintColor
+                    tagColor: root.hintColor  // ✅
                 }
             }
         }
 
-        // S_INF (esto queda mejor como texto)
+        // S_INF
         Text {
             visible: (root.sense.s_inf || []).length > 0
             text: (root.sense.s_inf || []).join("; ")
@@ -177,7 +176,7 @@ Column {
         Text {
             text: "See also:"
             font.pixelSize: 12
-            color: root.accentColor
+            color: root.hintColor
         }
 
         Flow {
@@ -189,7 +188,7 @@ Column {
 
                 delegate: Tag {
                     label: modelData.label
-                    color: root.accentColor
+                    tagColor: root.hintColor  // ✅
 
                     MouseArea {
                         anchors.fill: parent
@@ -197,7 +196,7 @@ Column {
                         hoverEnabled: true
 
                         onClicked: {
-                            stack.push("pages/DetailsPage.qml", {
+                            stack.push("qrc:/qml/pages/DetailsPage.qml", {
                                 docId: modelData.id
                             })
                         }
@@ -232,7 +231,7 @@ Column {
 
                 delegate: Tag {
                     label: modelData.label
-                    color: root.hintColor
+                    tagColor: root.hintColor  // ✅
 
                     MouseArea {
                         anchors.fill: parent
@@ -240,7 +239,7 @@ Column {
                         hoverEnabled: true
 
                         onClicked: {
-                            stack.push("pages/DetailsPage.qml", {
+                            stack.push("qrc:/qml/pages/DetailsPage.qml", {
                                 docId: modelData.id
                             })
                         }
