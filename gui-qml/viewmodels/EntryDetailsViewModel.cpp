@@ -15,6 +15,32 @@ EntryDetailsViewModel::EntryDetailsViewModel(
 {
 }
 
+/* -------------------------
+ * HEADWORD HELPER
+ * ------------------------- */
+QString EntryDetailsViewModel::headword(uint32_t id)
+{
+    const entry_bin *e = kotoba_entry(m_dict, id);
+    if (!e) return "";
+
+    if (e->k_elements_count > 0) {
+        const k_ele_bin *k = kotoba_k_ele(m_dict, e, 0);
+        kotoba_str s = kotoba_keb(m_dict, k);
+        return QString::fromUtf8(s.ptr, s.len);
+    }
+
+    if (e->r_elements_count > 0) {
+        const r_ele_bin *r = kotoba_r_ele(m_dict, e, 0);
+        kotoba_str s = kotoba_reb(m_dict, r);
+        return QString::fromUtf8(s.ptr, s.len);
+    }
+
+    return "";
+}
+
+/* -------------------------
+ * MAP ENTRY
+ * ------------------------- */
 QVariantMap EntryDetailsViewModel::mapEntry(int docId)
 {
     QVariantMap result;
@@ -23,43 +49,64 @@ QVariantMap EntryDetailsViewModel::mapEntry(int docId)
     if (!entry)
         return result;
 
-    // IDs y conteos básicos
     result["id"] = docId;
-    result["k_elements_count"] = entry->k_elements_count;
-    result["r_elements_count"] = entry->r_elements_count;
-    result["senses_count"] = entry->senses_count;
 
-    // KANJI ELEMENTS
+    /* -------------------------
+     * K ELEMENTS
+     * ------------------------- */
     QVariantList kElements;
     for (uint32_t i = 0; i < entry->k_elements_count; ++i) {
         QVariantMap kMap;
         const k_ele_bin *k = kotoba_k_ele(m_dict, entry, i);
+
         kotoba_str keb = kotoba_keb(m_dict, k);
         kMap["keb"] = QString::fromUtf8(keb.ptr, keb.len);
+
+        // tokenizados directos (NO copies innecesarias)
+        QStringList priList;
+        for (uint32_t p = 0; p < k->ke_pri_count; ++p) {
+            const char* pri = kotoba_ke_pri(m_dict, k, p);
+            if (pri) priList << QString::fromUtf8(pri);
+        }
+        kMap["ke_pri"] = priList;
+
         kElements.append(kMap);
     }
     result["k_elements"] = kElements;
 
-    // READING ELEMENTS
+    /* -------------------------
+     * R ELEMENTS
+     * ------------------------- */
     QVariantList rElements;
     for (uint32_t i = 0; i < entry->r_elements_count; ++i) {
         QVariantMap rMap;
         const r_ele_bin *r = kotoba_r_ele(m_dict, entry, i);
+
         kotoba_str reb = kotoba_reb(m_dict, r);
         rMap["reb"] = QString::fromUtf8(reb.ptr, reb.len);
+
+        QStringList priList;
+        for (uint32_t p = 0; p < r->re_pri_count; ++p) {
+            const char* pri = kotoba_re_pri(m_dict, r, p);
+            if (pri) priList << QString::fromUtf8(pri);
+        }
+        rMap["re_pri"] = priList;
+
         rElements.append(rMap);
     }
     result["r_elements"] = rElements;
 
-    // SENSES
+    /* -------------------------
+     * SENSES
+     * ------------------------- */
     QVariantList senses;
+
     for (uint32_t i = 0; i < entry->senses_count; ++i) {
         QVariantMap sMap;
         const sense_bin *sense = kotoba_sense(m_dict, entry, i);
-
-        sMap["lang"] = sense->lang;
-
-        // POS (tokenizado)
+        if (!m_config->languages[sense->lang]) // filtrar por idioma
+            continue;
+        /* POS (tokenizado directo) */
         QStringList posList;
         for (uint32_t p = 0; p < sense->pos_count; ++p) {
             const char* pos = kotoba_pos(m_dict, sense, p);
@@ -67,7 +114,7 @@ QVariantMap EntryDetailsViewModel::mapEntry(int docId)
         }
         sMap["pos"] = posList;
 
-        // GLOSS (texto libre)
+        /* GLOSS */
         QStringList glossList;
         for (uint32_t g = 0; g < sense->gloss_count; ++g) {
             kotoba_str gl = kotoba_gloss(m_dict, sense, g);
@@ -75,39 +122,60 @@ QVariantMap EntryDetailsViewModel::mapEntry(int docId)
         }
         sMap["gloss"] = glossList;
 
-        // STAGK (texto libre)
+        /* STAGK */
         QStringList stagkList;
+
         for (uint32_t sk = 0; sk < sense->stagk_count; ++sk) {
-            kotoba_str sks = kotoba_stagk(m_dict, sense, sk);
+            kotoba_str sks = kotoba_stagk(m_dict, entry, i, sk);
             stagkList << QString::fromUtf8(sks.ptr, sks.len);
         }
+
         sMap["stagk"] = stagkList;
 
-        // STAGR (texto libre)
+        /* STAGR */
         QStringList stagrList;
         for (uint32_t sr = 0; sr < sense->stagr_count; ++sr) {
-            kotoba_str srs = kotoba_stagr(m_dict, sense, sr);
+            kotoba_str srs = kotoba_stagr(m_dict, entry, i, sr);
             stagrList << QString::fromUtf8(srs.ptr, srs.len);
         }
         sMap["stagr"] = stagrList;
 
-        // XREF (texto libre)
-        QStringList xrefList;
+        /* XREF (índice → headword) */
+        QVariantList xrefList;
+
         for (uint32_t x = 0; x < sense->xref_count; ++x) {
-            kotoba_str xr = kotoba_xref(m_dict, sense, x);
-            xrefList << QString::fromUtf8(xr.ptr, xr.len);
+            uint32_t refId = kotoba_xref(m_dict, sense, x);
+
+            QString hw = headword(refId);
+            if (hw.isEmpty()) continue;
+
+            QVariantMap item;
+            item["id"] = refId;     // para navegación
+            item["label"] = hw;     // texto a mostrar
+
+            xrefList.append(item);
         }
         sMap["xref"] = xrefList;
 
-        // ANT (texto libre)
-        QStringList antList;
+        /* ANT */
+        QVariantList antList;
+
         for (uint32_t a = 0; a < sense->ant_count; ++a) {
-            kotoba_str an = kotoba_ant(m_dict, sense, a);
-            antList << QString::fromUtf8(an.ptr, an.len);
+            uint32_t refId = kotoba_ant(m_dict, sense, a);
+
+            QString hw = headword(refId);
+            if (hw.isEmpty()) continue;
+
+            QVariantMap item;
+            item["id"] = refId;
+            item["label"] = hw;
+
+            antList.append(item);
         }
+
         sMap["ant"] = antList;
 
-        // FIELD (tokenizado)
+        /* FIELD */
         QStringList fieldList;
         for (uint32_t f = 0; f < sense->field_count; ++f) {
             const char* fld = kotoba_field(m_dict, sense, f);
@@ -115,7 +183,7 @@ QVariantMap EntryDetailsViewModel::mapEntry(int docId)
         }
         sMap["field"] = fieldList;
 
-        // MISC (tokenizado)
+        /* MISC */
         QStringList miscList;
         for (uint32_t m = 0; m < sense->misc_count; ++m) {
             const char* misc = kotoba_misc(m_dict, sense, m);
@@ -123,7 +191,7 @@ QVariantMap EntryDetailsViewModel::mapEntry(int docId)
         }
         sMap["misc"] = miscList;
 
-        // S_INF (texto libre)
+        /* S_INF */
         QStringList sinfList;
         for (uint32_t si = 0; si < sense->s_inf_count; ++si) {
             kotoba_str sinf = kotoba_s_inf(m_dict, sense, si);
@@ -131,7 +199,7 @@ QVariantMap EntryDetailsViewModel::mapEntry(int docId)
         }
         sMap["s_inf"] = sinfList;
 
-        // LSOURCE (texto libre)
+        /* LSOURCE */
         QStringList lsourceList;
         for (uint32_t ls = 0; ls < sense->lsource_count; ++ls) {
             kotoba_str lsrc = kotoba_lsource(m_dict, sense, ls);
@@ -139,7 +207,7 @@ QVariantMap EntryDetailsViewModel::mapEntry(int docId)
         }
         sMap["lsource"] = lsourceList;
 
-        // DIAL (tokenizado)
+        /* DIAL */
         QStringList dialList;
         for (uint32_t d = 0; d < sense->dial_count; ++d) {
             const char* dial = kotoba_dial(m_dict, sense, d);
@@ -149,6 +217,7 @@ QVariantMap EntryDetailsViewModel::mapEntry(int docId)
 
         senses.append(sMap);
     }
+
     result["senses"] = senses;
 
     return result;

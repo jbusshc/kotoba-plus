@@ -17,6 +17,9 @@ public:
     Q_INVOKABLE QVariantMap mapEntry(int docId);
 
 private:
+    QString headword(uint32_t id);
+
     kotoba_dict *m_dict;
     Configuration *m_config;
+
 };

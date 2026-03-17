@@ -30,8 +30,8 @@ Page {
             Item { Layout.fillWidth: true }
 
             Button {
-                text: srsVM.contains(docId) ? "In SRS" : "Add to SRS"
-                enabled: !srsVM.contains(docId)
+                text: srsVM && srsVM.contains(docId) ? "In SRS" : "Add to SRS"
+                enabled: srsVM && !srsVM.contains(docId)
 
                 onClicked: srsVM.add(docId)
             }
