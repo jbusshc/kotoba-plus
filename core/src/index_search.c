@@ -95,7 +95,7 @@ void init_search_context(struct SearchContext *ctx,
 
     ctx->mixed_query   = ctx->queries_buffer;
     ctx->variant_query = ctx->queries_buffer + MAX_QUERY_LEN;
-
+    ctx->word_filter_buffer = ctx->queries_buffer + MAX_QUERY_LEN * 2;
     memset(ctx->is_gloss_active, 0, sizeof(ctx->is_gloss_active));
     // ---- Gloss flags ----
     if (glosses_active)
@@ -336,7 +336,7 @@ void query_results(struct SearchContext *ctx, const char *query)
     q.s = query;
     q.len = (uint8_t)utf8_strlen(query);
     q.first = query[0];
-
+    LOG_DEBUG("[CORE][INDEX_SEARCH][QUERY_RESULTS] New query: %s, length: %d\n", query, q.len);
     uint32_t gloss_hashes[SEARCH_MAX_QUERY_HASHES];
     int gloss_hcount = query_gram_hashes_mode(
         query,
@@ -552,44 +552,64 @@ static inline void delete_result(uint32_t idx, uint32_t *results_left, SearchRes
     (*results_left)--;
 }
 
-static inline int hard_filter(const kotoba_dict *dict, TrieContext *trie_ctx, PostingRef *pr, query_t *normal_q, query_t *mixed_q, query_t *variant_q, int type, uint8_t using_variant)
+static inline int hard_filter(const kotoba_dict *dict, TrieContext *trie_ctx, PostingRef *pr,
+                              query_t *normal_q, query_t *mixed_q, query_t *variant_q,
+                              int type, uint8_t using_variant, char *word_filter_buffer)
 {
-    static char normalized_str[256];
+    char *mixed_buf = word_filter_buffer; // mover a arena
     const entry_bin *e = kotoba_entry(dict, pr->p->doc_id);
     kotoba_str str;
-    query_t *q = mixed_q;
 
-    if (type == TYPE_KANJI)
+    query_t *effective_q;
+    const char* effective_word;
+    //LOG_DEBUG("[CORE][INDEX_SEARCH][HARD_FILTER] Checking doc_id: %d, type: %d\n", pr->p->doc_id, type);
+
+    if (type & TYPE_KANJI)
     {
         const k_ele_bin *k_ele = kotoba_k_ele(dict, e, pr->p->meta1);
         str = kotoba_keb(dict, k_ele);
+        memcpy(mixed_buf, str.ptr, str.len);
+        mixed_buf[str.len] = '\0';
+        mixed_to_hiragana(trie_ctx, mixed_buf, mixed_buf, MAX_QUERY_LEN);
+        effective_q = mixed_q;   // usar hiragana
+        effective_word = mixed_buf;
+
     }
-    else if (type == TYPE_READING)
+    else if (type & TYPE_READING)
     {
         const r_ele_bin *r_ele = kotoba_r_ele(dict, e, pr->p->meta1);
         str = kotoba_reb(dict, r_ele);
+        memcpy(mixed_buf, str.ptr, str.len);
+        mixed_buf[str.len] = '\0';
+        mixed_to_hiragana(trie_ctx, mixed_buf, mixed_buf, MAX_QUERY_LEN);
+        effective_q = mixed_q;   //usar hiragana
+        effective_word = mixed_buf;
     }
     else
     {
         const sense_bin *s = kotoba_sense(dict, e, pr->p->meta1);
         str = kotoba_gloss(dict, s, pr->p->meta2);
-        q = normal_q; // for glosses we want to match the original query, not the mixed one
+        effective_q = normal_q;  // romaji normal para gloss
+        effective_word = str.ptr;
     }
 
-    if (word_contains_q(str.ptr, str.len, q))
+    if (word_contains_q(effective_word, str.len, effective_q))
         return 1;
 
-    if (using_variant && word_contains_q(str.ptr, str.len, variant_q))
+    if (using_variant && word_contains_q(effective_word, str.len, variant_q))
         return 1;
 
     return 0;
 }
-
 // new version with partial sorting at top k, no hard filter, and scoring based on new score uint_8 binary instead of length (score layout defined in index_search.h)
 void query_next_page(struct SearchContext *ctx)
 {
-    if (ctx->results_left == 0 || ctx->page_size == 0)
+    LOG_DEBUG("[CORE][INDEX_SEARCH][QUERY_NEXT_PAGE] Fetching next page. Results left: %d\n", ctx->results_left);
+    if (ctx->results_left == 0 || ctx->page_size == 0) {
+        LOG_DEBUG("[CORE][INDEX_SEARCH][QUERY_NEXT_PAGE] No results left or page size is zero.\n");
+        LOG_DEBUG("[CORE][INDEX_SEARCH][QUERY_NEXT_PAGE] Results left: %d, Page size: %d\n", ctx->results_left, ctx->page_size);
         return;
+    }
 
     uint32_t k = ctx->page_size;
     if (k > ctx->results_left)
@@ -630,6 +650,7 @@ void query_next_page(struct SearchContext *ctx)
 
     // ---------- SINGLE PASS ----------
     uint32_t i = 0;
+    LOG_DEBUG("[CORE][INDEX_SEARCH][QUERY_NEXT_PAGE] Starting single pass for top-k selection. Total results to consider: %d\n", ctx->results_left);
     while (i < ctx->results_left)
     {
         uint8_t current_score = score[i];
@@ -640,24 +661,25 @@ void query_next_page(struct SearchContext *ctx)
             continue;
         }
 
-        // 🔥 CORRECT ACCESS
         PostingRef *posting =
             &results_buffer[results_idx[i]];
 
         if (!hard_filter(ctx->dict,
-                         ctx->trie_ctx,
-                         posting,
-                         &q,
-                         &mixed_q,
-                         &variant_q,
-                         type[i],
-                         using_variant))
+                        ctx->trie_ctx,
+                        posting,
+                        &q,
+                        &mixed_q,
+                        &variant_q,
+                        type[i],
+                        using_variant, ctx->word_filter_buffer))
         {
+            LOG_DEBUG("[CORE][INDEX_SEARCH][QUERY_NEXT_PAGE] Result at index %d failed hard filter and will be removed. Doc ID: %d\n", i, posting->p->doc_id);
             delete_result(i, &ctx->results_left, meta);
-            continue; // DO NOT i++
+            continue; // 🔥 NO incrementas i
         }
 
-        // ---------- INSERT ----------
+        /* INSERT LOGIC (igual que antes) */
+
         if (topk_size < k)
         {
             topk_scores[topk_size] = current_score;
@@ -676,7 +698,6 @@ void query_next_page(struct SearchContext *ctx)
             topk_scores[min_pos] = current_score;
             topk_meta_index[min_pos] = i;
 
-            // recompute min
             min_score = topk_scores[0];
             min_pos = 0;
 
@@ -692,7 +713,6 @@ void query_next_page(struct SearchContext *ctx)
 
         i++;
     }
-
     if (topk_size == 0)
         return;
 
@@ -749,6 +769,7 @@ void query_next_page(struct SearchContext *ctx)
 
     ctx->page_result_count = topk_size;
     LOG_DEBUG("[CORE][INDEX_SEARCH][QUERY_NEXT_PAGE] Page results: %d, Results left: %d\n", topk_size, ctx->results_left);
+    LOG_DEBUG("[CORE][INDEX_SEARCH][QUERY_NEXT_PAGE] QUERY: %s \n", ctx->query.s);
 }
 
 void warm_up(struct SearchContext *ctx)

@@ -2,7 +2,6 @@
 
 void mixed_to_hiragana(const TrieContext *ctx, const char *input, char *output, size_t out_size)
 {
-
     const char *s = input;
     char *out = output;
     size_t left = out_size - 1;
@@ -14,7 +13,39 @@ void mixed_to_hiragana(const TrieContext *ctx, const char *input, char *output, 
         /* --- Romaji path --- */
         if (isalpha(c))
         {
-            /* SOKUON */
+            /* --- standalone 'n' handling --- */
+            if (tolower(c) == 'n')
+            {
+                unsigned char n1 = (unsigned char)s[1];
+                unsigned char n2 = (unsigned char)s[2];
+
+                /* nn → ん */
+                if (tolower(n1) == 'n')
+                {
+                    emit_utf8(0x3093, &out, &left); // ん
+                    s += 2;
+                    continue;
+                }
+
+                /* n' → ん */
+                if (n1 == '\'')
+                {
+                    emit_utf8(0x3093, &out, &left);
+                    s += 2;
+                    continue;
+                }
+
+                /* n + consonant OR end */
+                if (n1 == '\0' ||
+                    (!is_vowel(n1) && tolower(n1) != 'y'))
+                {
+                    emit_utf8(0x3093, &out, &left);
+                    s++;
+                    continue;
+                }
+            }
+
+            /* --- SOKUON (double consonant except n) --- */
             if (isalpha((unsigned char)s[1]) &&
                 tolower(s[0]) == tolower(s[1]) &&
                 is_consonant(tolower(s[0])) &&
@@ -25,6 +56,7 @@ void mixed_to_hiragana(const TrieContext *ctx, const char *input, char *output, 
                 continue;
             }
 
+            /* --- Trie matching --- */
             uint16_t cur = 0;
             uint16_t last = 0;
             int last_len = 0;
@@ -53,14 +85,13 @@ void mixed_to_hiragana(const TrieContext *ctx, const char *input, char *output, 
 
             if (last)
             {
-                /* emitir hiragana (convertimos si estaba en katakana) */
                 for (int i = 0; i < ctx->trie[last].out_len; i++)
                 {
                     uint32_t cp = (i == 0)
                                       ? ctx->trie[last].out1
                                       : ctx->trie[last].out2;
 
-                    /* katakana → hiragana */
+                    /* Katakana → Hiragana */
                     if (cp >= 0x30A1 && cp <= 0x30F6)
                         cp -= 0x60;
 
@@ -71,33 +102,28 @@ void mixed_to_hiragana(const TrieContext *ctx, const char *input, char *output, 
                 continue;
             }
 
-            /* no match → copiar literal */
-            if (left)
-            {
-                *out++ = *s++;
-                left--;
-            }
+            /* fallback literal */
+            *out++ = *s++;
+            left--;
+            continue;
         }
 
-        /* --- Separador romaji ' --- */
+        /* --- skip romaji separator --- */
         if (c == '\'')
         {
             s++;
             continue;
         }
 
-        /* --- UTF8 path (kana/kanji/etc) --- */
+        /* --- UTF8 path --- */
         uint32_t cp;
         const char *next = utf8_decode(s, &cp);
 
         /* Katakana → Hiragana */
         if (cp >= 0x30A1 && cp <= 0x30F6)
             cp -= 0x60;
-        else if (cp == 0x30FC)
-            cp = 0x30FC; // mantener como está
 
         emit_utf8(cp, &out, &left);
-
         s = next;
     }
 

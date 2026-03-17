@@ -28,9 +28,14 @@ void SearchService::query(const QString &q)
         reset_search_context(&m_ctx);
         return;
     }
-    query_results(&m_ctx, q.toUtf8().constData());
-    if (m_ctx.results_left)
-        query_next_page(&m_ctx);
+
+    QByteArray utf8 = q.toUtf8();   // 🔥 IMPORTANTE
+
+    qDebug() << "SearchService::query called with:" << q;
+    qDebug() << "SearchService::query - q.toUtf8():" << utf8;
+
+    query_results(&m_ctx, utf8.constData());
+    query_next_page(&m_ctx);
 }
 
 void SearchService::queryNextPage()

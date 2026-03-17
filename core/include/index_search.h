@@ -59,7 +59,7 @@ KOTOBA_API void
 sort_scores(SearchResultMeta *a, int n);
 
 #define MAX_QUERY_LEN 256
-#define QUERY_BUFFER_SIZE (MAX_QUERY_LEN * 2) // para normalizaciones (hiragana, vowel prolongation mark, etc)
+#define QUERY_BUFFER_SIZE (MAX_QUERY_LEN * 3) // para normalizaciones (hiragana, vowel prolongation mark, etc)
 #define SEARCH_MAX_RESULTS 32768 // 2^15
 #define SEARCH_MAX_QUERY_HASHES 128
 #define DEFAULT_PAGE_SIZE 16
@@ -88,6 +88,7 @@ struct SearchContext
     char *queries_buffer;
     char *mixed_query;
     char *variant_query;
+    char *word_filter_buffer;
 
     kotoba_dict *dict;
 
