@@ -143,6 +143,7 @@ void SrsViewModel::add(int entryId)
     if (!m_service) return;
     if (m_service->add(static_cast<uint32_t>(entryId)))
         updateStats();
+    emit containsChanged(entryId); 
 }
 
 /* ---- stats ---- */
@@ -150,4 +151,14 @@ void SrsViewModel::add(int entryId)
 void SrsViewModel::updateStats()
 {
     emit statsChanged();
+}
+
+
+void SrsViewModel::remove(int id)
+{
+    if (!m_service->contains(id))
+        return;
+
+    m_service->remove(id);
+    emit containsChanged(id); // 🔥 misma señal para mantener reactividad
 }

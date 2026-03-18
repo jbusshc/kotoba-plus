@@ -39,6 +39,7 @@ public:
 
     Q_INVOKABLE bool contains(int entryId);
     Q_INVOKABLE void add(int entryId);
+    Q_INVOKABLE void remove(int entryId);
 
     /* Guardar el perfil explícitamente (llamado desde QML al salir de estudio) */
     Q_INVOKABLE bool saveProfile();
@@ -60,7 +61,8 @@ signals:
     void showAnswer(QString meaning);
     void noMoreCards();
     void statsChanged();
-
+    void containsChanged(int id);
+    
 private:
     void loadNext();
     void updateStats();

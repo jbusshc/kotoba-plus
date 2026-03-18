@@ -3,17 +3,41 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import Kotoba 1.0
 import "../components"
-
 Page {
     id: page
 
-    property int docId: -1
-    property var entryData: ({})
-
+    property bool darkTheme: Theme.darkTheme
     property color textColor: Theme.textColor
     property color hintColor: Theme.hintColor
     property color accentColor: Theme.accentColor
     property color dividerColor: Theme.dividerColor
+
+    property int docId: -1
+    property var entryData: ({})
+
+    // 🔥 estado reactivo local
+    property bool inSrs: false
+
+    function updateSrsState() {
+        if (srsVM && docId !== -1)
+            inSrs = srsVM.contains(docId)
+    }
+
+    Component.onCompleted: {
+        if (docId !== -1)
+            entryData = detailsVM.mapEntry(docId)
+
+        updateSrsState()
+    }
+
+    // 🔥 escuchar cambios del backend
+    Connections {
+        target: srsVM
+        function onContainsChanged(changedId) {
+            if (changedId === docId)
+                updateSrsState()
+        }
+    }
 
     ColumnLayout {
         anchors.fill: parent
@@ -30,10 +54,18 @@ Page {
             Item { Layout.fillWidth: true }
 
             Button {
-                text: srsVM && srsVM.contains(docId) ? "In SRS" : "Add to SRS"
-                enabled: srsVM && !srsVM.contains(docId)
+                text: inSrs ? "In SRS" : "Add to SRS"
+                enabled: true  // siempre clickeable
 
-                onClicked: srsVM.add(docId)
+                onClicked: {
+                    if (inSrs) {
+                        srsVM.remove(docId)
+                        inSrs = false
+                    } else {
+                        srsVM.add(docId)
+                        inSrs = true
+                    }
+                }
             }
         }
 
@@ -52,10 +84,5 @@ Page {
                 dividerColor: page.dividerColor
             }
         }
-    }
-
-    Component.onCompleted: {
-        if (docId !== -1)
-            entryData = detailsVM.mapEntry(docId)
     }
 }
