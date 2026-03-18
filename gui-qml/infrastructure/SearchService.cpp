@@ -29,10 +29,15 @@ void SearchService::query(const QString &q)
         return;
     }
 
-    QByteArray utf8 = q.toUtf8();   // 🔥 IMPORTANTE
+    QByteArray utf8 = q.toUtf8();   
 
     qDebug() << "SearchService::query called with:" << q;
     qDebug() << "SearchService::query - q.toUtf8():" << utf8;
+
+    if (utf8.size() >= MAX_QUERY_LEN) {
+        qDebug() << "SearchService::query - Query too long, truncating to" << MAX_QUERY_LEN - 1 << "bytes";
+        utf8.truncate(MAX_QUERY_LEN - 1);
+    }
 
     query_results(&m_ctx, utf8.constData());
     query_next_page(&m_ctx);

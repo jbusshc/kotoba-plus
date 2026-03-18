@@ -46,6 +46,7 @@ void SrsLibraryViewModel::loadAllCards()
             default:                    item.state = QStringLiteral("Unknown");    break;
         }
 
+        static char mixed_buf[MAX_QUERY_LEN]; // buffer reutilizable para normalizaciones
         /* word */
         if (entry->k_elements_count > 0) {
             const k_ele_bin* k = kotoba_k_ele(m_dict, entry, 0);
@@ -71,7 +72,11 @@ void SrsLibraryViewModel::loadAllCards()
         for (uint32_t r = 0; r < entry->r_elements_count; ++r) {
             const r_ele_bin* re = kotoba_r_ele(m_dict, entry, r);
             kotoba_str s = kotoba_reb(m_dict, re);
+            strncpy(mixed_buf, s.ptr, s.len);
+            mixed_buf[s.len] = '\0';
+            mixed_to_hiragana(m_searchService->searchCtx()->trie_ctx, mixed_buf, mixed_buf, MAX_QUERY_LEN);
             item.variants.append(QString::fromUtf8(s.ptr, s.len));
+            item.variants.append(QString::fromUtf8(mixed_buf));
         }
         /* meaning */
         if (entry->senses_count > 0) {
