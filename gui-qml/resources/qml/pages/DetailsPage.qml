@@ -3,6 +3,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import Kotoba 1.0
 import "../components"
+
 Page {
     id: page
 
@@ -15,7 +16,6 @@ Page {
     property int docId: -1
     property var entryData: ({})
 
-    // 🔥 estado reactivo local
     property bool inSrs: false
 
     function updateSrsState() {
@@ -26,11 +26,9 @@ Page {
     Component.onCompleted: {
         if (docId !== -1)
             entryData = detailsVM.mapEntry(docId)
-
         updateSrsState()
     }
 
-    // 🔥 escuchar cambios del backend
     Connections {
         target: srsVM
         function onContainsChanged(changedId) {
@@ -39,49 +37,127 @@ Page {
         }
     }
 
+    background: Rectangle { color: Theme.background }
+
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: 16
+        anchors.margins: 20
+        spacing: 14
 
+        // ── Top bar ──────────────────────────────────────────────────────────
         RowLayout {
             Layout.fillWidth: true
+            spacing: 0
 
-            Button {
-                text: "← Back"
-                onClicked: stack.pop()
+            // Back button — minimal, text-only
+            Item {
+                width: backLabel.implicitWidth + 24
+                height: 36
+
+                Rectangle {
+                    id: backBg
+                    anchors.fill: parent
+                    radius: 6
+                    color: backMouse.containsMouse ? Qt.rgba(1,1,1,0.06) : "transparent"
+                    Behavior on color { ColorAnimation { duration: 120 } }
+                }
+
+                RowLayout {
+                    anchors.centerIn: parent
+                    spacing: 5
+                    Text {
+                        text: "‹"
+                        font.pixelSize: 18
+                        color: hintColor
+                    }
+                    Text {
+                        id: backLabel
+                        text: "Back"
+                        font.pixelSize: 13
+                        font.weight: Font.Medium
+                        color: hintColor
+                    }
+                }
+
+                MouseArea {
+                    id: backMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: stack.pop()
+                }
             }
 
             Item { Layout.fillWidth: true }
 
-            Button {
-                text: inSrs ? "In SRS" : "Add to SRS"
-                enabled: true  // siempre clickeable
+            // SRS toggle button
+            Rectangle {
+                width: srsRowLayout.implicitWidth + 24
+                height: 34
+                radius: 6
+                color: inSrs
+                    ? Qt.rgba(accentColor.r, accentColor.g, accentColor.b, 0.15)
+                    : Qt.rgba(1, 1, 1, 0.05)
+                border.width: 1
+                border.color: inSrs ? Qt.rgba(accentColor.r, accentColor.g, accentColor.b, 0.5)
+                                    : Qt.rgba(1, 1, 1, 0.10)
 
-                onClicked: {
-                    if (inSrs) {
-                        srsVM.remove(docId)
-                        inSrs = false
-                    } else {
-                        srsVM.add(docId)
-                        inSrs = true
+                Behavior on color { ColorAnimation { duration: 180 } }
+
+                RowLayout {
+                    id: srsRowLayout
+                    anchors.centerIn: parent
+                    spacing: 6
+
+                    Rectangle {
+                        width: 7; height: 7; radius: 4
+                        color: inSrs ? accentColor : Qt.rgba(1,1,1,0.25)
+                        Behavior on color { ColorAnimation { duration: 180 } }
+                    }
+
+                    Text {
+                        text: inSrs ? "In SRS" : "Add to SRS"
+                        font.pixelSize: 12
+                        font.weight: Font.Medium
+                        color: inSrs ? accentColor : hintColor
+                        Behavior on color { ColorAnimation { duration: 180 } }
+                    }
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                        if (inSrs) { srsVM.remove(docId); inSrs = false }
+                        else       { srsVM.add(docId);    inSrs = true  }
                     }
                 }
             }
         }
 
-        ScrollView {
+        // ── Entry content area ───────────────────────────────────────────────
+        Rectangle {
             Layout.fillWidth: true
             Layout.fillHeight: true
+            radius: 10
+            color: Theme.cardBackground
+            border.width: 1
+            border.color: dividerColor
 
-            EntryView {
-                width: parent.width
-                entryData: page.entryData
-                mode: "dictionary"
+            ScrollView {
+                anchors.fill: parent
+                anchors.margins: 20
+                clip: true
 
-                textColor: page.textColor
-                hintColor: page.hintColor
-                accentColor: page.accentColor
-                dividerColor: page.dividerColor
+                EntryView {
+                    width: parent.width
+                    entryData: page.entryData
+                    mode: "dictionary"
+                    textColor:    page.textColor
+                    hintColor:    page.hintColor
+                    accentColor:  page.accentColor
+                    dividerColor: page.dividerColor
+                }
             }
         }
     }

@@ -463,3 +463,18 @@ std::string SrsService::dueDateText(uint32_t entryId) const
     fsrs_format_interval(delta, buf, sizeof(buf));
     return std::string(buf);
 }
+
+std::string SrsService::stateText(uint32_t entryId) const
+{
+    fsrs_card *card = getCard(entryId);
+    if (!card) return {};
+
+    switch (card->state) {
+        case FSRS_STATE_NEW:        return "New";
+        case FSRS_STATE_LEARNING:   return "Learning";
+        case FSRS_STATE_RELEARNING: return "Relearning";
+        case FSRS_STATE_REVIEW:     return "Review";
+        case FSRS_STATE_SUSPENDED:  return "Suspended";
+        default:                    return "Unknown";
+    }
+}

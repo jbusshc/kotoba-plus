@@ -1,12 +1,11 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import QtQuick.Controls.Material
 import Kotoba 1.0
 
 Page {
     id: page
-    padding: 32
+    padding: 0
 
     property bool darkTheme: Theme.darkTheme
     property color textColor: Theme.textColor
@@ -14,101 +13,179 @@ Page {
     property color accentColor: Theme.accentColor
     property color dividerColor: Theme.dividerColor
 
-    component DashboardCard: Rectangle {
-        property string label
-        property int value
-        property color accent
+    background: Rectangle { color: Theme.background }
 
-        radius: 12
+    // ── Stat card component ──────────────────────────────────────────────────
+    component StatCard: Rectangle {
+        property string label: ""
+        property string value: "0"
+        property color  accent: "white"
+        property string sublabel: ""
+
+        radius: 10
         color: Theme.cardBackground
-        border.color: accent
-        border.width: 2
+        border.width: 1
+        border.color: Qt.rgba(accent.r, accent.g, accent.b, 0.25)
 
         Layout.fillWidth: true
-        Layout.preferredHeight: 140
+        Layout.preferredHeight: 110
+
+        // Top accent line
+        Rectangle {
+            anchors.top: parent.top
+            anchors.left: parent.left
+            anchors.right: parent.right
+            height: 2
+            radius: 1
+            color: accent
+            opacity: 0.7
+        }
 
         Column {
-            anchors.centerIn: parent
-            width: parent.width
-            spacing: 8
+            anchors.fill: parent
+            anchors.margins: 16
+            spacing: 6
 
             Text {
                 text: value
-                font.pixelSize: 36
-                font.bold: true
+                font.pixelSize: 34
+                font.weight: Font.Bold
+                font.letterSpacing: -1
                 color: accent
-                width: parent.width
-                horizontalAlignment: Text.AlignHCenter
             }
 
             Text {
-                text: label
-                font.pixelSize: 14
-                opacity: 0.8
-                color: textColor
-                width: parent.width
-                horizontalAlignment: Text.AlignHCenter
+                text: label.toUpperCase()
+                font.pixelSize: 12
+                font.weight: Font.Medium
+                font.letterSpacing: 0.6
+                color: Qt.rgba(hintColor.r, hintColor.g, hintColor.b, 0.7)
             }
         }
     }
 
-    ColumnLayout {
-        anchors.fill: parent
-        spacing: 28
+    // ── Action button component ──────────────────────────────────────────────
+    component ActionButton: Rectangle {
+        property string label: ""
+        property string sublabel: ""
+        property color  accent: accentColor
+        property bool   primary: false
+        property bool   enabled: true
+        signal clicked()
 
-        GridLayout {
-            columns: 3
-            columnSpacing: 20
-            rowSpacing: 20
-            Layout.fillWidth: true
+        height: 60
+        radius: 8
+        color: primary
+            ? (btnMouse.containsMouse && enabled ? Qt.lighter(accent, 1.15) : accent)
+            : (btnMouse.containsMouse && enabled ? Qt.rgba(1,1,1,0.08) : Qt.rgba(1,1,1,0.04))
 
-            DashboardCard {
-                label: "Due"
-                value: srsVM ? srsVM.dueCount : 0
-                accent: Material.color(Material.Red)
+        border.width: primary ? 0 : 1
+        border.color: Qt.rgba(1,1,1,0.10)
+
+        opacity: enabled ? 1.0 : 0.35
+
+        Behavior on color { ColorAnimation { duration: 120 } }
+
+        ColumnLayout {
+            anchors.centerIn: parent
+            spacing: 2
+
+            Text {
+                Layout.alignment: Qt.AlignHCenter
+                text: label
+                font.pixelSize: 13
+                font.weight: Font.DemiBold
+                color: primary ? "white" : textColor
             }
 
-            DashboardCard {
-                label: "Total Cards"
-                value: srsVM ? srsVM.totalCount : 0
-                accent: Material.color(Material.Blue)
-            }
-
-            DashboardCard {
-                label: "Reviewed Today"
-                value: srsVM ? srsVM.reviewTodayCount : 0
-                accent: Material.color(Material.Green)
+            Text {
+                Layout.alignment: Qt.AlignHCenter
+                text: sublabel
+                font.pixelSize: 10
+                color: primary ? Qt.rgba(1,1,1,0.65) : hintColor
+                visible: sublabel.length > 0
             }
         }
 
-        Item { Layout.fillHeight: true }
+        MouseArea {
+            id: btnMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+            onClicked: if (parent.enabled) parent.clicked()
+        }
+    }
 
-        RowLayout {
-            Layout.alignment: Qt.AlignHCenter
-            spacing: 16
+    // ── Layout ───────────────────────────────────────────────────────────────
+    ColumnLayout {
+        anchors.fill: parent
+        anchors.margins: 24
+        spacing: 24
 
-            Button {
-                id: studyButton
-                text: srsVM && srsVM.dueCount > 0 ? "Start Study" : "Nothing to study"
+            Item { Layout.fillHeight: true }
+
+        // Header
+        Column {
+            Layout.fillWidth: true
+            spacing: 4
+
+            Text {
+                text: "Study Queue"
+                font.pixelSize: 22
+                font.weight: Font.Bold
+                color: textColor
+            }
+
+            Text {
+                text: {
+                    if (!srsVM) return ""
+                    const due = srsVM.dueCount
+                    if (due === 0) return "You're all caught up for now."
+                    return due + " card" + (due === 1 ? "" : "s") + " ready to review."
+                }
+                font.pixelSize: 13
+                color: hintColor
+            }
+        }
+
+        // Stats row
+        GridLayout {
+            Layout.fillWidth: true
+            columns: 3
+            columnSpacing: 12
+            rowSpacing: 12
+
+            StatCard {
+                label: "Due"
+                value: srsVM ? String(srsVM.dueCount ?? 0) : "0"
+                accent: "#F87171"
+            }
+
+            StatCard {
+                label: "Total"
+                value: srsVM ? String(srsVM.totalCount ?? 0) : "0"
+                accent: "#60A5FA"
+            }
+
+            StatCard {
+                label: "Today"
+                value: srsVM ? String(srsVM.reviewTodayCount ?? 0) : "0"
+                accent: "#34D399"
+            }
+        }
+
+        // Action buttons
+        ColumnLayout {
+            Layout.fillWidth: true
+            spacing: 10
+
+            ActionButton {
+                Layout.fillWidth: true
+                primary: true
+                label: srsVM && srsVM.dueCount > 0 ? "Start Study Session" : "Nothing Due"
+                sublabel: srsVM && srsVM.dueCount > 0 ? srsVM.dueCount + " cards in queue" : "Check back later"
+                accent: accentColor
                 enabled: srsVM && srsVM.dueCount > 0
-                font.pixelSize: 20
-                padding: 16
-                Layout.preferredWidth: 180
-
-                background: Rectangle {
-                    color: studyButton.enabled
-                           ? Material.color(Material.Blue)
-                           : (Theme.darkTheme ? "#555" : "#aaa")
-                    radius: 8
-                }
-
-                contentItem: Text {
-                    text: parent.text
-                    color: "white"
-                    font.pixelSize: 20
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                }
 
                 onClicked: {
                     if (stack && srsVM && srsVM.dueCount > 0) {
@@ -118,29 +195,14 @@ Page {
                 }
             }
 
-            Button {
-                id: libraryButton
-                text: "Cards list"
-                font.pixelSize: 20
-                padding: 16
-                Layout.preferredWidth: 180
-
-                background: Rectangle {
-                    color: Material.color(Material.BlueGrey)
-                    radius: 8
-                }
-
-                contentItem: Text {
-                    text: parent.text
-                    color: "white"
-                    font.pixelSize: 20
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                }
+            ActionButton {
+                Layout.fillWidth: true
+                label: "Browse Cards"
+                sublabel: srsVM ? ((parseInt(srsVM.totalCount) || 0) + " cards in deck") : ""
+                enabled: true
 
                 onClicked: {
-                    if (stack)
-                        stack.push("qrc:/qml/pages/SrsLibrary.qml")
+                    if (stack) stack.push("qrc:/qml/pages/SrsLibrary.qml")
                 }
             }
         }

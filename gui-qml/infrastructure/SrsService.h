@@ -61,6 +61,7 @@ public:
 
     /* Tiempo en segundos hasta la próxima carta */
     std::string dueDateText(uint32_t entryId) const; // nuevo: texto de vencimiento real
+    std::string stateText(uint32_t entryId) const;   // nuevo: texto del estado (New, Learning, Review, etc.)
 
     fsrs_deck*    getDeck()    const { return m_deck; }
     fsrs_session* getSession()       { return &m_session; }

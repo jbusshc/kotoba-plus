@@ -1,12 +1,11 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import QtQuick.Controls.Material
 import Kotoba 1.0
 
 Page {
     id: page
-    padding: 12
+    padding: 0
 
     property bool darkTheme: Theme.darkTheme
     property color textColor: Theme.textColor
@@ -14,20 +13,79 @@ Page {
     property color accentColor: Theme.accentColor
     property color dividerColor: Theme.dividerColor
 
+    background: Rectangle { color: Theme.background }
+
     ColumnLayout {
         anchors.fill: parent
-        spacing: 10
+        spacing: 0
 
-        TextField {
-            id: searchField
+        // ── Search bar ───────────────────────────────────────────────────────
+        Rectangle {
             Layout.fillWidth: true
-            placeholderText: "Search Japanese word..."
-            text: searchVM ? searchVM.query : ""
-            color: textColor
-            placeholderTextColor: hintColor
-            onTextChanged: if (searchVM) searchVM.query = text
+            height: 56
+            color: Theme.cardBackground
+            border.width: 0
+
+            // Bottom border only
+            Rectangle {
+                anchors.bottom: parent.bottom
+                width: parent.width
+                height: 1
+                color: dividerColor
+            }
+
+            RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: 16
+                anchors.rightMargin: 16
+                spacing: 10
+
+                // Search icon
+                Text {
+                    text: "⌕"
+                    font.pixelSize: 18
+                    color: searchField.activeFocus ? accentColor : Qt.rgba(hintColor.r, hintColor.g, hintColor.b, 0.5)
+                    Behavior on color { ColorAnimation { duration: 150 } }
+                }
+
+                TextField {
+                    id: searchField
+                    Layout.fillWidth: true
+                    placeholderText: "Search in Japanese, kana, or English…"
+                    text: searchVM ? searchVM.query : ""
+                    color: textColor
+                    placeholderTextColor: Qt.rgba(hintColor.r, hintColor.g, hintColor.b, 0.45)
+                    font.pixelSize: 14
+
+                    background: Rectangle { color: "transparent" }
+                    leftPadding: 0
+
+                    onTextChanged: if (searchVM) searchVM.query = text
+                }
+
+                // Clear button
+                Rectangle {
+                    width: 20; height: 20; radius: 10
+                    color: Qt.rgba(1,1,1,0.10)
+                    visible: searchField.text.length > 0
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: "×"
+                        font.pixelSize: 12
+                        color: hintColor
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: searchField.text = ""
+                    }
+                }
+            }
         }
 
+        // ── Results list ─────────────────────────────────────────────────────
         ListView {
             id: listView
             model: searchModel
@@ -35,59 +93,157 @@ Page {
             Layout.fillHeight: true
             clip: true
             boundsBehavior: Flickable.StopAtBounds
+            spacing: 0
 
-        delegate: Rectangle {
-            id: delegateRect
-            width: ListView.view.width
-            height: contentColumn.implicitHeight + 16
-            color: "transparent"
+            delegate: Item {
+                id: delegateRoot
+                width: listView.width
+                height: rowContent.implicitHeight + 20
 
-            Column {
-                id: contentColumn
-                anchors.fill: parent
-                anchors.margins: 10
-                spacing: 4
+                // Hover + press state
+                property bool hovered: false
+                property bool pressed: false
 
-                Text { text: headword; font.pixelSize: 18; font.bold: true; color: textColor; wrapMode: Text.Wrap }
-                Text { text: gloss; font.pixelSize: 13; color: hintColor; wrapMode: Text.Wrap }
-            }
+                Rectangle {
+                    anchors.fill: parent
+                    color: delegateRoot.pressed
+                        ? Qt.rgba(accentColor.r, accentColor.g, accentColor.b, 0.10)
+                        : delegateRoot.hovered
+                            ? Qt.rgba(1,1,1,0.04)
+                            : "transparent"
+                    Behavior on color { ColorAnimation { duration: 100 } }
+                }
 
-            MouseArea {
-                id: mouseArea
-                anchors.fill: parent
-                onClicked: {
-                    // Trigger the flash
-                    flashAnim.running = true
-                    // Navigate to details page
-                    stack.push("qrc:/qml/pages/DetailsPage.qml", { docId: docId })
+                RowLayout {
+                    id: rowContent
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.leftMargin: 16
+                    anchors.rightMargin: 16
+                    spacing: 12
+
+                    // Left accent bar on hover
+                    Rectangle {
+                        width: 3
+                        height: wordText.implicitHeight
+                        radius: 2
+                        color: accentColor
+                        opacity: delegateRoot.hovered ? 1 : 0
+                        Behavior on opacity { NumberAnimation { duration: 120 } }
+                    }
+
+                    Column {
+                        Layout.fillWidth: true
+                        spacing: 3
+
+                        Text {
+                            id: wordText
+                            text: headword
+                            font.pixelSize: 17
+                            font.weight: Font.Medium
+                            color: textColor
+                            wrapMode: Text.Wrap
+                            width: parent.width
+                        }
+
+                        Text {
+                            text: gloss
+                            font.pixelSize: 12
+                            color: Qt.rgba(hintColor.r, hintColor.g, hintColor.b, 0.8)
+                            wrapMode: Text.Wrap
+                            width: parent.width
+                            maximumLineCount: 2
+                            elide: Text.ElideRight
+                        }
+                    }
+
+                    Text {
+                        text: "›"
+                        font.pixelSize: 16
+                        color: Qt.rgba(hintColor.r, hintColor.g, hintColor.b, 0.35)
+                        opacity: delegateRoot.hovered ? 1 : 0
+                        Behavior on opacity { NumberAnimation { duration: 120 } }
+                    }
+                }
+
+                // Divider
+                Rectangle {
+                    anchors.bottom: parent.bottom
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.leftMargin: 16
+                    height: 1
+                    color: dividerColor
+                    opacity: 0.5
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onEntered:  delegateRoot.hovered = true
+                    onExited:   delegateRoot.hovered = false
+                    onPressed:  delegateRoot.pressed = true
+                    onReleased: delegateRoot.pressed = false
+                    onClicked:  stack.push("qrc:/qml/pages/DetailsPage.qml", { docId: docId })
                 }
             }
 
-            Rectangle {
-                id: flashRect
-                anchors.fill: parent
-                color: accentColor.lighter(1.5)
-                opacity: 0
+            onContentYChanged: {
+                if (contentY + height >= contentHeight - 150)
+                    searchVM.needMore()
             }
 
-            // Animation for the flash effect
-            Behavior on opacity {
-                NumberAnimation { duration: 300; easing.type: Easing.InOutQuad }
+            // Empty state
+            Item {
+                anchors.centerIn: parent
+                visible: listView.count === 0 && searchField.text.length > 0
+                width: parent.width
+
+                Column {
+                    anchors.centerIn: parent
+                    spacing: 8
+
+                    Text {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        text: "∅"
+                        font.pixelSize: 32
+                        color: Qt.rgba(hintColor.r, hintColor.g, hintColor.b, 0.25)
+                    }
+                    Text {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        text: "No results found"
+                        font.pixelSize: 13
+                        color: Qt.rgba(hintColor.r, hintColor.g, hintColor.b, 0.4)
+                    }
+                }
             }
 
-            SequentialAnimation {
-                id: flashAnim
-                running: false
-                PropertyAnimation { target: flashRect; property: "opacity"; to: 1; duration: 100 }
-                PropertyAnimation { target: flashRect; property: "opacity"; to: 0; duration: 300 }
+            // Prompt state (no query yet)
+            Item {
+                anchors.centerIn: parent
+                visible: listView.count === 0 && searchField.text.length === 0
+                width: parent.width
+
+                Column {
+                    anchors.centerIn: parent
+                    spacing: 8
+
+                    Text {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        text: "日"
+                        font.pixelSize: 48
+                        color: Qt.rgba(hintColor.r, hintColor.g, hintColor.b, 0.10)
+                    }
+                    Text {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        text: "Type to search"
+                        font.pixelSize: 13
+                        color: Qt.rgba(hintColor.r, hintColor.g, hintColor.b, 0.3)
+                    }
+                }
             }
-
-            Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: dividerColor }
-        }
-
-            onContentYChanged: { if (contentY + height >= contentHeight - 150) searchVM.needMore() }
-
-            Label { anchors.centerIn: parent; visible: listView.count === 0 && searchField.text.length > 0; text: "No results found"; color: hintColor }
         }
     }
 }

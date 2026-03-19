@@ -210,6 +210,12 @@ QString SrsLibraryViewModel::getDue(int entryId) const
     return QString::fromStdString(m_service->dueDateText(static_cast<uint32_t>(entryId)));
 }
 
+QString SrsLibraryViewModel::getState(int entryId) const
+{
+    if( !m_service) return {};
+    return QString::fromStdString(m_service->stateText(static_cast<uint32_t>(entryId)));
+}
+
 void SrsLibraryViewModel::suspend(int entryId)
 {
     if (!m_service || entryId < 0) return;

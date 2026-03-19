@@ -56,7 +56,8 @@ public:
     Q_INVOKABLE int     getReps(int entryId) const;
     Q_INVOKABLE int     getLapses(int entryId) const;
     Q_INVOKABLE QString getDue(int entryId) const;
-
+    Q_INVOKABLE QString getState(int entryId) const;
+    
     Q_INVOKABLE void suspend(int entryId);
     Q_INVOKABLE void reset(int entryId);
     Q_INVOKABLE void remove(int entryId);
