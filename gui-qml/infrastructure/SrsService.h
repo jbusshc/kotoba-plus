@@ -2,6 +2,7 @@
 #include <optional>
 #include <string>
 #include <cstdint>
+#include <vector>
 
 extern "C" {
 #include <fsrs.h>
@@ -63,8 +64,23 @@ public:
 
     fsrs_deck*    getDeck()    const { return m_deck; }
     fsrs_session* getSession()       { return &m_session; }
+    
+    bool undoLastAnswer();
+    bool canUndo() const { return m_undoStack.has_value(); }
 
 private:
+
+    struct UndoEntry {
+        fsrs_card    card;          // copia completa de la carta antes de responder
+        uint32_t     entryId;
+        uint32_t     cards_done;
+        uint32_t     new_done;
+        uint32_t     learn_done;
+        uint32_t     review_done;
+        // La palabra/meaning que se estaba mostrando (para relanzar showQuestion)
+    };
+    std::optional<UndoEntry> m_undoStack;
+
     fsrs_card* getCard(uint32_t entryId) const;
     std::string effectivePath() const;   // fuente única de verdad para la ruta
     bool        compactSync(uint64_t now);

@@ -111,87 +111,24 @@ void SrsLibraryViewModel::rebuildFiltered()
     const QString s = m_search.trimmed();
     const bool hasSearch = !s.isEmpty();
 
-    QString queryMixedStr;
-    QString queryVariantStr;
+    m_searchService->queryNonPagination(s); // obtener conteo total para la barra de progreso
 
-    bool sameMixed = true;
-    uint8_t variant_flag = 0;
 
-    QByteArray sUtf8;
+    const PostingRef* results = m_searchService->searchCtx()->results_buffer;
+    const uint32_t resultsCount = m_searchService->searchCtx()->results_left; // conteo total de resultados para el texto "X resultados"
 
-    if (hasSearch) {
-
-        sUtf8 = s.toUtf8();
-
-        static char query_mixed[MAX_QUERY_LEN];
-        static char query_variant[MAX_QUERY_LEN];
-
-        mixed_to_hiragana(
-            m_searchService->searchCtx()->trie_ctx,
-            sUtf8.constData(),
-            query_mixed,
-            MAX_QUERY_LEN
-        );
-
-        queryMixedStr = QString::fromUtf8(query_mixed);
-
-        sameMixed = strcmp(query_mixed, sUtf8.constData()) == 0;
-
-        if (!sameMixed) {
-            vowel_prolongation_mark(
-                query_mixed,
-                query_variant,
-                MAX_QUERY_LEN,
-                &variant_flag
-            );
-
-            queryVariantStr = QString::fromUtf8(query_variant);
-        }
-    }
-
-    /* micro-opt: detectar si la búsqueda es numérica */
-    bool searchIsNumeric = false;
-    uint32_t searchId = 0;
-
-    if (hasSearch) {
-        bool ok = false;
-        searchId = s.toUInt(&ok);
-        searchIsNumeric = ok;
+    // Construir un set de entryIds de los resultados para búsqueda rápida
+    QSet<uint32_t> resultEntryIds;
+    for (uint32_t i = 0; i < resultsCount; ++i){
+        resultEntryIds.insert(results[i].p->doc_id);
     }
 
     for (const SrsCardItem &it : m_allCards) {
 
         bool matchSearch = true;
-
         if (hasSearch) {
-
-            if (sameMixed) {
-
-                matchSearch =
-                    variantMatch(it, s) ||
-                    it.meaning.contains(s, Qt::CaseInsensitive) ||
-                    (searchIsNumeric && it.id == searchId);
-
-            }
-            else if (variant_flag) {
-
-                matchSearch =
-                    variantMatch(it, s) ||
-                    variantMatch(it, queryMixedStr) ||
-                    variantMatch(it, queryVariantStr) ||
-                    it.meaning.contains(s, Qt::CaseInsensitive) ||
-                    (searchIsNumeric && it.id == searchId);
-
-            }
-            else {
-
-                matchSearch =
-                    variantMatch(it, s) ||
-                    variantMatch(it, queryMixedStr) ||
-                    it.meaning.contains(s, Qt::CaseInsensitive) ||
-                    (searchIsNumeric && it.id == searchId);
-
-            }
+            // Coincide si el entryId está en los resultados de búsqueda
+            matchSearch = resultEntryIds.contains(it.id);
         }
 
         bool matchFilter = true;

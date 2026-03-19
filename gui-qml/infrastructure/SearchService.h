@@ -16,6 +16,7 @@ public:
     ~SearchService();
 
     void query(const QString &q);
+    void queryNonPagination(const QString &q);   // nueva: query sin paginación (para obtener conteo total)
     void queryNextPage();
 
     // access to context (read-only)

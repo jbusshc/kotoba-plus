@@ -50,11 +50,11 @@ bool SrsViewModel::saveProfile()
 }
 
 /* ---- main: cargar siguiente carta ---- */
-
 void SrsViewModel::loadNext()
 {
     if (!m_service) {
         m_hasCard = false;
+        emit currentChanged();
         emit noMoreCards();
         updateStats();
         return;
@@ -63,6 +63,7 @@ void SrsViewModel::loadNext()
     fsrs_card *card = m_service->nextCard();
     if (!card) {
         m_hasCard = false;
+        emit currentChanged();
         emit noMoreCards();
         updateStats();
         return;
@@ -74,6 +75,7 @@ void SrsViewModel::loadNext()
     const entry_bin *entry = kotoba_dict_get_entry(m_dict, m_currentEntryId);
     if (!entry) {
         m_hasCard = false;
+        emit currentChanged();
         emit noMoreCards();
         updateStats();
         return;
@@ -91,7 +93,9 @@ void SrsViewModel::loadNext()
         kotoba_str s = kotoba_reb(m_dict, r);
         word = QString::fromUtf8(s.ptr, s.len);
     }
-    if (word.isEmpty()) word = QStringLiteral("[unknown]");
+
+    if (word.isEmpty())
+        word = "[unknown]";
 
     if (entry->senses_count > 0) {
         const sense_bin *sense = kotoba_sense(m_dict, entry, 0);
@@ -100,11 +104,14 @@ void SrsViewModel::loadNext()
             kotoba_str gs = kotoba_gloss(m_dict, sense, g);
             parts << QString::fromUtf8(gs.ptr, gs.len);
         }
-        meaning = parts.join(QStringLiteral("; "));
+        meaning = parts.join("; ");
     }
 
+    // 🔥 AQUÍ está el cambio clave
+    m_currentWord = word;
     m_currentMeaning = meaning;
-    emit showQuestion(word);
+
+    emit currentChanged();
     updateStats();
 }
 
@@ -113,8 +120,6 @@ void SrsViewModel::loadNext()
 void SrsViewModel::revealAnswer()
 {
     if (!m_hasCard) return;
-    emit showAnswer(m_currentMeaning);
-    updateStats();
 }
 
 void SrsViewModel::handleAnswer(int quality)
@@ -161,4 +166,33 @@ void SrsViewModel::remove(int id)
 
     m_service->remove(id);
     emit containsChanged(id); // 🔥 misma señal para mantener reactividad
+}
+
+bool SrsViewModel::undoLastAnswer()
+{
+    if (!m_service || !m_service->canUndo())
+        return false;
+
+    if (!m_service->undoLastAnswer())
+        return false;
+
+    loadNext(); // recargar la carta actualizada
+    return true;
+}
+
+bool SrsViewModel::canUndo() const
+{
+    return m_service && m_service->canUndo();
+}
+
+QString SrsViewModel::currentWord() const {
+    return m_currentWord;
+}
+
+QString SrsViewModel::currentMeaning() const {
+    return m_currentMeaning;
+}
+
+bool SrsViewModel::hasCard() const {
+    return m_hasCard;
 }

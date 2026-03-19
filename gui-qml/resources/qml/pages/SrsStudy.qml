@@ -3,6 +3,8 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Controls.Material
 
+import "../theme"
+
 import Kotoba 1.0
 
 Page {
@@ -22,12 +24,21 @@ Page {
     property color goodColor: Theme.goodColor
     property color easyColor: Theme.easyColor
 
-    /* Limpiar estado al entrar a la pantalla */
-    onVisibleChanged: {
-        if (visible) {
-            questionText.text  = ""
-            answerText.text    = ""
-            page.answerShown   = false
+    property int buttonWidth: 120
+    property int buttonHeight: 65
+
+    /*  Iniciar sesión cuando la pantalla ya existe */
+    Component.onCompleted: {
+        if (srsVM) {
+            srsVM.startSession()
+        }
+    }
+
+    /* Reset visual cuando cambias de carta */
+    Connections {
+        target: srsVM
+        function onCurrentChanged() {
+            page.answerShown = false
         }
     }
 
@@ -55,17 +66,17 @@ Page {
 
                 Item { Layout.fillHeight: true }
 
+                /*  Pregunta desde estado */
                 Text {
-                    id: questionText
                     Layout.alignment: Qt.AlignHCenter
                     font.pixelSize: 36
                     font.bold: true
                     color: textColor
-                    text: ""
+                    text: srsVM ? srsVM.currentWord : ""
                 }
 
+                /*  Respuesta desde estado */
                 Text {
-                    id: answerText
                     Layout.alignment: Qt.AlignHCenter
                     visible: page.answerShown
                     font.pixelSize: 18
@@ -73,76 +84,90 @@ Page {
                     wrapMode: Text.WordWrap
                     horizontalAlignment: Text.AlignHCenter
                     width: parent.width * 0.9
+                    text: srsVM ? srsVM.currentMeaning : ""
                 }
 
                 Item { Layout.fillHeight: true }
             }
         }
-
-        Button {
-            id: revealButton
+        ColumnLayout {
             Layout.alignment: Qt.AlignHCenter
-            enabled: questionText.text !== ""
-            text: "Show Answer"
 
-            onClicked: {
-                page.answerShown = true
-                if (srsVM) srsVM.revealAnswer()
+            Item {
+                Layout.preferredHeight: buttonHeight
+                Layout.fillWidth: false
+
+                /* Botón reveal */
+                Button {
+                    anchors.centerIn: parent
+                    visible: !page.answerShown
+                    enabled: srsVM && srsVM.hasCard
+                    text: "Show Answer"
+                    Layout.preferredHeight: buttonHeight
+
+                    onClicked: {
+                        page.answerShown = true
+                    }
+                }
+
+                /* Botones de respuesta */
+                RowLayout {
+                    anchors.centerIn: parent
+                    spacing: 12
+                    visible: page.answerShown
+
+                    Button {
+                        text: "Again\n" + (srsVM ? srsVM.againInterval : "")
+                        Material.background: againColor
+                        onClicked: { if (srsVM) srsVM.answerAgain() }
+                        Layout.preferredWidth: buttonWidth
+                        Layout.preferredHeight: buttonHeight
+                    }
+
+                    Button {
+                        text: "Hard\n" + (srsVM ? srsVM.hardInterval : "")
+                        Material.background: hardColor
+                        onClicked: { if (srsVM) srsVM.answerHard() }
+                        Layout.preferredWidth: buttonWidth
+                        Layout.preferredHeight: buttonHeight
+                    }
+
+                    Button {
+                        text: "Good\n" + (srsVM ? srsVM.goodInterval : "")
+                        Material.background: goodColor
+                        onClicked: { if (srsVM) srsVM.answerGood() }
+                        Layout.preferredWidth: buttonWidth
+                        Layout.preferredHeight: buttonHeight
+                    }
+
+                    Button {
+                        text: "Easy\n" + (srsVM ? srsVM.easyInterval : "")
+                        Material.background: easyColor
+                        onClicked: { if (srsVM) srsVM.answerEasy() }
+                        Layout.preferredWidth: buttonWidth
+                        Layout.preferredHeight: buttonHeight
+                    }
+                }
             }
         }
 
-        RowLayout {
+        /*  Undo */
+        Button {
             Layout.alignment: Qt.AlignHCenter
-            spacing: 12
-            visible: page.answerShown
-
-            Button {
-                text: "Again\n" + (srsVM ? srsVM.againInterval : "")
-                Material.background: page.againColor
-                onClicked: { if (srsVM) srsVM.answerAgain() }
-            }
-
-            Button {
-                text: "Hard\n" + (srsVM ? srsVM.hardInterval : "")
-                Material.background: page.hardColor
-                onClicked: { if (srsVM) srsVM.answerHard() }
-            }
-
-            Button {
-                text: "Good\n" + (srsVM ? srsVM.goodInterval : "")
-                Material.background: page.goodColor
-                onClicked: { if (srsVM) srsVM.answerGood() }
-            }
-
-            Button {
-                text: "Easy\n" + (srsVM ? srsVM.easyInterval : "")
-                Material.background: page.easyColor
-                onClicked: { if (srsVM) srsVM.answerEasy() }
-            }
+            visible: srsVM && srsVM.canUndo && !page.answerShown
+            text: "↩ Undo"
+            flat: true
+            Material.foreground: page.hintColor
+            onClicked: { if (srsVM) srsVM.undoLastAnswer() }
         }
 
         Item { Layout.fillHeight: true }
     }
 
+    /*  Fin de sesión */
     Connections {
         target: srsVM
 
-        function onShowQuestion(word) {
-            questionText.text = word || ""
-            answerText.text   = ""
-            page.answerShown  = false
-        }
-
-        function onShowAnswer(ans) {
-            answerText.text  = ans || ""
-            page.answerShown = true
-        }
-
-        /*
-         * BUG FIX: antes se hacía stack.pop() directamente sin guardar.
-         * Ahora llamamos saveProfile() para que el progreso de la sesión
-         * quede persistido antes de salir de la pantalla de estudio.
-         */
         function onNoMoreCards() {
             if (srsVM) srsVM.saveProfile()
             if (stack) stack.pop()

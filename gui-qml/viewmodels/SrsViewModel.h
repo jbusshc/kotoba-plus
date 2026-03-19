@@ -23,6 +23,12 @@ class SrsViewModel : public QObject
     Q_PROPERTY(QString hardInterval  READ hardInterval  NOTIFY statsChanged)
     Q_PROPERTY(QString goodInterval  READ goodInterval  NOTIFY statsChanged)
     Q_PROPERTY(QString easyInterval  READ easyInterval  NOTIFY statsChanged)
+    Q_PROPERTY(bool canUndo READ canUndo NOTIFY statsChanged)
+
+    // 🔥 NUEVO (estado persistente)
+    Q_PROPERTY(QString currentWord READ currentWord NOTIFY currentChanged)
+    Q_PROPERTY(QString currentMeaning READ currentMeaning NOTIFY currentChanged)
+    Q_PROPERTY(bool hasCard READ hasCard NOTIFY currentChanged)
 
 public:
     explicit SrsViewModel(SrsService *service, kotoba_dict *dict, QObject *parent = nullptr);
@@ -41,9 +47,10 @@ public:
     Q_INVOKABLE void add(int entryId);
     Q_INVOKABLE void remove(int entryId);
 
-    /* Guardar el perfil explícitamente (llamado desde QML al salir de estudio) */
     Q_INVOKABLE bool saveProfile();
+    Q_INVOKABLE bool undoLastAnswer();
 
+    bool    canUndo() const;
     int     totalCount()       const;
     int     dueCount()         const;
     int     learningCount()    const;
@@ -56,13 +63,21 @@ public:
     QString goodInterval()     const;
     QString easyInterval()     const;
 
+    // 🔥 NUEVO getters
+    QString currentWord() const;
+    QString currentMeaning() const;
+    bool hasCard() const;
+
 signals:
-    void showQuestion(QString word);
+    void showQuestion(QString word);   // puedes eliminarlos después si quieres
     void showAnswer(QString meaning);
     void noMoreCards();
     void statsChanged();
     void containsChanged(int id);
-    
+
+    // 🔥 NUEVO
+    void currentChanged();
+
 private:
     void loadNext();
     void updateStats();
@@ -71,6 +86,9 @@ private:
     kotoba_dict  *m_dict;
 
     uint32_t m_currentEntryId = 0;
+
+    // 🔥 NUEVO estado persistente
+    QString  m_currentWord;
     QString  m_currentMeaning;
     bool     m_hasCard = false;
 };
