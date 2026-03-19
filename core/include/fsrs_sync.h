@@ -17,6 +17,7 @@ typedef enum {
     FSRS_EV_REMOVE  = 2,
     FSRS_EV_SUSPEND = 3,
     FSRS_EV_UPDATE  = 4,
+    FSRS_EV_UNDO   = 5
 } fsrs_ev_type;
 
 /* FsrsEvent layout (64 bytes) */
@@ -63,6 +64,7 @@ FsrsEvent *fsrs_sync_record_add(FsrsSync *s, const fsrs_card *card, uint64_t now
 FsrsEvent *fsrs_sync_record_answer(FsrsSync *s, const fsrs_card *card, fsrs_rating rating, uint64_t now);
 FsrsEvent *fsrs_sync_record_remove(FsrsSync *s, uint32_t card_id, uint64_t now);
 FsrsEvent *fsrs_sync_record_suspend(FsrsSync *s, const fsrs_card *card, uint64_t now);
+FsrsEvent *fsrs_sync_record_undo(FsrsSync *s, uint32_t card_id, uint64_t now);
 
 /* Merge & rebuild */
 void fsrs_sync_merge(FsrsSync *s, const FsrsEvent *remote, uint32_t remote_count);

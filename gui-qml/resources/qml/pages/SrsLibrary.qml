@@ -94,7 +94,7 @@ Page {
 
                     word:    model.word
                     meaning: model.meaning
-                    state:   model.state
+                    cardState:   model.state
                     due:     model.due
                     entryId: model.entryId
 

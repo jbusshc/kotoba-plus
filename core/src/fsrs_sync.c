@@ -111,6 +111,22 @@ FsrsEvent *fsrs_sync_record_suspend(FsrsSync *s, const fsrs_card *card, uint64_t
     return ev;
 }
 
+FsrsEvent *fsrs_sync_record_undo(FsrsSync *s, uint32_t card_id, uint64_t now)
+{
+    /* 1. Marcar el último FSRS_EV_REVIEW de esta carta como cancelado */
+    for (int i = (int)s->event_count - 1; i >= 0; i--) {
+        FsrsEvent *ev = &s->events[i];
+        if (ev->card_id == card_id && ev->type == FSRS_EV_REVIEW) {
+            ev->type = FSRS_EV_UNDO;   /* neutralizar en memoria */
+            break;
+        }
+    }
+
+    /* 2. Escribir el evento UNDO al log para sobrevivir un crash */
+    FsrsEvent *ev = _new_event(s, card_id, FSRS_EV_UNDO, now);
+    return ev;   /* caller hace fsrs_sync_log_append */
+}
+
 /* merge remote events into s->events (dedup by device_id+seq) */
 void fsrs_sync_merge(FsrsSync *s, const FsrsEvent *remote, uint32_t remote_count) {
     for (uint32_t i = 0; i < remote_count; i++) {
@@ -131,40 +147,65 @@ void fsrs_sync_merge(FsrsSync *s, const FsrsEvent *remote, uint32_t remote_count
 }
 
 /* rebuild: LWW per card -> project state into deck */
-void fsrs_sync_rebuild(FsrsSync *s, fsrs_deck *deck, uint64_t now) {
+void fsrs_sync_rebuild(FsrsSync *s, fsrs_deck *deck, uint64_t now)
+{
     if (!s->event_count) {
         fsrs_rebuild_queues(deck, now);
         return;
     }
 
-    qsort(s->events, s->event_count, sizeof(FsrsEvent), _ev_cmp);
+    /* --- Cancelar REVIEWs anulados por sus UNDOs ------------------------
+     * Por cada FSRS_EV_UNDO, buscar hacia atrás el último FSRS_EV_REVIEW
+     * de la misma carta y marcarlo también como UNDO para que el LWW
+     * winner loop lo ignore. Trabajamos sobre una copia para no mutar
+     * el array original antes del qsort. */
+    FsrsEvent *evs = malloc(s->event_count * sizeof(FsrsEvent));
+    if (!evs) return;
+    memcpy(evs, s->events, s->event_count * sizeof(FsrsEvent));
 
-    /* collect unique card ids */
+    for (int i = (int)s->event_count - 1; i >= 0; i--) {
+        if (evs[i].type != FSRS_EV_UNDO) continue;
+        /* buscar el REVIEW más reciente anterior a este UNDO */
+        for (int j = i - 1; j >= 0; j--) {
+            if (evs[j].card_id == evs[i].card_id &&
+                evs[j].type    == FSRS_EV_REVIEW) {
+                evs[j].type = FSRS_EV_UNDO;   /* neutralizar */
+                break;
+            }
+        }
+    }
+
+    qsort(evs, s->event_count, sizeof(FsrsEvent), _ev_cmp);
+
+    /* --- Unique card ids ----------------------------------------------- */
     uint32_t *ids = NULL;
-    uint32_t id_count = 0;
-    uint32_t id_cap = 0;
+    uint32_t id_count = 0, id_cap = 0;
 
     for (uint32_t i = 0; i < s->event_count; ++i) {
-        uint32_t cid = s->events[i].card_id;
+        if (evs[i].type == FSRS_EV_UNDO) continue;   /* ignorar */
+        uint32_t cid = evs[i].card_id;
         bool found = false;
-        for (uint32_t j = 0; j < id_count; j++) if (ids[j] == cid) { found = true; break; }
+        for (uint32_t j = 0; j < id_count; j++)
+            if (ids[j] == cid) { found = true; break; }
         if (!found) {
             if (id_count == id_cap) {
                 id_cap = id_cap ? id_cap * 2 : 32;
                 uint32_t *nb = realloc(ids, id_cap * sizeof(uint32_t));
-                if (!nb) { free(ids); return; }
+                if (!nb) { free(ids); free(evs); return; }
                 ids = nb;
             }
             ids[id_count++] = cid;
         }
     }
 
+    /* --- LWW winner por carta ------------------------------------------ */
     for (uint32_t ci = 0; ci < id_count; ++ci) {
         uint32_t cid = ids[ci];
         const FsrsEvent *winner = NULL;
         for (uint32_t i = 0; i < s->event_count; ++i) {
-            const FsrsEvent *ev = &s->events[i];
-            if (ev->card_id != cid) continue;
+            const FsrsEvent *ev = &evs[i];
+            if (ev->card_id != cid)          continue;
+            if (ev->type    == FSRS_EV_UNDO) continue;   /* ignorar */
             if (!winner || _lww_wins(ev, winner)) winner = ev;
         }
         if (!winner) continue;
@@ -182,23 +223,22 @@ void fsrs_sync_rebuild(FsrsSync *s, fsrs_deck *deck, uint64_t now) {
         fsrs_card *card = fsrs_get_card(deck, cid);
         if (!card) continue;
 
-        /* apply snapshot fields (note: card_due is unix timestamp) */
-        card->state = winner->card_state;
-        card->step = winner->card_step;
-        card->flags = winner->card_flags;
-        card->due_ts = winner->card_due;
-        card->due_day = (uint32_t)fsrs_current_day(deck, card->due_ts);
+        card->state       = winner->card_state;
+        card->step        = winner->card_step;
+        card->flags       = winner->card_flags;
+        card->due_ts      = winner->card_due;
+        card->due_day     = (uint32_t)fsrs_current_day(deck, card->due_ts);
         card->last_review = winner->card_last_review;
-        card->stability = winner->card_stability;
-        card->difficulty = winner->card_difficulty;
-        card->reps = winner->card_reps;
-        card->lapses = winner->card_lapses;
+        card->stability   = winner->card_stability;
+        card->difficulty  = winner->card_difficulty;
+        card->reps        = winner->card_reps;
+        card->lapses      = winner->card_lapses;
     }
 
     free(ids);
+    free(evs);
     fsrs_rebuild_queues(deck, now);
 }
-
 /* delta helpers */
 uint32_t fsrs_sync_events_since(const FsrsSync *s, uint64_t since_seq, FsrsEvent *out, uint32_t max) {
     uint32_t n = 0;

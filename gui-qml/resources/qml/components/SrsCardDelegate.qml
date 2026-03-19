@@ -7,7 +7,7 @@ Rectangle {
 
     property string word
     property string meaning
-    property string state
+    property string cardState
     property string due
     property int entryId
 
@@ -28,28 +28,26 @@ Rectangle {
         Label {
             text: word
             font.bold: true
-            Layout.preferredWidth: 160
+            Layout.fillWidth: true
+            Layout.preferredWidth: 1
             elide: Label.ElideRight
-            color: Theme.textColor
         }
 
         Label {
             text: meaning
             Layout.fillWidth: true
+            Layout.preferredWidth: 2
             elide: Label.ElideRight
-            color: Theme.hintColor
         }
 
         Label {
-            text: state
-            Layout.preferredWidth: 90
-            color: Theme.hintColor
+            text: cardState
+            Layout.preferredWidth: 80
         }
 
         Label {
             text: due
-            Layout.preferredWidth: 100
-            color: Theme.hintColor
+            Layout.preferredWidth: 90
         }
 
         Button {

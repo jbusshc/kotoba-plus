@@ -281,20 +281,15 @@ fsrs_card* SrsService::nextCard()
     return card;
 }
 
- 
 bool SrsService::undoLastAnswer()
 {
     if (!m_deck || !m_undoStack.has_value()) return false;
 
     const UndoEntry &undo = *m_undoStack;
-
-    fsrs_card *card = getCard(undo.entryId);
+    fsrs_card *card = fsrs_get_card(m_deck, undo.entryId);
     if (!card) return false;
 
-    /* Restaurar el estado completo de la carta.
-     * Importante: heap_pos_due / heap_pos_learn son índices internos que
-     * pueden haber cambiado tras el rebuild. Los ponemos a -1 y dejamos
-     * que rebuild_queues los recalcule desde cero. */
+    /* Restaurar estado de la carta en RAM */
     *card = undo.card;
     card->heap_pos_due   = -1;
     card->heap_pos_learn = -1;
@@ -305,19 +300,17 @@ bool SrsService::undoLastAnswer()
     m_session.learn_done  = undo.learn_done;
     m_session.review_done = undo.review_done;
 
-    /* Reconstruir heaps con el estado restaurado */
+    /* Registrar UNDO en sync + log — esto neutraliza el REVIEW anterior */
+    FsrsEvent *ev = fsrs_sync_record_undo(&m_sync, undo.entryId, fsrs_now());
+    if (ev) {
+        std::string log = log_path_for(effectivePath());
+        (void)fsrs_sync_log_append(log.c_str(), ev);
+    }
+
     fsrs_rebuild_queues(m_deck, fsrs_now());
-
-    /* Limpiar el stack — solo un nivel */
     m_undoStack.reset();
-
-    /* Nota: NO escribimos al log de sync. El evento de respuesta ya fue
-     * appendeado, pero como esto solo vive en memoria es aceptable.
-     * Al compactar/guardar, el estado real del deck (ya restaurado) manda. */
-
     return true;
 }
- 
 
 void SrsService::answer(uint32_t entryId, fsrs_rating rating)
 {
