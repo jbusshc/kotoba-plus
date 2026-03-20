@@ -41,22 +41,9 @@ void SrsLibraryViewModel::loadAllCards()
         item.difficulty = card->difficulty;
         item.lastReview = card->last_review;
 
-        /*
-         * totalReviews: reps cuenta solo revisiones graduadas (estado Review).
-         * Para tarjetas en Learning/Relearning, step indica cuántos pasos se
-         * han completado en la ronda actual. Sumamos ambos para obtener el
-         * total de interacciones reales con la tarjeta.
-         *
-         * Resultado esperado:
-         *   - New (nunca vista)          → 0
-         *   - Learning, step=1           → 0 + 1 = 1
-         *   - Review, reps=3             → 3 + 0 = 3
-         *   - Relearning tras 2 reviews  → 2 + step
-         */
-        uint32_t stepContrib = 0;
-        if (card->state == FSRS_STATE_LEARNING || card->state == FSRS_STATE_RELEARNING)
-            stepContrib = card->step;
-        item.totalReviews = card->reps + stepContrib;
+        /* total_answers se incrementa en cada fsrs_answer() sin importar
+         * el estado ni el rating — es el contador canónico de interacciones. */
+        item.totalReviews = card->total_answers;
 
         switch (card->state) {
             case FSRS_STATE_NEW:        item.state = QStringLiteral("New");        break;

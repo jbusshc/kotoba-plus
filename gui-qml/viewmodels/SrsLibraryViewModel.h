@@ -23,7 +23,7 @@ struct SrsCardItem {
     uint16_t lapses  = 0;
 
     // ── nuevos campos ────────────────────────────────────────────────────────
-    uint32_t totalReviews = 0;   // reps + step (pasos completados en learning/relearning)
+    uint32_t totalReviews = 0;   // card->total_answers: toda llamada a fsrs_answer()
     float    stability    = 0.f;
     float    difficulty   = 0.f;
     uint64_t lastReview   = 0;   // unix seconds, 0 = never

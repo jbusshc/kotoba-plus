@@ -92,6 +92,7 @@ typedef struct __attribute__((packed)) {
 
     uint16_t reps;
     uint16_t lapses;
+    uint32_t total_answers;   /* every fsrs_answer() call, all states */
 
     int32_t heap_pos_due;   /* position in due_heap (or -1) */
     int32_t heap_pos_learn; /* position in learn_heap (or -1) */

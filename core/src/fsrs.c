@@ -492,6 +492,7 @@ fsrs_card* fsrs_add_card(fsrs_deck *d, uint32_t id, uint64_t now) {
     c->difficulty = FSRS_MIN_DIFFICULTY;
     c->reps = 0;
     c->lapses = 0;
+    c->total_answers= 0;
     c->step = 0;
     c->flags = FSRS_FLAG_NONE;
     c->heap_pos_due = -1;
@@ -839,6 +840,7 @@ void fsrs_answer(fsrs_deck *d, fsrs_card *card, fsrs_rating rating, uint64_t now
 
     /* update last_review timestamp */
     card->last_review = now;
+    card->total_answers++;
     card->flags &= ~FSRS_FLAG_SNOOZED;
 
     /* state machine */
