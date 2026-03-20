@@ -2,13 +2,14 @@
 #include "../infrastructure/SrsService.h"
 #include "../infrastructure/SearchService.h"
 #include <QDebug>
+#include <QDateTime>
 
 extern "C" {
 #include "../../core/include/viewer.h"
 #include "../../core/include/index_search.h"
 }
 
-SrsLibraryViewModel::SrsLibraryViewModel(SrsService* service, kotoba_dict* dict,SearchService* searchService, QObject* parent)
+SrsLibraryViewModel::SrsLibraryViewModel(SrsService* service, kotoba_dict* dict, SearchService* searchService, QObject* parent)
     : QAbstractListModel(parent), m_service(service), m_dict(dict), m_searchService(searchService)
 {
     loadAllCards();
@@ -33,9 +34,29 @@ void SrsLibraryViewModel::loadAllCards()
         if (!entry) continue;
 
         SrsCardItem item;
-        item.id     = card->id;
-        item.reps   = card->reps;
-        item.lapses = card->lapses;
+        item.id         = card->id;
+        item.reps       = card->reps;
+        item.lapses     = card->lapses;
+        item.stability  = card->stability;
+        item.difficulty = card->difficulty;
+        item.lastReview = card->last_review;
+
+        /*
+         * totalReviews: reps cuenta solo revisiones graduadas (estado Review).
+         * Para tarjetas en Learning/Relearning, step indica cuántos pasos se
+         * han completado en la ronda actual. Sumamos ambos para obtener el
+         * total de interacciones reales con la tarjeta.
+         *
+         * Resultado esperado:
+         *   - New (nunca vista)          → 0
+         *   - Learning, step=1           → 0 + 1 = 1
+         *   - Review, reps=3             → 3 + 0 = 3
+         *   - Relearning tras 2 reviews  → 2 + step
+         */
+        uint32_t stepContrib = 0;
+        if (card->state == FSRS_STATE_LEARNING || card->state == FSRS_STATE_RELEARNING)
+            stepContrib = card->step;
+        item.totalReviews = card->reps + stepContrib;
 
         switch (card->state) {
             case FSRS_STATE_NEW:        item.state = QStringLiteral("New");        break;
@@ -46,7 +67,8 @@ void SrsLibraryViewModel::loadAllCards()
             default:                    item.state = QStringLiteral("Unknown");    break;
         }
 
-        static char mixed_buf[MAX_QUERY_LEN]; // buffer reutilizable para normalizaciones
+        static char mixed_buf[MAX_QUERY_LEN];
+
         /* word */
         if (entry->k_elements_count > 0) {
             const k_ele_bin* k = kotoba_k_ele(m_dict, entry, 0);
@@ -60,15 +82,12 @@ void SrsLibraryViewModel::loadAllCards()
             item.word = QStringLiteral("[unknown]");
         }
 
-
-        /* variants (kanji + readings) */
-
+        /* variants */
         for (uint32_t k = 0; k < entry->k_elements_count; ++k) {
             const k_ele_bin* ke = kotoba_k_ele(m_dict, entry, k);
             kotoba_str s = kotoba_keb(m_dict, ke);
             item.variants.append(QString::fromUtf8(s.ptr, s.len));
         }
-
         for (uint32_t r = 0; r < entry->r_elements_count; ++r) {
             const r_ele_bin* re = kotoba_r_ele(m_dict, entry, r);
             kotoba_str s = kotoba_reb(m_dict, re);
@@ -78,6 +97,7 @@ void SrsLibraryViewModel::loadAllCards()
             item.variants.append(QString::fromUtf8(s.ptr, s.len));
             item.variants.append(QString::fromUtf8(mixed_buf));
         }
+
         /* meaning */
         if (entry->senses_count > 0) {
             const sense_bin* sense = kotoba_sense(m_dict, entry, 0);
@@ -89,15 +109,6 @@ void SrsLibraryViewModel::loadAllCards()
             item.meaning = glosses.join(QStringLiteral("; "));
         }
 
-        /*
-         * BUG FIX: "due" ahora muestra la fecha de vencimiento REAL de la
-         * carta (cuánto falta hasta card->due_ts), no el intervalo que
-         * obtendría si respondiera FSRS_GOOD en este momento.
-         *
-         * predictInterval(FSRS_GOOD) era incorrecto para la librería: mostraba
-         * "¿cuánto tiempo ganaría si respondiera bien?" en vez de "¿cuándo toca
-         * repasar esta carta?".
-         */
         item.due = QString::fromStdString(m_service->dueDateText(card->id));
 
         m_allCards.append(item);
@@ -111,29 +122,20 @@ void SrsLibraryViewModel::rebuildFiltered()
     const QString s = m_search.trimmed();
     const bool hasSearch = !s.isEmpty();
 
-    m_searchService->queryNonPagination(s); // obtener conteo total para la barra de progreso
+    m_searchService->queryNonPagination(s);
 
+    const PostingRef* results      = m_searchService->searchCtx()->results_buffer;
+    const uint32_t   resultsCount  = m_searchService->searchCtx()->results_left;
 
-    const PostingRef* results = m_searchService->searchCtx()->results_buffer;
-    const uint32_t resultsCount = m_searchService->searchCtx()->results_left; // conteo total de resultados para el texto "X resultados"
-
-    // Construir un set de entryIds de los resultados para búsqueda rápida
     QSet<uint32_t> resultEntryIds;
-    for (uint32_t i = 0; i < resultsCount; ++i){
+    for (uint32_t i = 0; i < resultsCount; ++i)
         resultEntryIds.insert(results[i].p->doc_id);
-    }
 
     for (const SrsCardItem &it : m_allCards) {
-
-        bool matchSearch = true;
-        if (hasSearch) {
-            // Coincide si el entryId está en los resultados de búsqueda
-            matchSearch = resultEntryIds.contains(it.id);
-        }
-
+        bool matchSearch = !hasSearch || resultEntryIds.contains(it.id);
         bool matchFilter = true;
 
-        if (m_filter == QLatin1String("New"))
+        if      (m_filter == QLatin1String("New"))
             matchFilter = (it.state == QLatin1String("New"));
         else if (m_filter == QLatin1String("Learning"))
             matchFilter = (it.state == QLatin1String("Learning") ||
@@ -169,10 +171,8 @@ void SrsLibraryViewModel::refresh()
 
 void SrsLibraryViewModel::setSearch(const QString &text)
 {
-    // No early-return por igualdad: el deck puede haber cambiado
-    // desde la última vez que se cargaron las cartas.
     m_search = text;
-    loadAllCards();       // siempre refrescar desde el deck
+    loadAllCards();
     rebuildFiltered();
     resetToInitialPage();
 }
@@ -180,10 +180,12 @@ void SrsLibraryViewModel::setSearch(const QString &text)
 void SrsLibraryViewModel::setFilter(const QString &filter)
 {
     m_filter = filter;
-    loadAllCards();       // idem
+    loadAllCards();
     rebuildFiltered();
     resetToInitialPage();
 }
+
+/* ---- getters ---- */
 
 int SrsLibraryViewModel::getReps(int entryId) const
 {
@@ -199,11 +201,42 @@ int SrsLibraryViewModel::getLapses(int entryId) const
     return 0;
 }
 
+int SrsLibraryViewModel::getTotalReviews(int entryId) const
+{
+    for (const SrsCardItem &it : m_allCards)
+        if (static_cast<int>(it.id) == entryId) return static_cast<int>(it.totalReviews);
+    return 0;
+}
+
+float SrsLibraryViewModel::getStability(int entryId) const
+{
+    for (const SrsCardItem &it : m_allCards)
+        if (static_cast<int>(it.id) == entryId) return it.stability;
+    return 0.f;
+}
+
+float SrsLibraryViewModel::getDifficulty(int entryId) const
+{
+    for (const SrsCardItem &it : m_allCards)
+        if (static_cast<int>(it.id) == entryId) return it.difficulty;
+    return 0.f;
+}
+
 /*
- * getDue() — BUG FIX.
- * Devuelve el tiempo real hasta el vencimiento (dueDateText),
- * no el intervalo hipotético de FSRS_GOOD.
+ * getLastReview: convierte last_review (unix seconds) a texto legible.
+ * Si es 0 (nunca revisada) devuelve "Never".
  */
+QString SrsLibraryViewModel::getLastReview(int entryId) const
+{
+    for (const SrsCardItem &it : m_allCards) {
+        if (static_cast<int>(it.id) != entryId) continue;
+        if (it.lastReview == 0) return QStringLiteral("Never");
+        QDateTime dt = QDateTime::fromSecsSinceEpoch(static_cast<qint64>(it.lastReview));
+        return dt.toString(QStringLiteral("MMM d, yyyy"));
+    }
+    return QStringLiteral("Never");
+}
+
 QString SrsLibraryViewModel::getDue(int entryId) const
 {
     if (!m_service) return {};
@@ -212,9 +245,11 @@ QString SrsLibraryViewModel::getDue(int entryId) const
 
 QString SrsLibraryViewModel::getState(int entryId) const
 {
-    if( !m_service) return {};
+    if (!m_service) return {};
     return QString::fromStdString(m_service->stateText(static_cast<uint32_t>(entryId)));
 }
+
+/* ---- acciones ---- */
 
 void SrsLibraryViewModel::suspend(int entryId)
 {
@@ -223,13 +258,6 @@ void SrsLibraryViewModel::suspend(int entryId)
     refresh();
 }
 
-/*
- * reset() — BUG FIX.
- *
- * Antes manipulaba el fsrs_card* directamente sin pasar por el sistema de
- * sync, perdiendo el cambio en el siguiente load(). Ahora delega a
- * SrsService::reset() que hace remove+add con eventos de sync.
- */
 void SrsLibraryViewModel::reset(int entryId)
 {
     if (!m_service || entryId < 0) return;
@@ -310,11 +338,10 @@ void SrsLibraryViewModel::fetchMore(const QModelIndex &parent)
     endInsertRows();
 }
 
-bool SrsLibraryViewModel::variantMatch(const SrsCardItem& it, const QString& q) const
+bool SrsLibraryViewModel::variantMatch(const SrsCardItem &it, const QString &q) const
 {
-    for (const QString& v : it.variants)
+    for (const QString &v : it.variants)
         if (v.contains(q, Qt::CaseInsensitive))
             return true;
-
     return false;
 }

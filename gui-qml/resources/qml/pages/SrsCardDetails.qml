@@ -10,6 +10,29 @@ Page {
     property int entryId: -1
     property var entryData: ({})
 
+    // ── reactive stats — refreshed on entry ──────────────────────────────────
+    property string statDue:          "—"
+    property int    statReps:         0
+    property int    statLapses:       0
+    property int    statTotalReviews: 0
+    property real   statStability:    0
+    property real   statDifficulty:   0
+    property string statLastReview:   "Never"
+    property string statState:        ""
+
+    function refreshStats() {
+        if (entryId < 0 || !srsLibraryVM) return
+        srsLibraryVM.refresh()
+        statDue          = srsLibraryVM.getDue(entryId)
+        statReps         = srsLibraryVM.getReps(entryId)
+        statLapses       = srsLibraryVM.getLapses(entryId)
+        statTotalReviews = srsLibraryVM.getTotalReviews(entryId)
+        statStability    = srsLibraryVM.getStability(entryId)
+        statDifficulty   = srsLibraryVM.getDifficulty(entryId)
+        statLastReview   = srsLibraryVM.getLastReview(entryId)
+        statState        = srsLibraryVM.getState(entryId)
+    }
+
     property color textColor:    Theme.textColor
     property color hintColor:    Theme.hintColor
     property color accentColor:  Theme.accentColor
@@ -91,7 +114,7 @@ Page {
                     }
                     Text {
                         id: cardState
-                        text: srsLibraryVM.getState ? srsLibraryVM.getState(entryId) : "—"
+                        text: statState
                         color: stateColor(text)
                         font.pixelSize: 12
                         font.weight: Font.Medium
@@ -146,7 +169,7 @@ Page {
             StatCard {
                 Layout.fillWidth: true
                 label: "Due"
-                value: srsLibraryVM.getDue(entryId)
+                value: statDue
                 icon:  "⏰"
                 accent:      accentColor
                 bg:          Theme.cardBackground
@@ -155,11 +178,11 @@ Page {
                 fg:          textColor
             }
 
-            // ── Reps ──
+            // ── Total reviews (reps + learning steps) ──
             StatCard {
                 Layout.fillWidth: true
                 label: "Reviews"
-                value: srsLibraryVM.getReps(entryId).toString()
+                value: statTotalReviews.toString()
                 icon:  "🔁"
                 accent:      "#4CAF7D"
                 bg:          Theme.cardBackground
@@ -172,9 +195,48 @@ Page {
             StatCard {
                 Layout.fillWidth: true
                 label: "Lapses"
-                value: srsLibraryVM.getLapses(entryId).toString()
+                value: statLapses.toString()
                 icon:  "⚡"
-                accent:      srsLibraryVM.getLapses(entryId) > 0 ? "#FF7043" : hintColor
+                accent:      statLapses > 0 ? "#FF7043" : hintColor
+                bg:          Theme.cardBackground
+                borderColor: dividerColor
+                hint:        hintColor
+                fg:          textColor
+            }
+
+            // ── Stability ──
+            StatCard {
+                Layout.fillWidth: true
+                label: "Stability"
+                value: statState === "New" ? "—" : statStability.toFixed(1) + "d"
+                icon:  "◈"
+                accent:      "#60A5FA"
+                bg:          Theme.cardBackground
+                borderColor: dividerColor
+                hint:        hintColor
+                fg:          textColor
+            }
+
+            // ── Difficulty ──
+            StatCard {
+                Layout.fillWidth: true
+                label: "Difficulty"
+                value: statState === "New" ? "—" : statDifficulty.toFixed(2)
+                icon:  "◇"
+                accent:      statDifficulty > 7 ? "#FF7043" : statDifficulty > 4 ? "#FFB83F" : "#4CAF7D"
+                bg:          Theme.cardBackground
+                borderColor: dividerColor
+                hint:        hintColor
+                fg:          textColor
+            }
+
+            // ── Last review ──
+            StatCard {
+                Layout.fillWidth: true
+                label: "Last seen"
+                value: statLastReview
+                icon:  "◷"
+                accent:      hintColor
                 bg:          Theme.cardBackground
                 borderColor: dividerColor
                 hint:        hintColor
@@ -202,6 +264,7 @@ Page {
                 text: "Suspend"
                 onClicked: {
                     srsLibraryVM.suspend(entryId)
+                    refreshStats()
                 }
             }
 
@@ -288,6 +351,7 @@ Page {
 
         onAccepted: {
             srsLibraryVM.reset(entryId)
+            refreshStats()
         }
     }
 
@@ -312,9 +376,17 @@ Page {
         }
     }
 
+    // ── re-sync when backend emits stats update (e.g. after study session) ────
+    Connections {
+        target: srsVM
+        function onStatsChanged() { refreshStats() }
+    }
+
     // ── init ──────────────────────────────────────────────────────────────────
     Component.onCompleted: {
-        if (entryId >= 0)
+        if (entryId >= 0) {
             entryData = detailsVM.mapEntry(entryId)
+            refreshStats()
+        }
     }
 }
