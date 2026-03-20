@@ -10,7 +10,7 @@ Page {
     property int entryId: -1
     property var entryData: ({})
 
-    // ── reactive stats — refreshed on entry ──────────────────────────────────
+    // ── reactive stats ───────────────────────────────────────────────────────
     property string statDue:          "—"
     property int    statReps:         0
     property int    statLapses:       0
@@ -38,8 +38,6 @@ Page {
     property color accentColor:  Theme.accentColor
     property color dividerColor: Theme.dividerColor
 
-    // ── helpers ────────────────────────────────────────────────────────────────
-
     function stateColor(state) {
         switch (state) {
             case "New":        return "#4A9EFF"
@@ -58,64 +56,62 @@ Page {
             case "Relearning": return "↺"
             case "Review":     return "✓"
             case "Suspended":  return "⏸"
-            default:           return "?"
+            default:           return ""
         }
     }
 
-    // ── root layout ────────────────────────────────────────────────────────────
-
+    // ── root layout ──────────────────────────────────────────────────────────
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: 16
         spacing: 12
 
         // ── top bar ──────────────────────────────────────────────────────────
-        RowLayout {
+        Item {
             Layout.fillWidth: true
+            height: 36
 
             Button {
+                anchors.left: parent.left
+                anchors.verticalCenter: parent.verticalCenter
                 text: "← Back"
                 onClicked: stack.pop()
             }
 
-            Item { Layout.fillWidth: true }
-
-            // Live state badge
+            // Badge anchored to right — not in flow, so it never affects layout
             Rectangle {
-                id: stateBadge
-                height: 28
-                width: stateLabel.implicitWidth + 28
-                radius: height / 2
-                color: stateColor(srsLibraryVM.getState ? srsLibraryVM.getState(entryId) : "")
-                opacity: 0.15
-                visible: false  // used as background; actual badge below
-            }
-
-            Rectangle {
+                id: stateBadgeRect
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
                 height: 28
                 width: badgeRow.implicitWidth + 28
                 radius: height / 2
-                color: Qt.rgba(stateColorValue.r, stateColorValue.g, stateColorValue.b, 0.18)
+                color: Qt.rgba(
+                    stateColor(statState).r,
+                    stateColor(statState).g,
+                    stateColor(statState).b, 0.18)
+                border.width: 1
+                border.color: Qt.rgba(
+                    stateColor(statState).r,
+                    stateColor(statState).g,
+                    stateColor(statState).b, 0.40)
 
-                ColorAnimation on color { duration: 300 }
+                Behavior on color { ColorAnimation { duration: 200 } }
 
-                // helper to expose parsed color
-                property color stateColorValue: stateColor(cardState.text)
-
-                RowLayout {
+                Row {
                     id: badgeRow
                     anchors.centerIn: parent
-                    spacing: 4
+                    spacing: 5
 
                     Text {
-                        text: stateIcon(cardState.text)
-                        color: stateColor(cardState.text)
+                        text: stateIcon(statState)
+                        color: stateColor(statState)
                         font.pixelSize: 11
+                        visible: statState !== ""
                     }
                     Text {
-                        id: cardState
                         text: statState
-                        color: stateColor(text)
+                        color: stateColor(statState)
                         font.pixelSize: 12
                         font.weight: Font.Medium
                     }
@@ -165,7 +161,6 @@ Page {
             columnSpacing: 10
             rowSpacing: 10
 
-            // ── Due ──
             StatCard {
                 Layout.fillWidth: true
                 label: "Due"
@@ -178,7 +173,6 @@ Page {
                 fg:          textColor
             }
 
-            // ── Total reviews (reps + learning steps) ──
             StatCard {
                 Layout.fillWidth: true
                 label: "Reviews"
@@ -191,7 +185,6 @@ Page {
                 fg:          textColor
             }
 
-            // ── Lapses ──
             StatCard {
                 Layout.fillWidth: true
                 label: "Lapses"
@@ -204,7 +197,6 @@ Page {
                 fg:          textColor
             }
 
-            // ── Stability ──
             StatCard {
                 Layout.fillWidth: true
                 label: "Stability"
@@ -217,7 +209,6 @@ Page {
                 fg:          textColor
             }
 
-            // ── Difficulty ──
             StatCard {
                 Layout.fillWidth: true
                 label: "Difficulty"
@@ -230,7 +221,6 @@ Page {
                 fg:          textColor
             }
 
-            // ── Last review ──
             StatCard {
                 Layout.fillWidth: true
                 label: "Last seen"
@@ -258,7 +248,6 @@ Page {
             Layout.fillWidth: true
             spacing: 10
 
-            // Suspend / Unsuspend toggle
             Button {
                 Layout.fillWidth: true
                 text: "Suspend"
@@ -271,24 +260,20 @@ Page {
             Button {
                 Layout.fillWidth: true
                 text: "Reset"
-                onClicked: {
-                    resetDialog.open()
-                }
+                onClicked: resetDialog.open()
             }
 
             Button {
                 Layout.fillWidth: true
                 text: "Delete"
-                onClicked: {
-                    deleteDialog.open()
-                }
+                onClicked: deleteDialog.open()
             }
         }
 
         Item { Layout.fillHeight: true }
     }
 
-    // ── inline StatCard component ─────────────────────────────────────────────
+    // ── StatCard component ────────────────────────────────────────────────────
     component StatCard: Rectangle {
         property string label:       ""
         property string value:       "—"
@@ -312,7 +297,7 @@ Page {
 
             RowLayout {
                 spacing: 4
-                Text { text: icon;  font.pixelSize: 13 }
+                Text { text: icon; font.pixelSize: 13 }
                 Text {
                     text: label
                     color: hint
@@ -333,7 +318,7 @@ Page {
         }
     }
 
-    // ── confirmation dialogs ──────────────────────────────────────────────────
+    // ── dialogs ───────────────────────────────────────────────────────────────
     Dialog {
         id: resetDialog
         title: "Reset card?"
@@ -348,7 +333,6 @@ Page {
         }
 
         standardButtons: Dialog.Ok | Dialog.Cancel
-
         onAccepted: {
             srsLibraryVM.reset(entryId)
             refreshStats()
@@ -369,20 +353,17 @@ Page {
         }
 
         standardButtons: Dialog.Ok | Dialog.Cancel
-
         onAccepted: {
             srsLibraryVM.remove(entryId)
             stack.pop()
         }
     }
 
-    // ── re-sync when backend emits stats update (e.g. after study session) ────
     Connections {
         target: srsVM
         function onStatsChanged() { refreshStats() }
     }
 
-    // ── init ──────────────────────────────────────────────────────────────────
     Component.onCompleted: {
         if (entryId >= 0) {
             entryData = detailsVM.mapEntry(entryId)
