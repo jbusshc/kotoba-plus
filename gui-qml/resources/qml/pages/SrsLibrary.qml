@@ -94,6 +94,38 @@ Page {
                 anchors.margins: 14
                 spacing: 10
 
+                // Back button
+                RowLayout {
+                    width: parent.width
+
+                    Item {
+                        width: backLabel.implicitWidth + 20
+                        height: 32
+
+                        Rectangle {
+                            anchors.fill: parent
+                            radius: 6
+                            color: backMouse.containsMouse ? Qt.rgba(1,1,1,0.06) : "transparent"
+                            Behavior on color { ColorAnimation { duration: 120 } }
+                        }
+                        RowLayout {
+                            anchors.centerIn: parent
+                            spacing: 4
+                            Text { text: "‹"; font.pixelSize: 16; color: hintColor }
+                            Text { id: backLabel; text: "Back"; font.pixelSize: 12; font.weight: Font.Medium; color: hintColor }
+                        }
+                        MouseArea {
+                            id: backMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: stack.pop()
+                        }
+                    }
+
+                    Item { Layout.fillWidth: true }
+                }
+
                 // Search row
                 Rectangle {
                     width: parent.width
