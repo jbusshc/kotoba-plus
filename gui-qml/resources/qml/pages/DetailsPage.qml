@@ -67,13 +67,13 @@ Page {
                     spacing: 5
                     Text {
                         text: "‹"
-                        font.pixelSize: 18
+                        font.pixelSize: Theme.fontSizeLarge
                         color: hintColor
                     }
                     Text {
                         id: backLabel
                         text: "Back"
-                        font.pixelSize: 13
+                        font.pixelSize: Theme.fontSizeBody
                         font.weight: Font.Medium
                         color: hintColor
                     }
@@ -117,7 +117,7 @@ Page {
 
                     Text {
                         text: inSrs ? "In SRS" : "Add to SRS"
-                        font.pixelSize: 12
+                        font.pixelSize: Theme.fontSizeSmall
                         font.weight: Font.Medium
                         color: inSrs ? accentColor : hintColor
                         Behavior on color { ColorAnimation { duration: 180 } }

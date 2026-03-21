@@ -48,7 +48,7 @@ Page {
 
             Text {
                 text: value
-                font.pixelSize: 34
+                font.pixelSize: Theme.fontSizeHero
                 font.weight: Font.Bold
                 font.letterSpacing: -1
                 color: accent
@@ -56,7 +56,7 @@ Page {
 
             Text {
                 text: label.toUpperCase()
-                font.pixelSize: 12
+                font.pixelSize: Theme.fontSizeSmall
                 font.weight: Font.Medium
                 font.letterSpacing: 0.6
                 color: Qt.rgba(hintColor.r, hintColor.g, hintColor.b, 0.7)
@@ -93,7 +93,7 @@ Page {
             Text {
                 Layout.alignment: Qt.AlignHCenter
                 text: label
-                font.pixelSize: 13
+                font.pixelSize: Theme.fontSizeBody
                 font.weight: Font.DemiBold
                 color: primary ? "white" : textColor
             }
@@ -101,7 +101,7 @@ Page {
             Text {
                 Layout.alignment: Qt.AlignHCenter
                 text: sublabel
-                font.pixelSize: 10
+                font.pixelSize: Theme.fontSizeTiny
                 color: primary ? Qt.rgba(1,1,1,0.65) : hintColor
                 visible: sublabel.length > 0
             }
@@ -131,7 +131,7 @@ Page {
 
             Text {
                 text: "Study Queue"
-                font.pixelSize: 22
+                font.pixelSize: Theme.fontSizeTitle
                 font.weight: Font.Bold
                 color: textColor
             }
@@ -143,7 +143,7 @@ Page {
                     if (due === 0) return "You're all caught up for now."
                     return due + " card" + (due === 1 ? "" : "s") + " ready to review."
                 }
-                font.pixelSize: 13
+                font.pixelSize: Theme.fontSizeBody
                 color: hintColor
             }
         }

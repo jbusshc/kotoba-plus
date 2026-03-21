@@ -43,7 +43,7 @@ Page {
                 // Search icon
                 Text {
                     text: "⌕"
-                    font.pixelSize: 18
+                    font.pixelSize: Theme.fontSizeLarge
                     color: searchField.activeFocus ? accentColor : Qt.rgba(hintColor.r, hintColor.g, hintColor.b, 0.5)
                     Behavior on color { ColorAnimation { duration: 150 } }
                 }
@@ -55,7 +55,7 @@ Page {
                     text: searchVM ? searchVM.query : ""
                     color: textColor
                     placeholderTextColor: Qt.rgba(hintColor.r, hintColor.g, hintColor.b, 0.45)
-                    font.pixelSize: 14
+                    font.pixelSize: Theme.fontSizeBase
 
                     background: Rectangle { color: "transparent" }
                     leftPadding: 0
@@ -72,7 +72,7 @@ Page {
                     Text {
                         anchors.centerIn: parent
                         text: "×"
-                        font.pixelSize: 12
+                        font.pixelSize: Theme.fontSizeSmall
                         color: hintColor
                     }
 
@@ -140,7 +140,7 @@ Page {
                         Text {
                             id: wordText
                             text: headword
-                            font.pixelSize: 17
+                            font.pixelSize: Theme.fontSizeItem
                             font.weight: Font.Medium
                             color: textColor
                             wrapMode: Text.Wrap
@@ -149,7 +149,7 @@ Page {
 
                         Text {
                             text: gloss
-                            font.pixelSize: 12
+                            font.pixelSize: Theme.fontSizeSmall
                             color: Qt.rgba(hintColor.r, hintColor.g, hintColor.b, 0.8)
                             wrapMode: Text.Wrap
                             width: parent.width
@@ -160,7 +160,7 @@ Page {
 
                     Text {
                         text: "›"
-                        font.pixelSize: 16
+                        font.pixelSize: Theme.fontSizeMedium
                         color: Qt.rgba(hintColor.r, hintColor.g, hintColor.b, 0.35)
                         opacity: delegateRoot.hovered ? 1 : 0
                         Behavior on opacity { NumberAnimation { duration: 120 } }
@@ -208,13 +208,13 @@ Page {
                     Text {
                         anchors.horizontalCenter: parent.horizontalCenter
                         text: "∅"
-                        font.pixelSize: 32
+                        font.pixelSize: Theme.fontSizeBack
                         color: Qt.rgba(hintColor.r, hintColor.g, hintColor.b, 0.25)
                     }
                     Text {
                         anchors.horizontalCenter: parent.horizontalCenter
                         text: "No results found"
-                        font.pixelSize: 13
+                        font.pixelSize: Theme.fontSizeBody
                         color: Qt.rgba(hintColor.r, hintColor.g, hintColor.b, 0.4)
                     }
                 }
@@ -233,13 +233,13 @@ Page {
                     Text {
                         anchors.horizontalCenter: parent.horizontalCenter
                         text: "日"
-                        font.pixelSize: 48
+                        font.pixelSize: Theme.fontSizeGlyph
                         color: Qt.rgba(hintColor.r, hintColor.g, hintColor.b, 0.10)
                     }
                     Text {
                         anchors.horizontalCenter: parent.horizontalCenter
                         text: "Type to search"
-                        font.pixelSize: 13
+                        font.pixelSize: Theme.fontSizeBody
                         color: Qt.rgba(hintColor.r, hintColor.g, hintColor.b, 0.3)
                     }
                 }

@@ -57,14 +57,14 @@ Page {
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: label
-                font.pixelSize: 13
+                font.pixelSize: Theme.fontSizeBody
                 font.weight: Font.DemiBold
                 color: accent
             }
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: interval
-                font.pixelSize: 10
+                font.pixelSize: Theme.fontSizeTiny
                 color: Qt.rgba(accent.r, accent.g, accent.b, 0.65)
                 visible: interval.length > 0
             }
@@ -101,8 +101,8 @@ Page {
                 }
                 RowLayout {
                     anchors.centerIn: parent; spacing: 4
-                    Text { text: "‹"; font.pixelSize: 16; color: hintColor }
-                    Text { id: backLabel; text: "Back"; font.pixelSize: 12; font.weight: Font.Medium; color: hintColor }
+                    Text { text: "‹"; font.pixelSize: Theme.fontSizeMedium; color: hintColor }
+                    Text { id: backLabel; text: "Back"; font.pixelSize: Theme.fontSizeSmall; font.weight: Font.Medium; color: hintColor }
                 }
                 MouseArea {
                     id: backMouse; anchors.fill: parent
@@ -124,8 +124,8 @@ Page {
                 }
                 RowLayout {
                     anchors.centerIn: parent; spacing: 4
-                    Text { text: "↩"; font.pixelSize: 12; color: hintColor }
-                    Text { id: undoLabel; text: "Undo"; font.pixelSize: 12; font.weight: Font.Medium; color: hintColor }
+                    Text { text: "↩"; font.pixelSize: Theme.fontSizeSmall; color: hintColor }
+                    Text { id: undoLabel; text: "Undo"; font.pixelSize: Theme.fontSizeSmall; font.weight: Font.Medium; color: hintColor }
                 }
                 MouseArea {
                     id: undoMouse; anchors.fill: parent
@@ -158,7 +158,7 @@ Page {
                 Text {
                     anchors.centerIn: parent
                     text: "Show Answer"
-                    font.pixelSize: 14; font.weight: Font.Medium
+                    font.pixelSize: Theme.fontSizeBase; font.weight: Font.Medium
                     color: accentColor
                 }
                 MouseArea {
@@ -231,7 +231,7 @@ Page {
                     Text {
                         anchors.horizontalCenter: parent.horizontalCenter
                         text: srsVM ? srsVM.currentWord : ""
-                        font.pixelSize: 42; font.weight: Font.Bold
+                        font.pixelSize: Theme.fontSizeCard; font.weight: Font.Bold
                         color: textColor
                         horizontalAlignment: Text.AlignHCenter
                         wrapMode: Text.Wrap; width: parent.width
@@ -249,7 +249,7 @@ Page {
                         opacity: page.answerShown ? 1.0 : 0.0
                         visible: opacity > 0
                         text: srsVM ? srsVM.currentMeaning : ""
-                        font.pixelSize: 16; color: hintColor
+                        font.pixelSize: Theme.fontSizeMedium; color: hintColor
                         horizontalAlignment: Text.AlignHCenter
                         wrapMode: Text.WordWrap; width: parent.width
                         Behavior on opacity { NumberAnimation { duration: 180 } }

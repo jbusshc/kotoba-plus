@@ -8,8 +8,7 @@ extern "C" {
 #include <stdint.h>
 #endif
 
-
-
+#include <string.h>
 #include "kotoba.h"
 
 /* ============================================================================
@@ -51,6 +50,34 @@ enum kotoba_lang
     KOTOBA_LANG_UNK,
     KOTOBA_LANG_COUNT
 };
+
+static inline const char* lang_to_str(uint8_t lang)
+{
+    static const char* langs[] = {
+        "en", "fr", "de", "ru", "es", "pt", "it", "nl", "hu", "sv",
+        "cs", "pl", "ro", "he", "ar", "tr", "th", "vi", "id", "ms",
+        "ko", "zh", "zh-cn", "zh-tw", "fa", "eo", "slv", "unk"
+    };
+    
+    if (lang >= KOTOBA_LANG_COUNT)
+        return "unk";
+    
+    return langs[lang];
+}
+
+static inline int8_t str_to_lang(const char* str)
+{
+    if (!str)
+        return -1;
+    
+    for (int i = 0; i < KOTOBA_LANG_COUNT; ++i)
+    {
+        if (strcmp(str, lang_to_str(i)) == 0)
+            return (int8_t)i;
+    }
+    
+    return -1;
+}
 
 /* ============================================================================
  *  Headers de archivo

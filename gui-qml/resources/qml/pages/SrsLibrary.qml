@@ -57,7 +57,7 @@ Page {
             id: pillLabel
             anchors.centerIn: parent
             text: label
-            font.pixelSize: 11
+            font.pixelSize: Theme.fontSizeXSmall
             font.weight: Font.Medium
             color: active ? pillColor(label) : Qt.rgba(hintColor.r, hintColor.g, hintColor.b, 0.7)
             Behavior on color { ColorAnimation { duration: 130 } }
@@ -111,8 +111,8 @@ Page {
                         RowLayout {
                             anchors.centerIn: parent
                             spacing: 4
-                            Text { text: "‹"; font.pixelSize: 16; color: hintColor }
-                            Text { id: backLabel; text: "Back"; font.pixelSize: 12; font.weight: Font.Medium; color: hintColor }
+                            Text { text: "‹"; font.pixelSize: Theme.fontSizeMedium; color: hintColor }
+                            Text { id: backLabel; text: "Back"; font.pixelSize: Theme.fontSizeSmall; font.weight: Font.Medium; color: hintColor }
                         }
                         MouseArea {
                             id: backMouse
@@ -147,7 +147,7 @@ Page {
 
                         Text {
                             text: "⌕"
-                            font.pixelSize: 15
+                            font.pixelSize: Theme.fontSizeIcon
                             color: Qt.rgba(hintColor.r, hintColor.g, hintColor.b, 0.45)
                         }
 
@@ -157,7 +157,7 @@ Page {
                             placeholderText: "Search word or meaning…"
                             color: textColor
                             placeholderTextColor: Qt.rgba(hintColor.r, hintColor.g, hintColor.b, 0.4)
-                            font.pixelSize: 13
+                            font.pixelSize: Theme.fontSizeBody
                             background: Rectangle { color: "transparent" }
                             leftPadding: 0
                             onTextChanged: if (srsLibraryVM) srsLibraryVM.setSearch(text)
@@ -171,7 +171,7 @@ Page {
                             Text {
                                 anchors.centerIn: parent
                                 text: "×"
-                                font.pixelSize: 11
+                                font.pixelSize: Theme.fontSizeXSmall
                                 color: hintColor
                             }
                             MouseArea {
@@ -222,7 +222,7 @@ Page {
                 anchors.rightMargin: 16
 
                 Text {
-                    font.pixelSize: 11
+                    font.pixelSize: Theme.fontSizeXSmall
                     font.weight: Font.Medium
                     color: Qt.rgba(hintColor.r, hintColor.g, hintColor.b, 0.55)
                     font.letterSpacing: 0.5
@@ -291,13 +291,13 @@ Page {
                 Text {
                     anchors.horizontalCenter: parent.horizontalCenter
                     text: searchField.text.length > 0 ? "∅" : "○"
-                    font.pixelSize: 36
+                    font.pixelSize: Theme.fontSizeDisplay
                     color: Qt.rgba(hintColor.r, hintColor.g, hintColor.b, 0.15)
                 }
                 Text {
                     anchors.horizontalCenter: parent.horizontalCenter
                     text: searchField.text.length > 0 ? "No cards found" : "No cards in deck"
-                    font.pixelSize: 13
+                    font.pixelSize: Theme.fontSizeBody
                     color: Qt.rgba(hintColor.r, hintColor.g, hintColor.b, 0.35)
                 }
             }

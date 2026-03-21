@@ -7,11 +7,11 @@
 SearchService::SearchService(kotoba_dict *dict, Configuration* config)
     : m_dict(dict), m_config(config)
 {
-    init_search_context(&m_ctx, config->languages, m_dict, config->searchPageSize);
+    init_search_context(&m_ctx, config->languages, m_dict, config->pageSize);
     // debug print language array
     qDebug() << "SearchService initialized with languages:";
-    for (int i = 0; i < 29; ++i) {
-        if (config->languages[i] == 0) break;
+    for (int i = 0; i < KOTOBA_LANG_COUNT; ++i) {
+        if (config->languages[i] == 0) continue; // skip false entries;
         qDebug() << i << " -" << config->languages[i];
     }
     warm_up(&m_ctx);
