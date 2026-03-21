@@ -1,4 +1,5 @@
 #include "SrsService.h"
+#include "SrsHistoryLog.h"
 #include "../app/Configuration.h"
 
 #include <string>
@@ -30,8 +31,6 @@ SrsService::SrsService(uint32_t dictSize, Configuration *config)
     uint64_t device_id = m_config ? m_config->deviceId : 0;
     fsrs_sync_init(&m_sync, device_id);
 
-    /* Sesión por defecto arranca con el timestamp actual para que
-       fsrs_current_day() devuelva el día lógico correcto desde el inicio. */
     fsrs_session_start(&m_session, fsrs_now(), 0);
 }
 
@@ -50,15 +49,6 @@ fsrs_card* SrsService::getCard(uint32_t entryId) const
     return fsrs_get_card(m_deck, entryId);
 }
 
-/*
- * effectivePath() — fuente única de verdad.
- *
- * Prioridad: m_profilePath (establecido en load()) >
- *            m_config->srsPath (ruta por defecto de configuración) >
- *            "" (sin ruta).
- *
- * Antes, cada método copiaba esta lógica de forma inconsistente.
- */
 std::string SrsService::effectivePath() const
 {
     if (!m_profilePath.empty())
@@ -101,10 +91,8 @@ bool SrsService::load(const char *path)
     fsrs_sync_rebuild(&m_sync, m_deck, fsrs_now());
     fsrs_rebuild_queues(m_deck, fsrs_now());
 
-    /* BUG FIX: reiniciar la sesión con now para que el día lógico sea el
-       correcto desde el primer nextCard(). Antes se usaba el session_start
-       del ctor (que podría ser de un run anterior si el objeto se reutilizaba),
-       lo que hacía que la comparación de días en nextCard() fallara. */
+    m_history = std::make_unique<SrsHistoryLog>(m_profilePath);
+
     uint32_t prev_limit = m_session.session_limit;
     fsrs_session_start(&m_session, fsrs_now(), prev_limit);
 
@@ -137,8 +125,10 @@ bool SrsService::add(uint32_t entryId)
     fsrs_card *card = fsrs_add_card(m_deck, entryId, now);
     if (!card) return false;
 
-    FsrsEvent *ev = fsrs_sync_record_add(&m_sync, card, now);
+    if (m_history)
+        m_history->recordAdd(card, now);
 
+    FsrsEvent *ev = fsrs_sync_record_add(&m_sync, card, now);
     std::string log = log_path_for(effectivePath());
     (void)fsrs_sync_log_append(log.c_str(), ev);
 
@@ -151,10 +141,17 @@ bool SrsService::remove(uint32_t entryId)
     if (!m_deck) return false;
 
     uint64_t now = fsrs_now();
+
+    const fsrs_card *before = fsrs_get_card(m_deck, entryId);
+    fsrs_card before_copy = before ? *before : fsrs_card{};
+    const bool had_card = (before != nullptr);
+
     if (!fsrs_remove_card(m_deck, entryId)) return false;
 
-    FsrsEvent *ev = fsrs_sync_record_remove(&m_sync, entryId, now);
+    if (m_history && had_card)
+        m_history->recordRemove(entryId, &before_copy, now);
 
+    FsrsEvent *ev = fsrs_sync_record_remove(&m_sync, entryId, now);
     std::string log = log_path_for(effectivePath());
     (void)fsrs_sync_log_append(log.c_str(), ev);
 
@@ -162,15 +159,6 @@ bool SrsService::remove(uint32_t entryId)
     return true;
 }
 
-/*
- * reset() — BUG FIX respecto a la versión anterior en SrsLibraryViewModel.
- *
- * Antes, reset() manipulaba el card directamente y no registraba ningún
- * evento de sync ni compactaba. Esto significa que al recargar el perfil,
- * el reset se perdía.
- *
- * Ahora: remove + re-add = evento REMOVE + evento ADD en el log.
- */
 bool SrsService::reset(uint32_t entryId)
 {
     if (!m_deck) return false;
@@ -203,18 +191,35 @@ bool SrsService::reset(uint32_t entryId)
 bool SrsService::suspend(uint32_t entryId)
 {
     if (!m_deck) return false;
+
     uint64_t now = fsrs_now();
+
+    const fsrs_card *sc = fsrs_get_card(m_deck, entryId);
+    fsrs_card before = sc ? *sc : fsrs_card{};
+    const bool had_sc = (sc != nullptr);
+
     fsrs_suspend(m_deck, entryId);
     fsrs_rebuild_queues(m_deck, now);
+
+    if (m_history && had_sc)
+        m_history->recordSuspend(&before, now);
+
     return compactSync(now);
 }
 
 bool SrsService::unsuspend(uint32_t entryId)
 {
     if (!m_deck) return false;
+
     uint64_t now = fsrs_now();
+
     fsrs_unsuspend(m_deck, entryId, now);
     fsrs_rebuild_queues(m_deck, now);
+
+    const fsrs_card *after = fsrs_get_card(m_deck, entryId);
+    if (m_history)
+        m_history->recordUnsuspend(after, now);
+
     return compactSync(now);
 }
 
@@ -243,25 +248,12 @@ void SrsService::startSession(uint32_t limit)
     fsrs_session_start(&m_session, fsrs_now(), limit);
 }
 
-/*
- * nextCard() — BUG FIX principal.
- *
- * 1. card_is_due usaba `now / FSRS_SEC_PER_DAY` (día UTC crudo) en vez de
- *    `fsrs_current_day(m_deck, now)` que respeta el day_offset configurado.
- *    Si el offset es != 0 (p.ej. 4 h → día empieza a las 04:00) la comparación
- *    era incorrecta durante las horas de transición.
- *
- * 2. La comparación de días para el reset de sesión es ahora correcta porque
- *    load() ya arranca la sesión con now, así que session_start siempre
- *    refleja el comienzo real de la sesión del día actual.
- */
 fsrs_card* SrsService::nextCard()
 {
     if (!m_deck) return nullptr;
 
     uint64_t now = fsrs_now();
 
-    /* Reiniciar sesión si el día lógico cambió */
     uint64_t session_day = fsrs_current_day(m_deck, m_session.session_start);
     uint64_t current_day = fsrs_current_day(m_deck, now);
     if (session_day != current_day) {
@@ -272,11 +264,10 @@ fsrs_card* SrsService::nextCard()
     fsrs_card *card = fsrs_next_for_session(m_deck, &m_session, now);
     if (!card) return nullptr;
 
-    /* BUG FIX: usar fsrs_current_day en vez de división cruda */
     if (card->state == FSRS_STATE_SUSPENDED) return nullptr;
 
     uint64_t card_day = (uint64_t)card->due_day;
-    if (card_day > current_day) return nullptr;   // no está debida aún hoy
+    if (card_day > current_day) return nullptr;
 
     return card;
 }
@@ -289,18 +280,15 @@ bool SrsService::undoLastAnswer()
     fsrs_card *card = fsrs_get_card(m_deck, undo.entryId);
     if (!card) return false;
 
-    /* Restaurar estado de la carta en RAM */
     *card = undo.card;
     card->heap_pos_due   = -1;
     card->heap_pos_learn = -1;
 
-    /* Restaurar contadores de sesión */
     m_session.cards_done  = undo.cards_done;
     m_session.new_done    = undo.new_done;
     m_session.learn_done  = undo.learn_done;
     m_session.review_done = undo.review_done;
 
-    /* Registrar UNDO en sync + log — esto neutraliza el REVIEW anterior */
     FsrsEvent *ev = fsrs_sync_record_undo(&m_sync, undo.entryId, fsrs_now());
     if (ev) {
         std::string log = log_path_for(effectivePath());
@@ -308,6 +296,12 @@ bool SrsService::undoLastAnswer()
     }
 
     fsrs_rebuild_queues(m_deck, fsrs_now());
+
+    if (m_history)
+        m_history->recordUndo(undo.entryId,
+                              fsrs_get_card(m_deck, undo.entryId),
+                              fsrs_now());
+
     m_undoStack.reset();
     return true;
 }
@@ -321,11 +315,11 @@ void SrsService::answer(uint32_t entryId, fsrs_rating rating)
     if (!card) return;
 
     m_undoStack = UndoEntry{
-        .card = *card,   // copia completa del estado actual de la carta
-        .entryId = entryId,
-        .cards_done = m_session.cards_done,
-        .new_done = m_session.new_done,
-        .learn_done = m_session.learn_done,
+        .card        = *card,
+        .entryId     = entryId,
+        .cards_done  = m_session.cards_done,
+        .new_done    = m_session.new_done,
+        .learn_done  = m_session.learn_done,
         .review_done = m_session.review_done
     };
 
@@ -333,7 +327,6 @@ void SrsService::answer(uint32_t entryId, fsrs_rating rating)
 
     fsrs_answer(m_deck, card, rating, now);
 
-    /* Actualizar contadores de sesión */
     m_session.cards_done += 1;
     if (prev_state == FSRS_STATE_NEW)
         m_session.new_done += 1;
@@ -343,6 +336,9 @@ void SrsService::answer(uint32_t entryId, fsrs_rating rating)
         m_session.review_done += 1;
 
     fsrs_rebuild_queues(m_deck, now);
+
+    if (m_history)
+        m_history->recordAnswer(fsrs_get_card(m_deck, entryId), rating, now);
 
     FsrsEvent *ev = fsrs_sync_record_answer(&m_sync, card, rating, now);
     std::string log = log_path_for(effectivePath());
@@ -394,13 +390,6 @@ uint32_t SrsService::lapsedCount() const
     return st.cards_with_lapses;
 }
 
-/*
- * reviewTodayCount() — BUG FIX.
- *
- * Antes se usaba st.due_today (cartas *pendientes* hoy), no las ya *respondidas*.
- * Ahora devolvemos m_session.cards_done, que es el conteo real de respuestas
- * dadas en la sesión del día actual (se resetea con la sesión al cambiar de día).
- */
 uint32_t SrsService::reviewTodayCount() const
 {
     return m_session.cards_done;
@@ -435,13 +424,6 @@ std::string SrsService::predictInterval(uint32_t entryId, fsrs_rating rating)
     return std::string(buf);
 }
 
-/*
- * dueDateText() — NUEVO.
- *
- * Devuelve el tiempo que falta hasta la fecha de vencimiento *real* de la
- * carta (card->due_ts), en vez de predecir el intervalo de una respuesta
- * hipotética. Esto es lo que debe mostrarse en la columna "Due" de la librería.
- */
 std::string SrsService::dueDateText(uint32_t entryId) const
 {
     fsrs_card *card = getCard(entryId);
@@ -449,14 +431,11 @@ std::string SrsService::dueDateText(uint32_t entryId) const
 
     uint64_t now = fsrs_now();
 
-    /* Cartas nuevas: mostrar "New" */
-    if (card->state == FSRS_STATE_NEW) return "New";
-
-    /* Cartas suspendidas */
+    if (card->state == FSRS_STATE_NEW)       return "New";
     if (card->state == FSRS_STATE_SUSPENDED) return "Suspended";
 
     uint64_t due = card->due_ts;
-    if (due <= now) return "Now";   // ya debida
+    if (due <= now) return "Now";
 
     uint64_t delta = due - now;
     char buf[64] = {0};

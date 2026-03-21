@@ -308,7 +308,6 @@ static int search_jp_query(
         PostingRef *pr = &results_buffer[base + i];
         int len = pr->p->len; // use indexed length for better pruning
         int type = pr->p->meta2; // TYPE_KANJI or TYPE_READING
-        // ✅ CORRECTO: usamos la longitud de ESTA query
         if (q.len > len)
         {
             continue;
@@ -650,7 +649,6 @@ void query_next_page(struct SearchContext *ctx)
 
     // ---------- SINGLE PASS ----------
     uint32_t i = 0;
-    LOG_DEBUG("[CORE][INDEX_SEARCH][QUERY_NEXT_PAGE] Starting single pass for top-k selection. Total results to consider: %d\n", ctx->results_left);
     while (i < ctx->results_left)
     {
         uint8_t current_score = score[i];

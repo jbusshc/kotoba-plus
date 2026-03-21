@@ -3,6 +3,8 @@
 #include <string>
 #include <cstdint>
 #include <vector>
+#include "SrsHistoryLog.h"
+#include <memory>
 
 extern "C" {
 #include <fsrs.h>
@@ -93,4 +95,6 @@ private:
     uint32_t     m_dictSize = 0;
     Configuration *m_config = nullptr;
     std::string  m_profilePath;
+
+    std::unique_ptr<SrsHistoryLog> m_history;
 };
