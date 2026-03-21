@@ -361,9 +361,21 @@ uint32_t SrsService::totalCount() const
 uint32_t SrsService::dueCount() const
 {
     if (!m_deck) return 0;
-    fsrs_stats st;
-    fsrs_compute_stats(m_deck, fsrs_now(), &st);
-    return st.due_now;
+    /*
+     * due_now from fsrs_compute_stats includes ALL cards whose due_day <= today,
+     * including suspended ones. We compute manually to exclude them.
+     */
+    uint64_t now = fsrs_now();
+    uint64_t today = fsrs_current_day(m_deck, now);
+    uint32_t count = 0;
+    uint32_t total = fsrs_deck_count(m_deck);
+    for (uint32_t i = 0; i < total; ++i) {
+        const fsrs_card *c = fsrs_deck_card(m_deck, i);
+        if (!c) continue;
+        if (c->state == FSRS_STATE_SUSPENDED) continue;
+        if ((uint64_t)c->due_day <= today) ++count;
+    }
+    return count;
 }
 
 uint32_t SrsService::learningCount() const

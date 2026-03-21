@@ -501,7 +501,7 @@ fsrs_card* fsrs_add_card(fsrs_deck *d, uint32_t id, uint64_t now) {
     c->due_ts = now;
     c->due_day = (uint32_t)fsrs_current_day(d, now);
     c->last_review = 0;
-
+    c->prev_state = 0;
     _bitmap_set(d, id, true);
     d->id_to_index[id] = idx;
 
@@ -561,11 +561,14 @@ fsrs_card* fsrs_get_card(fsrs_deck *d, uint32_t id) {
     return &d->cards[idx];
 }
 
+
 void fsrs_suspend(fsrs_deck *d, uint32_t id) {
     fsrs_card *c = fsrs_get_card(d, id);
     if (!c || c->state == FSRS_STATE_SUSPENDED) return;
     uint32_t idx = d->id_to_index[id];
-
+ 
+    c->prev_state = c->state;  
+ 
     switch (c->state) {
         case FSRS_STATE_NEW:
             for (uint32_t i = 0; i < d->new_queue_size; i++) {
@@ -584,27 +587,51 @@ void fsrs_suspend(fsrs_deck *d, uint32_t id) {
             break;
         default: break;
     }
-
+ 
     c->state = FSRS_STATE_SUSPENDED;
 }
 
+/* ---- Reemplazar fsrs_unsuspend() en fsrs.c ---- */
+ 
 void fsrs_unsuspend(fsrs_deck *d, uint32_t id, uint64_t now) {
     fsrs_card *c = fsrs_get_card(d, id);
     if (!c || c->state != FSRS_STATE_SUSPENDED) return;
     uint32_t idx = d->id_to_index[id];
     uint32_t today = (uint32_t)fsrs_current_day(d, now);
-
-    if (c->reps == 0) {
-        c->state = FSRS_STATE_NEW;
-        c->due_ts = now;
-        c->due_day = today;
-        _newq_push(d, idx);
-    } else {
-        c->state = FSRS_STATE_REVIEW;
-        c->due_day = today;
-        c->due_ts = fsrs_day_start(d, today);
-        _heap_push(d, &d->due_heap, &d->due_heap_size, &d->due_heap_cap, idx, false);
+ 
+    uint8_t prev = c->prev_state;   /* estado antes de suspender */
+ 
+    switch (prev) {
+        case FSRS_STATE_NEW:
+            c->state = FSRS_STATE_NEW;
+            c->due_ts  = now;
+            c->due_day = today;
+            _newq_push(d, idx);
+            break;
+ 
+        case FSRS_STATE_LEARNING:
+        case FSRS_STATE_RELEARNING:
+            /* Restaurar al mismo estado y step — due_ts ya estaba guardado.
+             * Si due_ts quedó en el pasado la carta aparece como lista
+             * inmediatamente, que es el comportamiento correcto. */
+            c->state = (fsrs_state)prev;
+            /* due_ts y step no se tocan — se conservan del momento del suspend */
+            _heap_push(d, &d->learn_heap, &d->learn_heap_size,
+                       &d->learn_heap_cap, idx, true);
+            break;
+ 
+        case FSRS_STATE_REVIEW:
+        default:
+            /* Para Review o estado desconocido: comportamiento original */
+            c->state   = FSRS_STATE_REVIEW;
+            c->due_day = today;
+            c->due_ts  = fsrs_day_start(d, today);
+            _heap_push(d, &d->due_heap, &d->due_heap_size,
+                       &d->due_heap_cap, idx, false);
+            break;
     }
+ 
+    c->prev_state = 0;   /* limpiar */
 }
 
 void fsrs_mark(fsrs_deck *d, uint32_t id, bool marked) {

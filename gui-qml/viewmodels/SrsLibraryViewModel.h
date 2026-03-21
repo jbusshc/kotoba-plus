@@ -66,6 +66,7 @@ public:
     Q_INVOKABLE QString getState(int entryId)       const;
 
     Q_INVOKABLE void suspend(int entryId);
+    Q_INVOKABLE void unsuspend(int entryId);
     Q_INVOKABLE void reset(int entryId);
     Q_INVOKABLE void remove(int entryId);
     Q_INVOKABLE void refresh();

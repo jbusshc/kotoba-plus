@@ -100,7 +100,7 @@ typedef struct __attribute__((packed)) {
     uint8_t state;
     uint8_t step;
     uint8_t flags;
-    uint8_t padding;
+    uint8_t prev_state;
 } fsrs_card;
 
 typedef struct {

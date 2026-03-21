@@ -245,6 +245,13 @@ void SrsLibraryViewModel::suspend(int entryId)
     refresh();
 }
 
+void SrsLibraryViewModel::unsuspend(int entryId)
+{
+    if (!m_service || entryId < 0) return;
+    m_service->unsuspend(static_cast<uint32_t>(entryId));
+    refresh();
+}
+
 void SrsLibraryViewModel::reset(int entryId)
 {
     if (!m_service || entryId < 0) return;

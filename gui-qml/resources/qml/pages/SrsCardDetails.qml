@@ -100,7 +100,6 @@ Page {
 
                 Row {
                     id: badgeRow
-                    anchors.centerIn: parent
                     spacing: 5
 
                     Text {
@@ -248,25 +247,99 @@ Page {
             Layout.fillWidth: true
             spacing: 10
 
-            Button {
+            // Suspend / Unsuspend toggle based on current state
+            Rectangle {
                 Layout.fillWidth: true
-                text: "Suspend"
-                onClicked: {
-                    srsLibraryVM.suspend(entryId)
-                    refreshStats()
+                height: 36
+                radius: 7
+                color: actionSuspendMouse.containsMouse
+                    ? Qt.rgba(1,1,1,0.08) : Qt.rgba(1,1,1,0.04)
+                border.width: 1
+                border.color: Qt.rgba(1,1,1,0.10)
+                Behavior on color { ColorAnimation { duration: 100 } }
+
+                Text {
+                    anchors.centerIn: parent
+                    width: parent.width - 8
+                    text: statState === "Suspended" ? "Unsuspend" : "Suspend"
+                    font.pixelSize: 12
+                    font.weight: Font.Medium
+                    color: statState === "Suspended" ? "#34D399" : "#FFB83F"
+                    horizontalAlignment: Text.AlignHCenter
+                    elide: Text.ElideRight
+                }
+
+                MouseArea {
+                    id: actionSuspendMouse
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                        if (statState === "Suspended")
+                            suspendDialog.unsuspending = true
+                        else
+                            suspendDialog.unsuspending = false
+                        suspendDialog.open()
+                    }
                 }
             }
 
-            Button {
+            Rectangle {
                 Layout.fillWidth: true
-                text: "Reset"
-                onClicked: resetDialog.open()
+                height: 36
+                radius: 7
+                color: actionResetMouse.containsMouse
+                    ? Qt.rgba(1,1,1,0.08) : Qt.rgba(1,1,1,0.04)
+                border.width: 1
+                border.color: Qt.rgba(1,1,1,0.10)
+                Behavior on color { ColorAnimation { duration: 100 } }
+
+                Text {
+                    anchors.centerIn: parent
+                    width: parent.width - 8
+                    text: "Reset"
+                    font.pixelSize: 12
+                    font.weight: Font.Medium
+                    color: "#60A5FA"
+                    horizontalAlignment: Text.AlignHCenter
+                    elide: Text.ElideRight
+                }
+
+                MouseArea {
+                    id: actionResetMouse
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: resetDialog.open()
+                }
             }
 
-            Button {
+
+            Rectangle {
                 Layout.fillWidth: true
-                text: "Delete"
-                onClicked: deleteDialog.open()
+                height: 36
+                radius: 7
+                color: actionDeleteMouse.containsMouse
+                    ? Qt.rgba(1,1,1,0.08) : Qt.rgba(1,1,1,0.04)
+                border.width: 1
+                border.color: Qt.rgba(1,1,1,0.10)
+                Behavior on color { ColorAnimation { duration: 100 } }
+
+                Text {
+                    anchors.centerIn: parent
+                    width: parent.width - 8
+                    text: "Delete"
+                    font.pixelSize: 12
+                    font.weight: Font.Medium
+                    color: "#F87171"
+                    horizontalAlignment: Text.AlignHCenter
+                    elide: Text.ElideRight
+                }
+
+                MouseArea {
+                    id: actionDeleteMouse
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: deleteDialog.open()
+                }
             }
         }
 
@@ -319,11 +392,15 @@ Page {
     }
 
     // ── dialogs ───────────────────────────────────────────────────────────────
+
+    // Reset confirmation
     Dialog {
         id: resetDialog
         title: "Reset card?"
+        width: 320
+        anchors.centerIn: Overlay.overlay
         modal: true
-        anchors.centerIn: parent
+
 
         Text {
             text: "This will move the card back to New state and clear all progress."
@@ -339,14 +416,21 @@ Page {
         }
     }
 
+
+    // Suspend / Unsuspend confirmation
     Dialog {
-        id: deleteDialog
-        title: "Delete card?"
+        id: suspendDialog
+        width: 320
+        anchors.centerIn: Overlay.overlay
         modal: true
-        anchors.centerIn: parent
+        property bool unsuspending: false
+
+        title: unsuspending ? "Unsuspend card?" : "Suspend card?"
 
         Text {
-            text: "This will permanently remove the card from your deck."
+            text: suspendDialog.unsuspending
+                ? "The card will return to its previous state and become available for review."
+                : "The card will be removed from all queues and won't appear in reviews."
             wrapMode: Text.Wrap
             width: 260
             color: page.textColor
@@ -354,8 +438,60 @@ Page {
 
         standardButtons: Dialog.Ok | Dialog.Cancel
         onAccepted: {
+            if (unsuspending)
+                srsLibraryVM.unsuspend(entryId)
+            else
+                srsLibraryVM.suspend(entryId)
+            refreshStats()
+        }
+    }
+
+    // Delete confirmation — offers re-add after deletion
+    Dialog {
+        id: deleteDialog
+        title: "Delete card?"
+        width: 320
+        anchors.centerIn: Overlay.overlay
+        modal: true
+
+        property int deletedEntryId: -1
+
+        Text {
+            text: "This will permanently remove the card and all its progress from your deck."
+            wrapMode: Text.Wrap
+            width: 260
+            color: page.textColor
+        }
+
+        standardButtons: Dialog.Ok | Dialog.Cancel
+        onAccepted: {
+            deleteDialog.deletedEntryId = entryId
             srsLibraryVM.remove(entryId)
+            readdDialog.open()
             stack.pop()
+        }
+    }
+
+    // Re-add prompt shown immediately after deletion
+    Dialog {
+        id: readdDialog
+        title: "Card deleted"
+        width: 320
+        anchors.centerIn: Overlay.overlay
+        modal: true
+
+
+        Text {
+            text: "The card was removed. Would you like to add it back as new?"
+            wrapMode: Text.Wrap
+            width: 260
+            color: page.textColor
+        }
+
+        standardButtons: Dialog.Yes | Dialog.No
+        onAccepted: {
+            if (deleteDialog.deletedEntryId >= 0)
+                srsVM.add(deleteDialog.deletedEntryId)
         }
     }
 
