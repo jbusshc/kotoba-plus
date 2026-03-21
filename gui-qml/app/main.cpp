@@ -35,7 +35,7 @@ int main(int argc, char **argv)
     qDebug() << "File exists:" << QFile::exists(configPath);
 
     bool b = loadConfiguration(configWrapper.m_config, configPath);
-
+    configWrapper.m_configPath = configPath;
     QQuickStyle::setStyle("Material");
     QGuiApplication app(argc, argv);
     app.setApplicationName("KotobaPlus");

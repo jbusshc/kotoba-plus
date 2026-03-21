@@ -12,5 +12,6 @@
         <file>qml/components/EntryView.qml</file>
         <file>qml/components/SenseItem.qml</file>
         <file>qml/components/Tag.qml</file>
+        <file>qml/pages/SettingsPage.qml</file>
     </qresource>
 </RCC>

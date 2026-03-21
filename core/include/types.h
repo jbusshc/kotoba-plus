@@ -29,7 +29,7 @@ enum kotoba_lang
     KOTOBA_LANG_IT,
     KOTOBA_LANG_NL,
     KOTOBA_LANG_HU,
-    KOTOBA_LANG_SV,
+    KOTOBA_LANG_SV, 
     KOTOBA_LANG_CS,
     KOTOBA_LANG_PL,
     KOTOBA_LANG_RO,

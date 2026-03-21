@@ -126,6 +126,14 @@ void saveConfiguration(const Configuration &c, const QString &filePath)
     s.setValue("dict_path", c.dictPath);
     s.setValue("gloss_en_path", c.glossEnPath);
     s.setValue("gloss_es_path", c.glossEsPath);
+    s.setValue("gloss_de_path", c.glossDePath);
+    s.setValue("gloss_fr_path", c.glossFrPath);
+    s.setValue("gloss_hu_path", c.glossHuPath);
+    s.setValue("gloss_nl_path", c.glossNlPath);
+    s.setValue("gloss_ru_path", c.glossRuPath);
+    s.setValue("gloss_slv_path", c.glossSlvPath);
+    s.setValue("gloss_sv_path", c.glossSvPath);
+
     s.setValue("jp_path", c.jpPath);
     s.setValue("srs_path", c.srsPath);
     s.endGroup();
@@ -204,6 +212,14 @@ bool loadConfiguration(Configuration &c, const QString &filePath)
     c.dictPath = s.value("dict_path", c.dictPath).toString();
     c.glossEnPath = s.value("gloss_en_path", c.glossEnPath).toString();
     c.glossEsPath = s.value("gloss_es_path", c.glossEsPath).toString();
+    c.glossDePath = s.value("gloss_de_path", c.glossDePath).toString();
+    c.glossFrPath = s.value("gloss_fr_path", c.glossFrPath).toString();
+    c.glossHuPath = s.value("gloss_hu_path", c.glossHuPath).toString();
+    c.glossNlPath = s.value("gloss_nl_path", c.glossNlPath).toString();
+    c.glossRuPath = s.value("gloss_ru_path", c.glossRuPath).toString();
+    c.glossSlvPath = s.value("gloss_slv_path", c.glossSlvPath).toString();
+    c.glossSvPath = s.value("gloss_sv_path", c.glossSvPath).toString();
+
     c.jpPath = s.value("jp_path", c.jpPath).toString();
     c.srsPath = s.value("srs_path", c.srsPath).toString();
     s.endGroup();
@@ -260,3 +276,40 @@ bool loadConfiguration(Configuration &c, const QString &filePath)
 
     return true;
 }
+
+// ─────────────────────────────────────────
+// ConfigWrapper (exponer a QML)
+// ─────────────────────────────────────────
+void ConfigWrapper::saveToDisk()
+{
+    if (!m_configPath.isEmpty())
+        saveConfiguration(m_config, m_configPath);
+}
+ 
+void ConfigWrapper::reloadFromDisk()
+{
+    if (m_configPath.isEmpty()) return;
+ 
+    loadConfiguration(m_config, m_configPath);
+ 
+    // Notify QML of all changed properties so bindings update
+    emit themeChanged();
+    emit accentColorChanged();
+    emit primaryColorChanged();
+    emit fontScaleChanged();
+    emit fontFamilyChanged();
+    emit showFuriganaChanged();
+    emit searchDelayMsChanged();
+    emit searchOnTypingChanged();
+    emit glossLanguagesChanged();
+    emit fallbackLanguageChanged();
+    emit interfaceLanguageChanged();
+    emit newCardsPerDayChanged();
+    emit reviewsPerDayChanged();
+    emit desiredRetentionChanged();
+    emit enableFuzzChanged();
+    emit leechThresholdChanged();
+    emit maximumIntervalChanged();
+    emit dayOffsetChanged();
+}
+ 
