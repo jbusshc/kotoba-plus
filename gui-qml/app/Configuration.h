@@ -49,10 +49,11 @@ struct Configuration {
     int  pageSize         = 20;
     int  searchDelayMs    = 150;
     bool searchOnTyping   = true;
+    bool showRomaji       = false;
 
     // ---------------- Language ----------------
     QString fallbackLanguage = "en";
-    QString glossLanguages   = "es, en";
+    QString glossLanguages   = "en";
     QString interface        = "en";   // UI language
 
     // ---------------- Session ----------------

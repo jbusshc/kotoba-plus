@@ -94,7 +94,7 @@ Page {
         appConfig.accentColor       = "blue"
         appConfig.fontScale         = 1.0
         appConfig.showFurigana      = true
-        appConfig.glossLanguages    = "es, en"
+        appConfig.glossLanguages    = "en"
         appConfig.fallbackLanguage  = "en"
         appConfig.interfaceLanguage = "en"
         appConfig.searchOnTyping    = true
@@ -107,6 +107,7 @@ Page {
         appConfig.dayOffset         = 14400
         appConfig.enableFuzz        = true
         checkDirty()
+        applySettings()
     }
 
     Timer {

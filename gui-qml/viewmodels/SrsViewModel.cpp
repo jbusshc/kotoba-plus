@@ -1,4 +1,5 @@
 #include "SrsViewModel.h"
+#include "EntryDetailsViewModel.h"
 #include "../infrastructure/SrsService.h"
 
 extern "C" {
@@ -7,40 +8,40 @@ extern "C" {
 
 #include <QStringList>
 
-SrsViewModel::SrsViewModel(SrsService *service, kotoba_dict *dict, QObject *parent)
-    : QObject(parent), m_service(service), m_dict(dict)
-{
-}
+// ── Constructor ───────────────────────────────────────────────────────────────
 
-/* ---- properties ---- */
+SrsViewModel::SrsViewModel(SrsService *service, kotoba_dict *dict,
+                           EntryDetailsViewModel *detailsVM, QObject *parent)
+    : QObject(parent), m_service(service), m_dict(dict), m_detailsVM(detailsVM)
+{}
 
-int SrsViewModel::totalCount()    const { return m_service ? static_cast<int>(m_service->totalCount())      : 0; }
-int SrsViewModel::dueCount()      const { return m_service ? static_cast<int>(m_service->dueCount())        : 0; }
-int SrsViewModel::learningCount() const { return m_service ? static_cast<int>(m_service->learningCount()) : 0; }
-int SrsViewModel::newCount()      const { return m_service ? static_cast<int>(m_service->newCount())      : 0; }
-int SrsViewModel::lapsedCount()   const { return m_service ? static_cast<int>(m_service->lapsedCount())   : 0; }
+// ── Properties ────────────────────────────────────────────────────────────────
 
-/*
- * reviewTodayCount() — BUG FIX delegado al service.
- * Ahora devuelve cards_done de la sesión actual (respuestas dadas hoy),
- * no due_today que es un conteo de cartas *pendientes*.
- */
-int SrsViewModel::reviewTodayCount() const
-{
-    return m_service ? static_cast<int>(m_service->reviewTodayCount()) : 0;
-}
+int SrsViewModel::totalCount()       const { return m_service ? static_cast<int>(m_service->totalCount())       : 0; }
+int SrsViewModel::dueCount()         const { return m_service ? static_cast<int>(m_service->dueCount())         : 0; }
+int SrsViewModel::learningCount()    const { return m_service ? static_cast<int>(m_service->learningCount())    : 0; }
+int SrsViewModel::newCount()         const { return m_service ? static_cast<int>(m_service->newCount())         : 0; }
+int SrsViewModel::lapsedCount()      const { return m_service ? static_cast<int>(m_service->lapsedCount())      : 0; }
+int SrsViewModel::reviewTodayCount() const { return m_service ? static_cast<int>(m_service->reviewTodayCount()) : 0; }
 
 QString SrsViewModel::againInterval() const { return m_hasCard && m_service ? QString::fromStdString(m_service->predictInterval(m_currentEntryId, FSRS_AGAIN)) : QString(); }
 QString SrsViewModel::hardInterval()  const { return m_hasCard && m_service ? QString::fromStdString(m_service->predictInterval(m_currentEntryId, FSRS_HARD))  : QString(); }
 QString SrsViewModel::goodInterval()  const { return m_hasCard && m_service ? QString::fromStdString(m_service->predictInterval(m_currentEntryId, FSRS_GOOD))  : QString(); }
 QString SrsViewModel::easyInterval()  const { return m_hasCard && m_service ? QString::fromStdString(m_service->predictInterval(m_currentEntryId, FSRS_EASY))  : QString(); }
 
-/* ---- session control ---- */
+QString     SrsViewModel::currentWord()      const { return m_currentWord; }
+QString     SrsViewModel::currentMeaning()   const { return m_currentMeaning; }
+bool        SrsViewModel::hasCard()          const { return m_hasCard; }
+int         SrsViewModel::currentEntryId()   const { return m_hasCard ? static_cast<int>(m_currentEntryId) : -1; }
+QVariantMap SrsViewModel::currentEntryData() const { return m_currentEntryData; }
+
+bool SrsViewModel::canUndo() const { return m_service && m_service->canUndo(); }
+
+// ── Session ───────────────────────────────────────────────────────────────────
 
 void SrsViewModel::startSession()
 {
-    if (m_service)
-        m_service->startSession();
+    if (m_service) m_service->startSession();
     loadNext();
 }
 
@@ -49,40 +50,45 @@ bool SrsViewModel::saveProfile()
     return m_service ? m_service->save() : false;
 }
 
-/* ---- main: cargar siguiente carta ---- */
+// ── loadNext ──────────────────────────────────────────────────────────────────
+
 void SrsViewModel::loadNext()
 {
+    auto finish = [&]() {
+        emit currentChanged();
+        updateStats();
+    };
+
     if (!m_service) {
         m_hasCard = false;
-        emit currentChanged();
+        finish();
         emit noMoreCards();
-        updateStats();
         return;
     }
 
     fsrs_card *card = m_service->nextCard();
     if (!card) {
         m_hasCard = false;
-        emit currentChanged();
+        m_currentEntryData = {};
+        finish();
         emit noMoreCards();
-        updateStats();
         return;
     }
 
-    m_hasCard = true;
+    m_hasCard        = true;
     m_currentEntryId = card->id;
 
     const entry_bin *entry = kotoba_dict_get_entry(m_dict, m_currentEntryId);
     if (!entry) {
         m_hasCard = false;
-        emit currentChanged();
+        m_currentEntryData = {};
+        finish();
         emit noMoreCards();
-        updateStats();
         return;
     }
 
-    QString word;
-    QString meaning;
+    // word / meaning (para compatibilidad con código existente)
+    QString word, meaning;
 
     if (entry->k_elements_count > 0) {
         const k_ele_bin *k = kotoba_k_ele(m_dict, entry, 0);
@@ -93,9 +99,7 @@ void SrsViewModel::loadNext()
         kotoba_str s = kotoba_reb(m_dict, r);
         word = QString::fromUtf8(s.ptr, s.len);
     }
-
-    if (word.isEmpty())
-        word = "[unknown]";
+    if (word.isEmpty()) word = "[unknown]";
 
     if (entry->senses_count > 0) {
         const sense_bin *sense = kotoba_sense(m_dict, entry, 0);
@@ -107,27 +111,25 @@ void SrsViewModel::loadNext()
         meaning = parts.join("; ");
     }
 
-    // 🔥 AQUÍ está el cambio clave
-    m_currentWord = word;
+    m_currentWord    = word;
     m_currentMeaning = meaning;
 
-    emit currentChanged();
-    updateStats();
+    // entry data completo via detailsVM
+    m_currentEntryData = m_detailsVM
+        ? m_detailsVM->mapEntry(static_cast<int>(m_currentEntryId))
+        : QVariantMap{};
+
+    finish();
 }
 
-/* ---- reveal / answer ---- */
+// ── Answer ────────────────────────────────────────────────────────────────────
 
-void SrsViewModel::revealAnswer()
-{
-    if (!m_hasCard) return;
-}
+void SrsViewModel::revealAnswer() {}
 
 void SrsViewModel::handleAnswer(int quality)
 {
     if (!m_hasCard || !m_service) return;
-
-    fsrs_rating r = static_cast<fsrs_rating>(quality);
-    m_service->answer(m_currentEntryId, r);
+    m_service->answer(m_currentEntryId, static_cast<fsrs_rating>(quality));
     loadNext();
 }
 
@@ -136,7 +138,7 @@ void SrsViewModel::answerHard()  { handleAnswer(FSRS_HARD);  }
 void SrsViewModel::answerGood()  { handleAnswer(FSRS_GOOD);  }
 void SrsViewModel::answerEasy()  { handleAnswer(FSRS_EASY);  }
 
-/* ---- add / contains ---- */
+// ── Add / Remove / Contains ───────────────────────────────────────────────────
 
 bool SrsViewModel::contains(int entryId)
 {
@@ -148,51 +150,29 @@ void SrsViewModel::add(int entryId)
     if (!m_service) return;
     if (m_service->add(static_cast<uint32_t>(entryId)))
         updateStats();
-    emit containsChanged(entryId); 
+    emit containsChanged(entryId);
 }
 
-/* ---- stats ---- */
+void SrsViewModel::remove(int id)
+{
+    if (!m_service || !m_service->contains(id)) return;
+    m_service->remove(id);
+    emit containsChanged(id);
+}
+
+// ── Undo ──────────────────────────────────────────────────────────────────────
+
+bool SrsViewModel::undoLastAnswer()
+{
+    if (!m_service || !m_service->canUndo()) return false;
+    if (!m_service->undoLastAnswer()) return false;
+    loadNext();
+    return true;
+}
+
+// ── Stats ─────────────────────────────────────────────────────────────────────
 
 void SrsViewModel::updateStats()
 {
     emit statsChanged();
-}
-
-
-void SrsViewModel::remove(int id)
-{
-    if (!m_service->contains(id))
-        return;
-
-    m_service->remove(id);
-    emit containsChanged(id); // 🔥 misma señal para mantener reactividad
-}
-
-bool SrsViewModel::undoLastAnswer()
-{
-    if (!m_service || !m_service->canUndo())
-        return false;
-
-    if (!m_service->undoLastAnswer())
-        return false;
-
-    loadNext(); // recargar la carta actualizada
-    return true;
-}
-
-bool SrsViewModel::canUndo() const
-{
-    return m_service && m_service->canUndo();
-}
-
-QString SrsViewModel::currentWord() const {
-    return m_currentWord;
-}
-
-QString SrsViewModel::currentMeaning() const {
-    return m_currentMeaning;
-}
-
-bool SrsViewModel::hasCard() const {
-    return m_hasCard;
 }

@@ -75,7 +75,7 @@ int main(int argc, char **argv)
     SearchResultModel *searchModel = new SearchResultModel();
     SearchViewModel *searchVM = new SearchViewModel(searchSvc, searchModel, dict);
     EntryDetailsViewModel *detailsVM = new EntryDetailsViewModel(dict, &configWrapper.m_config);
-    SrsViewModel *srsVM = new SrsViewModel(srsSvc, dict);
+    SrsViewModel *srsVM = new SrsViewModel(srsSvc, dict, detailsVM);
 
     SrsLibraryViewModel* libVM = new SrsLibraryViewModel(srsSvc, dict, searchSvc);
 
