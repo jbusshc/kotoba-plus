@@ -5,6 +5,8 @@
  *  - due_day (day index) + due_ts (unix secs per card)
  *  - learning/relearning steps in seconds
  *  - heaps (due_heap, learn_heap) keep per-card heap positions for O(log n) removals
+ *  - order_mode: MIXED / REVIEW_FIRST / NEW_FIRST
+ *  - fix: reviews_per_day == 0 treated as unlimited in fsrs_next_for_session
  */
 
 #include "fsrs.h"
@@ -276,10 +278,11 @@ static void _maybe_new_day(fsrs_deck *d, uint64_t now) {
         d->new_today = 0;
         d->reviews_today = 0;
         d->streak_count = 0;
+        d->streak_type  = 0;
     }
 }
 
-/* fuzz helper (same semantics as before) */
+/* fuzz helper */
 static uint32_t _apply_fuzz(fsrs_deck *d, uint32_t interval) {
     if (interval < 7) return interval;
     uint32_t r = (uint32_t)(_rng_next(d) % 11);
@@ -291,7 +294,7 @@ static uint32_t _apply_fuzz(fsrs_deck *d, uint32_t interval) {
     return varied;
 }
 
-/* ==================== FSRS math helpers (copied from your implementation) ==================== */
+/* ==================== FSRS math helpers ==================== */
 static inline float _s0(const float w[19], fsrs_rating r) {
     int ri = (int)r - 1;
     if (ri < 0) ri = 0;
@@ -331,7 +334,6 @@ static float _d_update(const float w[19], float d, fsrs_rating r) {
     return _clamp_difficulty(new_d);
 }
 
-/* reemplaza fsrs_fuzz_days por esta versión (usa PRNG del deck) */
 static uint32_t fsrs_fuzz_days(fsrs_deck *deck, uint32_t ivl)
 {
     if (!deck->params.enable_fuzz)
@@ -340,7 +342,6 @@ static uint32_t fsrs_fuzz_days(fsrs_deck *deck, uint32_t ivl)
     if (ivl < 2)
         return ivl;
 
-    /* fuzz similar a Anki */
     float fuzz_factor;
     if (ivl < 7) fuzz_factor = 0.15f;
     else if (ivl < 30) fuzz_factor = 0.10f;
@@ -359,16 +360,9 @@ static uint32_t fsrs_fuzz_days(fsrs_deck *deck, uint32_t ivl)
 
 static void fsrs_normalize_intervals(uint32_t ivl[4])
 {
-    /* Again < Hard < Good < Easy */
-
-    if(ivl[1] <= ivl[0])
-        ivl[1] = ivl[0] + 1;
-
-    if(ivl[2] <= ivl[1])
-        ivl[2] = ivl[1] + 1;
-
-    if(ivl[3] <= ivl[2])
-        ivl[3] = ivl[2] + 1;
+    if(ivl[1] <= ivl[0]) ivl[1] = ivl[0] + 1;
+    if(ivl[2] <= ivl[1]) ivl[2] = ivl[1] + 1;
+    if(ivl[3] <= ivl[2]) ivl[3] = ivl[2] + 1;
 }
 
 static void fsrs_normalize_seconds(uint64_t out[4], uint64_t now)
@@ -378,29 +372,9 @@ static void fsrs_normalize_seconds(uint64_t out[4], uint64_t now)
     uint64_t good  = out[2] - now;
     uint64_t easy  = out[3] - now;
 
-    /* Hard debe ser mayor que Again */
-
-    if(hard <= again)
-    {
-        hard = again + 60;      /* +1 minuto */
-        out[1] = now + hard;
-    }
-
-    /* Good debe ser mayor que Hard */
-
-    if(good <= hard)
-    {
-        good = hard + 60;
-        out[2] = now + good;
-    }
-
-    /* Easy debe ser mayor que Good */
-
-    if(easy <= good)
-    {
-        easy = good + 60;
-        out[3] = now + easy;
-    }
+    if(hard <= again) { hard = again + 60; out[1] = now + hard; }
+    if(good <= hard)  { good = hard  + 60; out[2] = now + good; }
+    if(easy <= good)  { easy = good  + 60; out[3] = now + easy; }
 }
 
 static uint32_t _next_interval(fsrs_deck *d, float s, bool apply_fuzz) {
@@ -417,22 +391,22 @@ static uint32_t _next_interval(fsrs_deck *d, float s, bool apply_fuzz) {
 
 fsrs_params fsrs_default_params(void) {
     fsrs_params p;
-
     memset(&p, 0, sizeof(p));
     memcpy(p.w, FSRS5_W, sizeof(FSRS5_W));
-    p.desired_retention   = 0.9f;
-    p.maximum_interval    = 36500;
-    p.leech_threshold     = 8;
-    p.day_offset_secs     = FSRS_DEFAULT_OFFSET;
-    p.new_cards_per_day   = 20;
-    p.reviews_per_day     = 200;
-    p.learning_steps      = _default_learn_steps;
-    p.learning_steps_count = 2;
-    p.relearning_steps    = _default_relearn_steps;
+    p.desired_retention      = 0.9f;
+    p.maximum_interval       = 36500;
+    p.leech_threshold        = 8;
+    p.day_offset_secs        = FSRS_DEFAULT_OFFSET;
+    p.new_cards_per_day      = 20;
+    p.reviews_per_day        = 200;
+    p.learning_steps         = _default_learn_steps;
+    p.learning_steps_count   = 2;
+    p.relearning_steps       = _default_relearn_steps;
     p.relearning_steps_count = 1;
-    p.new_review_ratio    = 0.5f;
-    p.mix_burst_size      = 5;
-    p.enable_fuzz         = true;
+    p.new_review_ratio       = 0.5f;
+    p.mix_burst_size         = 5;
+    p.enable_fuzz            = true;
+    p.order_mode             = FSRS_ORDER_MIXED;
     return p;
 }
 
@@ -440,9 +414,9 @@ fsrs_deck* fsrs_deck_create(uint32_t id_space, const fsrs_params *params) {
     fsrs_deck *d = (fsrs_deck*)calloc(1, sizeof(fsrs_deck));
     if (!d) return NULL;
     d->params = params ? *params : fsrs_default_params();
-    d->_learn_steps = d->params.learning_steps ? d->params.learning_steps : _default_learn_steps;
+    d->_learn_steps   = d->params.learning_steps   ? d->params.learning_steps   : _default_learn_steps;
     d->_learn_steps_n = d->params.learning_steps_count ? d->params.learning_steps_count : 2;
-    d->_relearn_steps = d->params.relearning_steps ? d->params.relearning_steps : _default_relearn_steps;
+    d->_relearn_steps   = d->params.relearning_steps   ? d->params.relearning_steps   : _default_relearn_steps;
     d->_relearn_steps_n = d->params.relearning_steps_count ? d->params.relearning_steps_count : 1;
 
     uint32_t bits = id_space ? id_space : 512;
@@ -451,9 +425,8 @@ fsrs_deck* fsrs_deck_create(uint32_t id_space, const fsrs_params *params) {
         return NULL;
     }
 
-    d->rng_state = (uint64_t)time(NULL) ^ 0x9e3779b97f4a7c15ULL;
+    d->rng_state  = (uint64_t)time(NULL) ^ 0x9e3779b97f4a7c15ULL;
     d->current_day = fsrs_current_day(d, (uint64_t)time(NULL));
-
     return d;
 }
 
@@ -486,25 +459,24 @@ fsrs_card* fsrs_add_card(fsrs_deck *d, uint32_t id, uint64_t now) {
     uint32_t idx = d->count++;
     fsrs_card *c = &d->cards[idx];
     memset(c, 0, sizeof(*c));
-    c->id = id;
-    c->state = FSRS_STATE_NEW;
-    c->stability = 0.0f;
+    c->id         = id;
+    c->state      = FSRS_STATE_NEW;
+    c->stability  = 0.0f;
     c->difficulty = FSRS_MIN_DIFFICULTY;
-    c->reps = 0;
-    c->lapses = 0;
-    c->total_answers= 0;
-    c->step = 0;
-    c->flags = FSRS_FLAG_NONE;
-    c->heap_pos_due = -1;
+    c->reps       = 0;
+    c->lapses     = 0;
+    c->total_answers = 0;
+    c->step       = 0;
+    c->flags      = FSRS_FLAG_NONE;
+    c->heap_pos_due   = -1;
     c->heap_pos_learn = -1;
-
-    c->due_ts = now;
+    c->due_ts  = now;
     c->due_day = (uint32_t)fsrs_current_day(d, now);
     c->last_review = 0;
-    c->prev_state = 0;
+    c->prev_state  = 0;
+
     _bitmap_set(d, id, true);
     d->id_to_index[id] = idx;
-
     _newq_push(d, idx);
     return c;
 }
@@ -542,7 +514,6 @@ bool fsrs_remove_card(fsrs_deck *d, uint32_t id) {
         uint32_t moved_id = d->cards[idx].id;
         d->id_to_index[moved_id] = idx;
 
-        /* update positions in heaps/queues referencing last -> idx */
         if (d->cards[idx].heap_pos_due >= 0 && (uint32_t)d->cards[idx].heap_pos_due < d->due_heap_size)
             d->due_heap[d->cards[idx].heap_pos_due] = idx;
         if (d->cards[idx].heap_pos_learn >= 0 && (uint32_t)d->cards[idx].heap_pos_learn < d->learn_heap_size)
@@ -561,14 +532,13 @@ fsrs_card* fsrs_get_card(fsrs_deck *d, uint32_t id) {
     return &d->cards[idx];
 }
 
-
 void fsrs_suspend(fsrs_deck *d, uint32_t id) {
     fsrs_card *c = fsrs_get_card(d, id);
     if (!c || c->state == FSRS_STATE_SUSPENDED) return;
     uint32_t idx = d->id_to_index[id];
- 
-    c->prev_state = c->state;  
- 
+
+    c->prev_state = c->state;
+
     switch (c->state) {
         case FSRS_STATE_NEW:
             for (uint32_t i = 0; i < d->new_queue_size; i++) {
@@ -587,42 +557,35 @@ void fsrs_suspend(fsrs_deck *d, uint32_t id) {
             break;
         default: break;
     }
- 
+
     c->state = FSRS_STATE_SUSPENDED;
 }
 
-/* ---- Reemplazar fsrs_unsuspend() en fsrs.c ---- */
- 
 void fsrs_unsuspend(fsrs_deck *d, uint32_t id, uint64_t now) {
     fsrs_card *c = fsrs_get_card(d, id);
     if (!c || c->state != FSRS_STATE_SUSPENDED) return;
     uint32_t idx = d->id_to_index[id];
     uint32_t today = (uint32_t)fsrs_current_day(d, now);
- 
-    uint8_t prev = c->prev_state;   /* estado antes de suspender */
- 
+
+    uint8_t prev = c->prev_state;
+
     switch (prev) {
         case FSRS_STATE_NEW:
-            c->state = FSRS_STATE_NEW;
+            c->state   = FSRS_STATE_NEW;
             c->due_ts  = now;
             c->due_day = today;
             _newq_push(d, idx);
             break;
- 
+
         case FSRS_STATE_LEARNING:
         case FSRS_STATE_RELEARNING:
-            /* Restaurar al mismo estado y step — due_ts ya estaba guardado.
-             * Si due_ts quedó en el pasado la carta aparece como lista
-             * inmediatamente, que es el comportamiento correcto. */
             c->state = (fsrs_state)prev;
-            /* due_ts y step no se tocan — se conservan del momento del suspend */
             _heap_push(d, &d->learn_heap, &d->learn_heap_size,
                        &d->learn_heap_cap, idx, true);
             break;
- 
+
         case FSRS_STATE_REVIEW:
         default:
-            /* Para Review o estado desconocido: comportamiento original */
             c->state   = FSRS_STATE_REVIEW;
             c->due_day = today;
             c->due_ts  = fsrs_day_start(d, today);
@@ -630,8 +593,8 @@ void fsrs_unsuspend(fsrs_deck *d, uint32_t id, uint64_t now) {
                        &d->due_heap_cap, idx, false);
             break;
     }
- 
-    c->prev_state = 0;   /* limpiar */
+
+    c->prev_state = 0;
 }
 
 void fsrs_mark(fsrs_deck *d, uint32_t id, bool marked) {
@@ -647,8 +610,8 @@ void fsrs_snooze(fsrs_deck *d, uint32_t id, uint32_t days, uint64_t now) {
     _heap_remove(d, d->due_heap, &d->due_heap_size, idx, false);
     uint32_t target_day = (uint32_t)(fsrs_current_day(d, now) + days);
     c->due_day = target_day;
-    c->due_ts = fsrs_day_start(d, target_day);
-    c->flags |= FSRS_FLAG_SNOOZED;
+    c->due_ts  = fsrs_day_start(d, target_day);
+    c->flags  |= FSRS_FLAG_SNOOZED;
     _heap_push(d, &d->due_heap, &d->due_heap_size, &d->due_heap_cap, idx, false);
 }
 
@@ -656,11 +619,11 @@ void fsrs_snooze(fsrs_deck *d, uint32_t id, uint32_t days, uint64_t now) {
 
 void fsrs_rebuild_queues(fsrs_deck *d, uint64_t now) {
     if (!d) return;
-    d->due_heap_size = 0;
+    d->due_heap_size  = 0;
     d->learn_heap_size = 0;
-    d->new_queue_size = 0;
-    d->streak_count = 0;
-    d->streak_type = 0;
+    d->new_queue_size  = 0;
+    d->streak_count    = 0;
+    d->streak_type     = 0;
     _maybe_new_day(d, now);
     uint32_t today = (uint32_t)d->current_day;
 
@@ -669,8 +632,7 @@ void fsrs_rebuild_queues(fsrs_deck *d, uint64_t now) {
         if (c->due_day <= today) c->flags |= FSRS_FLAG_DUE;
         else c->flags &= ~FSRS_FLAG_DUE;
 
-        /* reset heap positions */
-        c->heap_pos_due = -1;
+        c->heap_pos_due   = -1;
         c->heap_pos_learn = -1;
 
         switch (c->state) {
@@ -691,24 +653,22 @@ void fsrs_rebuild_queues(fsrs_deck *d, uint64_t now) {
     _newq_shuffle(d);
 }
 
-fsrs_card* fsrs_next_card(fsrs_deck *d, uint64_t now) {
-    fsrs_queue_type tmp;
-    return fsrs_next_card_ex(d, now, &tmp);
-}
+/* ==================== SCHEDULING CORE ==================== */
 
-/* next selection enforces:
-   1) learning ready (due_ts <= now)
-   2) review due today (due_day <= today)
-   3) new (if quota)
-   4) earliest learning (even if due_ts > now)
-   5) earliest review (future)
-*/
-fsrs_card* fsrs_next_card_ex(fsrs_deck *d, uint64_t now, fsrs_queue_type *out_queue) {
-    if (!d) return NULL;
+/*
+ * _next_card_internal — shared logic for fsrs_next_card_ex and fsrs_next_for_session.
+ *
+ * Priority:
+ *   1. Learning / relearning ready (due_ts <= now)          — always first
+ *   2. Reviews / new according to order_mode
+ *   3. Earliest pending learning (due_ts > now)             — fallback
+ *   4. Earliest review (future day)                         — fallback
+ */
+static fsrs_card* _next_card_internal(fsrs_deck *d, uint64_t now, fsrs_queue_type *out_queue) {
     _maybe_new_day(d, now);
     uint32_t today = (uint32_t)d->current_day;
 
-    /* 1 learning ready */
+    /* 1 — learning / relearning ready */
     if (d->learn_heap_size > 0) {
         uint32_t idx = d->learn_heap[0];
         if (d->cards[idx].due_ts <= now) {
@@ -717,38 +677,87 @@ fsrs_card* fsrs_next_card_ex(fsrs_deck *d, uint64_t now, fsrs_queue_type *out_qu
         }
     }
 
-    /* 2 reviews due today */
+    /* limits — 0 means unlimited */
     uint32_t rlimit = d->params.reviews_per_day;
-    bool review_ok = (rlimit == 0) || (d->reviews_today < rlimit);
-    if (review_ok && d->due_heap_size > 0) {
-        uint32_t idx = d->due_heap[0];
-        if (d->cards[idx].due_day <= today) {
-            if (out_queue) *out_queue = FSRS_QUEUE_REVIEW;
-            return &d->cards[idx];
-        }
-    }
-
-    /* 3 new */
+    bool review_ok  = (rlimit == 0) || (d->reviews_today < rlimit);
     uint32_t nlimit = d->params.new_cards_per_day;
-    bool new_ok = (nlimit == 0) || (d->new_today < nlimit);
-    if (new_ok && d->new_queue_size > 0) {
-        if (out_queue) *out_queue = FSRS_QUEUE_NEW;
-        return &d->cards[d->new_queue[0]];
+    bool new_ok     = (nlimit == 0) || (d->new_today < nlimit);
+
+    bool has_review = review_ok && d->due_heap_size > 0 &&
+                      d->cards[d->due_heap[0]].due_day <= today;
+    bool has_new    = new_ok && d->new_queue_size > 0;
+
+    switch (d->params.order_mode) {
+
+        case FSRS_ORDER_REVIEW_FIRST:
+            if (has_review) {
+                if (out_queue) *out_queue = FSRS_QUEUE_REVIEW;
+                return &d->cards[d->due_heap[0]];
+            }
+            if (has_new) {
+                if (out_queue) *out_queue = FSRS_QUEUE_NEW;
+                return &d->cards[d->new_queue[0]];
+            }
+            break;
+
+        case FSRS_ORDER_NEW_FIRST:
+            if (has_new) {
+                if (out_queue) *out_queue = FSRS_QUEUE_NEW;
+                return &d->cards[d->new_queue[0]];
+            }
+            if (has_review) {
+                if (out_queue) *out_queue = FSRS_QUEUE_REVIEW;
+                return &d->cards[d->due_heap[0]];
+            }
+            break;
+
+        case FSRS_ORDER_MIXED:
+        default:
+            if (has_review && has_new) {
+                /* interleave: serve a new card every mix_burst_size reviews */
+                uint32_t burst = d->params.mix_burst_size ? d->params.mix_burst_size : 5;
+                if (d->streak_type == FSRS_QUEUE_REVIEW && d->streak_count >= burst) {
+                    if (out_queue) *out_queue = FSRS_QUEUE_NEW;
+                    return &d->cards[d->new_queue[0]];
+                }
+                if (out_queue) *out_queue = FSRS_QUEUE_REVIEW;
+                return &d->cards[d->due_heap[0]];
+            }
+            if (has_review) {
+                if (out_queue) *out_queue = FSRS_QUEUE_REVIEW;
+                return &d->cards[d->due_heap[0]];
+            }
+            if (has_new) {
+                if (out_queue) *out_queue = FSRS_QUEUE_NEW;
+                return &d->cards[d->new_queue[0]];
+            }
+            break;
     }
 
-    /* 4 earliest learning (even if not ready) */
+    /* 3 — earliest pending learning (not yet ready) */
     if (d->learn_heap_size > 0) {
         if (out_queue) *out_queue = FSRS_QUEUE_DAY_LEARN;
         return &d->cards[d->learn_heap[0]];
     }
 
-    /* 5 earliest review (future) */
+    /* 4 — earliest review (future day) */
     if (d->due_heap_size > 0) {
         if (out_queue) *out_queue = FSRS_QUEUE_REVIEW;
         return &d->cards[d->due_heap[0]];
     }
 
+    if (out_queue) *out_queue = FSRS_QUEUE_NONE;
     return NULL;
+}
+
+fsrs_card* fsrs_next_card(fsrs_deck *d, uint64_t now) {
+    fsrs_queue_type tmp;
+    return fsrs_next_card_ex(d, now, &tmp);
+}
+
+fsrs_card* fsrs_next_card_ex(fsrs_deck *d, uint64_t now, fsrs_queue_type *out_queue) {
+    if (!d) return NULL;
+    return _next_card_internal(d, now, out_queue);
 }
 
 void fsrs_session_start(fsrs_session *s, uint64_t now, uint32_t limit) {
@@ -761,53 +770,27 @@ void fsrs_session_start(fsrs_session *s, uint64_t now, uint32_t limit) {
 fsrs_card* fsrs_next_for_session(fsrs_deck *d, fsrs_session *s, uint64_t now) {
     if (!d || !s) return NULL;
     if (s->session_limit > 0 && s->cards_done >= s->session_limit) return NULL;
-
-    _maybe_new_day(d, now);
-    uint32_t today = (uint32_t)d->current_day;
-
-    /* 1 learning ready */
-    if (d->learn_heap_size > 0) {
-        uint32_t idx = d->learn_heap[0];
-        if (d->cards[idx].due_ts <= now) return &d->cards[idx];
-    }
-
-    /* 2 review today */
-    if (d->reviews_today < d->params.reviews_per_day && d->due_heap_size > 0) {
-        uint32_t idx = d->due_heap[0];
-        if (d->cards[idx].due_day <= today) return &d->cards[idx];
-    }
-
-    /* 3 new */
-    if (d->new_today < d->params.new_cards_per_day && d->new_queue_size > 0) {
-        return &d->cards[d->new_queue[0]];
-    }
-
-    /* 4 earliest learning */
-    if (d->learn_heap_size > 0) return &d->cards[d->learn_heap[0]];
-
-    /* 5 earliest review */
-    if (d->due_heap_size > 0) return &d->cards[d->due_heap[0]];
-
-    return NULL;
+    return _next_card_internal(d, now, NULL);
 }
 
 uint64_t fsrs_wait_seconds(fsrs_deck *d, uint64_t now) {
     if (!d) return 0;
     _maybe_new_day(d, now);
 
-    /* if something is available now */
     if (fsrs_next_card(d, now)) return 0;
 
     uint64_t earliest = UINT64_MAX;
 
     if (d->learn_heap_size > 0) {
         uint32_t idx = d->learn_heap[0];
-        if (d->cards[idx].due_ts > now && d->cards[idx].due_ts < earliest) earliest = d->cards[idx].due_ts;
+        if (d->cards[idx].due_ts > now && d->cards[idx].due_ts < earliest)
+            earliest = d->cards[idx].due_ts;
     }
 
     if (d->due_heap_size > 0) {
         uint32_t idx = d->due_heap[0];
-        if (d->cards[idx].due_ts > now && d->cards[idx].due_ts < earliest) earliest = d->cards[idx].due_ts;
+        if (d->cards[idx].due_ts > now && d->cards[idx].due_ts < earliest)
+            earliest = d->cards[idx].due_ts;
     }
 
     if (earliest == UINT64_MAX || earliest <= now) return 0;
@@ -835,15 +818,15 @@ void fsrs_answer(fsrs_deck *d, fsrs_card *card, fsrs_rating rating, uint64_t now
     _maybe_new_day(d, now);
 
     const float *w = d->params.w;
-    uint32_t idx = (uint32_t)(card - d->cards);
+    uint32_t idx   = (uint32_t)(card - d->cards);
     uint32_t today = (uint32_t)fsrs_current_day(d, now);
 
-    /* retrievability uses elapsed seconds */
     uint64_t elapsed_secs = 0;
     if (card->last_review > 0 && now > card->last_review) elapsed_secs = now - card->last_review;
     float r_val = fsrs_retrievability(card->stability, elapsed_secs);
 
     /* remove from current queue */
+    fsrs_queue_type prev_queue = FSRS_QUEUE_NONE;
     switch (card->state) {
         case FSRS_STATE_NEW:
             for (uint32_t i = 0; i < d->new_queue_size; i++) {
@@ -853,20 +836,41 @@ void fsrs_answer(fsrs_deck *d, fsrs_card *card, fsrs_rating rating, uint64_t now
                 }
             }
             d->new_today++;
+            prev_queue = FSRS_QUEUE_NEW;
             break;
         case FSRS_STATE_LEARNING:
         case FSRS_STATE_RELEARNING:
             _heap_remove(d, d->learn_heap, &d->learn_heap_size, idx, true);
+            prev_queue = FSRS_QUEUE_LEARN;
             break;
         case FSRS_STATE_REVIEW:
             _heap_remove(d, d->due_heap, &d->due_heap_size, idx, false);
             d->reviews_today++;
+            prev_queue = FSRS_QUEUE_REVIEW;
             break;
         default: break;
     }
 
-    /* update last_review timestamp */
-    card->last_review = now;
+    /* update streak for MIXED mode */
+    if (d->params.order_mode == FSRS_ORDER_MIXED) {
+        if (prev_queue == FSRS_QUEUE_REVIEW || prev_queue == FSRS_QUEUE_LEARN) {
+            if (d->streak_type == FSRS_QUEUE_REVIEW) {
+                d->streak_count++;
+            } else {
+                d->streak_type  = FSRS_QUEUE_REVIEW;
+                d->streak_count = 1;
+            }
+        } else if (prev_queue == FSRS_QUEUE_NEW) {
+            if (d->streak_type == FSRS_QUEUE_NEW) {
+                d->streak_count++;
+            } else {
+                d->streak_type  = FSRS_QUEUE_NEW;
+                d->streak_count = 1;
+            }
+        }
+    }
+
+    card->last_review  = now;
     card->total_answers++;
     card->flags &= ~FSRS_FLAG_SNOOZED;
 
@@ -875,67 +879,67 @@ void fsrs_answer(fsrs_deck *d, fsrs_card *card, fsrs_rating rating, uint64_t now
         case FSRS_STATE_NEW:
             card->stability  = _s0(w, rating);
             card->difficulty = _d0(w, rating);
-            card->reps = 0;
+            card->reps   = 0;
             card->lapses = 0;
-            card->step = 0;
+            card->step   = 0;
 
             if (rating == FSRS_AGAIN) {
                 card->state = FSRS_STATE_LEARNING;
-                card->step = 0;
+                card->step  = 0;
                 uint32_t secs = d->_learn_steps_n ? d->_learn_steps[0] : 60;
-                card->due_ts = now + (uint64_t)secs;
+                card->due_ts  = now + (uint64_t)secs;
                 card->due_day = (uint32_t)fsrs_current_day(d, card->due_ts);
             } else if (d->_learn_steps_n == 0 || rating == FSRS_EASY) {
-                card->state = FSRS_STATE_REVIEW;
+                card->state   = FSRS_STATE_REVIEW;
                 uint32_t days = _next_interval(d, card->stability, true);
                 card->due_day = today + days;
-                card->due_ts = fsrs_day_start(d, card->due_day);
-                card->reps = 1;
+                card->due_ts  = fsrs_day_start(d, card->due_day);
+                card->reps    = 1;
             } else {
                 uint32_t step = (rating == FSRS_GOOD) ? 1 : 0;
                 if (step >= d->_learn_steps_n) {
-                    card->state = FSRS_STATE_REVIEW;
+                    card->state   = FSRS_STATE_REVIEW;
                     uint32_t days = _next_interval(d, card->stability, true);
                     card->due_day = today + days;
-                    card->due_ts = fsrs_day_start(d, card->due_day);
-                    card->reps = 1;
+                    card->due_ts  = fsrs_day_start(d, card->due_day);
+                    card->reps    = 1;
                 } else {
-                    card->state = FSRS_STATE_LEARNING;
-                    card->step = (uint8_t)step;
+                    card->state   = FSRS_STATE_LEARNING;
+                    card->step    = (uint8_t)step;
                     uint32_t secs = d->_learn_steps[card->step];
-                    card->due_ts = now + (uint64_t)secs;
+                    card->due_ts  = now + (uint64_t)secs;
                     card->due_day = (uint32_t)fsrs_current_day(d, card->due_ts);
                 }
             }
             break;
 
         case FSRS_STATE_LEARNING: {
-            card->stability = _s_short(w, card->stability, rating);
+            card->stability  = _s_short(w, card->stability, rating);
             card->difficulty = _d_update(w, card->difficulty, rating);
 
             if (rating == FSRS_AGAIN) {
-                card->step = 0;
+                card->step    = 0;
                 uint32_t secs = d->_learn_steps_n ? d->_learn_steps[0] : 60;
-                card->due_ts = now + (uint64_t)secs;
+                card->due_ts  = now + (uint64_t)secs;
                 card->due_day = (uint32_t)fsrs_current_day(d, card->due_ts);
             } else if (rating == FSRS_EASY) {
-                card->state = FSRS_STATE_REVIEW;
+                card->state   = FSRS_STATE_REVIEW;
                 card->reps++;
                 uint32_t days = _next_interval(d, card->stability, true);
                 card->due_day = today + days;
-                card->due_ts = fsrs_day_start(d, card->due_day);
+                card->due_ts  = fsrs_day_start(d, card->due_day);
             } else {
                 uint32_t next_step = card->step + (rating >= FSRS_GOOD ? 1 : 0);
                 if (next_step >= d->_learn_steps_n) {
-                    card->state = FSRS_STATE_REVIEW;
+                    card->state   = FSRS_STATE_REVIEW;
                     card->reps++;
                     uint32_t days = _next_interval(d, card->stability, true);
                     card->due_day = today + days;
-                    card->due_ts = fsrs_day_start(d, card->due_day);
+                    card->due_ts  = fsrs_day_start(d, card->due_day);
                 } else {
-                    card->step = (uint8_t)next_step;
+                    card->step    = (uint8_t)next_step;
                     uint32_t secs = d->_learn_steps[card->step];
-                    card->due_ts = now + (uint64_t)secs;
+                    card->due_ts  = now + (uint64_t)secs;
                     card->due_day = (uint32_t)fsrs_current_day(d, card->due_ts);
                 }
             }
@@ -945,49 +949,49 @@ void fsrs_answer(fsrs_deck *d, fsrs_card *card, fsrs_rating rating, uint64_t now
         case FSRS_STATE_REVIEW:
             if (rating == FSRS_AGAIN) {
                 card->lapses++;
-                card->stability = _s_forget(w, card->difficulty, card->stability, r_val);
+                card->stability  = _s_forget(w, card->difficulty, card->stability, r_val);
                 card->difficulty = _d_update(w, card->difficulty, rating);
                 if (d->params.leech_threshold > 0 && card->lapses >= d->params.leech_threshold)
                     card->flags |= FSRS_FLAG_LEECH;
                 if (d->_relearn_steps_n > 0) {
-                    card->state = FSRS_STATE_RELEARNING;
-                    card->step = 0;
+                    card->state   = FSRS_STATE_RELEARNING;
+                    card->step    = 0;
                     uint32_t secs = d->_relearn_steps[0];
-                    card->due_ts = now + (uint64_t)secs;
+                    card->due_ts  = now + (uint64_t)secs;
                     card->due_day = (uint32_t)fsrs_current_day(d, card->due_ts);
                 } else {
                     uint32_t days = _next_interval(d, card->stability, true);
                     card->due_day = today + days;
-                    card->due_ts = fsrs_day_start(d, card->due_day);
+                    card->due_ts  = fsrs_day_start(d, card->due_day);
                 }
             } else {
-                card->stability = _s_recall(w, card->difficulty, card->stability, r_val, rating);
+                card->stability  = _s_recall(w, card->difficulty, card->stability, r_val, rating);
                 card->difficulty = _d_update(w, card->difficulty, rating);
                 card->reps++;
                 uint32_t days = _next_interval(d, card->stability, true);
                 card->due_day = today + days;
-                card->due_ts = fsrs_day_start(d, card->due_day);
+                card->due_ts  = fsrs_day_start(d, card->due_day);
             }
             break;
 
         case FSRS_STATE_RELEARNING:
-            card->stability = _s_short(w, card->stability, rating);
+            card->stability  = _s_short(w, card->stability, rating);
             card->difficulty = _d_update(w, card->difficulty, rating);
             if (rating == FSRS_AGAIN) {
-                card->step = 0;
+                card->step    = 0;
                 uint32_t secs = d->_relearn_steps_n ? d->_relearn_steps[0] : 600;
-                card->due_ts = now + (uint64_t)secs;
+                card->due_ts  = now + (uint64_t)secs;
                 card->due_day = (uint32_t)fsrs_current_day(d, card->due_ts);
             } else if (rating == FSRS_EASY || (uint32_t)(card->step + 1) >= d->_relearn_steps_n) {
-                card->state = FSRS_STATE_REVIEW;
+                card->state   = FSRS_STATE_REVIEW;
                 card->reps++;
                 uint32_t days = _next_interval(d, card->stability, true);
                 card->due_day = today + days;
-                card->due_ts = fsrs_day_start(d, card->due_day);
+                card->due_ts  = fsrs_day_start(d, card->due_day);
             } else {
                 card->step++;
                 uint32_t secs = d->_relearn_steps[card->step];
-                card->due_ts = now + (uint64_t)secs;
+                card->due_ts  = now + (uint64_t)secs;
                 card->due_day = (uint32_t)fsrs_current_day(d, card->due_ts);
             }
             break;
@@ -999,7 +1003,8 @@ void fsrs_answer(fsrs_deck *d, fsrs_card *card, fsrs_rating rating, uint64_t now
     _enqueue(d, idx);
 }
 
-/* preview produces absolute unix timestamps (due_ts) for each rating */
+/* ==================== Preview ==================== */
+
 void fsrs_preview(const fsrs_deck *deck, const fsrs_card *card, uint64_t now, uint64_t out[4]) {
     if (!deck || !card || !out) return;
 
@@ -1012,9 +1017,9 @@ void fsrs_preview(const fsrs_deck *deck, const fsrs_card *card, uint64_t now, ui
     float r_val = fsrs_retrievability(card->stability, elapsed_secs);
 
     static const fsrs_rating ratings[4] = { FSRS_AGAIN, FSRS_HARD, FSRS_GOOD, FSRS_EASY };
-    // rng preserve
-    uint64_t rng_state_backup = d->rng_state;
-    /* 1) Generate raw timestamps as before */
+    uint64_t rng_state_backup = ((fsrs_deck*)d)->rng_state;
+
+    /* 1) Generate raw timestamps */
     for (int ri = 0; ri < 4; ++ri) {
         fsrs_rating rating = ratings[ri];
         uint64_t ts = now;
@@ -1109,17 +1114,17 @@ void fsrs_preview(const fsrs_deck *deck, const fsrs_card *card, uint64_t now, ui
         out[ri] = ts;
     }
 
-    /* 2) Convert to deltas (seconds) and mark day-level intervals */
+    /* 2) Convert to deltas and mark day-level intervals */
     uint64_t secs[4];
     bool is_day[4];
     for (int i = 0; i < 4; ++i) {
         uint64_t delta = (out[i] > now) ? (out[i] - now) : 0;
         is_day[i] = (delta >= FSRS_SEC_PER_DAY);
-        if (is_day[i]) secs[i] = (delta / FSRS_SEC_PER_DAY) * FSRS_SEC_PER_DAY; /* truncate to whole days */
+        if (is_day[i]) secs[i] = (delta / FSRS_SEC_PER_DAY) * FSRS_SEC_PER_DAY;
         else secs[i] = delta;
     }
 
-    /* 3) Apply fuzz to day-level intervals (only for ratings 1..3 as before we do i>=1) */
+    /* 3) Apply fuzz to day-level intervals */
     for (int i = 1; i < 4; ++i) {
         if (is_day[i]) {
             uint32_t days = (uint32_t)(secs[i] / FSRS_SEC_PER_DAY);
@@ -1128,19 +1133,13 @@ void fsrs_preview(const fsrs_deck *deck, const fsrs_card *card, uint64_t now, ui
         }
     }
 
-    /* 4) Normalize monotonicity in seconds:
-       ensure secs[1] > secs[0], secs[2] > secs[1], secs[3] > secs[2]
-       - if both are day-level, step by 1 day
-       - otherwise step by 60s (1 minute)
-    */
+    /* 4) Normalize monotonicity */
     for (int i = 1; i < 4; ++i) {
         if (secs[i] <= secs[i-1]) {
             if (is_day[i] && is_day[i-1]) {
                 secs[i] = secs[i-1] + FSRS_SEC_PER_DAY;
             } else {
-                /* step by 1 minute */
                 secs[i] = secs[i-1] + 60;
-                /* if this one is supposed to be day-level, round up to next whole day */
                 if (is_day[i]) {
                     uint64_t days = (secs[i] + FSRS_SEC_PER_DAY - 1) / FSRS_SEC_PER_DAY;
                     secs[i] = days * FSRS_SEC_PER_DAY;
@@ -1149,15 +1148,15 @@ void fsrs_preview(const fsrs_deck *deck, const fsrs_card *card, uint64_t now, ui
         }
     }
 
-    /* 5) Rebuild out[] timestamps (keep again as computed if it was instant learning-step; we already used secs[0]) */
+    /* 5) Rebuild out[] timestamps */
     for (int i = 0; i < 4; ++i) {
         out[i] = now + secs[i];
     }
-    // restore rng state
+
     ((fsrs_deck*)d)->rng_state = rng_state_backup;
 }
 
-/* ==================== Statistics / misc ==================== */
+/* ==================== Statistics ==================== */
 
 void fsrs_compute_stats(const fsrs_deck *d, uint64_t now, fsrs_stats *out) {
     if (!d || !out) return;
@@ -1171,22 +1170,17 @@ void fsrs_compute_stats(const fsrs_deck *d, uint64_t now, fsrs_stats *out) {
     for (uint32_t i = 0; i < d->count; ++i) {
         const fsrs_card *c = &d->cards[i];
         switch (c->state) {
-            case FSRS_STATE_NEW: out->new_count++; break;
-            case FSRS_STATE_LEARNING: out->learning_count++; break;
+            case FSRS_STATE_NEW:        out->new_count++;        break;
+            case FSRS_STATE_LEARNING:   out->learning_count++;   break;
             case FSRS_STATE_RELEARNING: out->relearning_count++; break;
-            case FSRS_STATE_REVIEW: out->review_count++; break;
-            case FSRS_STATE_SUSPENDED: out->suspended_count++; break;
+            case FSRS_STATE_REVIEW:     out->review_count++;     break;
+            case FSRS_STATE_SUSPENDED:  out->suspended_count++;  break;
             default: break;
         }
         if (c->flags & FSRS_FLAG_LEECH) out->leech_count++;
         if (c->lapses > 0) out->cards_with_lapses++;
-        //if (c->due_day <= today) out->due_now++;
-        //if (c->due_day <= today + 1) out->due_today++;
-        if (c->due_day <= today)
-            out->due_now++;
-
-        if (c->due_day == today)
-            out->due_today++;
+        if (c->due_day <= today) out->due_now++;
+        if (c->due_day == today) out->due_today++;
 
         if (c->stability > 0.0f && c->state != FSRS_STATE_SUSPENDED) {
             sum_s += c->stability;
@@ -1200,20 +1194,21 @@ void fsrs_compute_stats(const fsrs_deck *d, uint64_t now, fsrs_stats *out) {
     }
 
     if (r_count > 0) {
-        out->average_stability = sum_s / (float)r_count;
+        out->average_stability  = sum_s / (float)r_count;
         out->average_difficulty = sum_d / (float)r_count;
-        out->retention = sum_r / (float)r_count;
+        out->retention          = sum_r / (float)r_count;
     }
 }
+
 void fsrs_format_interval(uint64_t secs, char *buf, size_t len) {
     if (!buf || !len) return;
 
-    uint64_t m = secs / 60;
-    uint64_t h = secs / 3600;
-    uint64_t d = secs / 86400;
-    uint64_t w = d / 7;
+    uint64_t m  = secs / 60;
+    uint64_t h  = secs / 3600;
+    uint64_t d  = secs / 86400;
+    uint64_t w  = d / 7;
     uint64_t mo = d / 30;
-    uint64_t y = d / 365;
+    uint64_t y  = d / 365;
 
     if (secs < 60)
         snprintf(buf, len, "%lu %s", (unsigned long)secs, secs == 1 ? "segundo" : "segundos");
@@ -1238,20 +1233,20 @@ bool fsrs_save(const fsrs_deck *d, const char *path) {
     FILE *f = fopen(path, "wb");
     if (!f) return false;
 
-    uint32_t magic = FSRS_MAGIC;
-    uint32_t ver = FSRS_FILE_VER;
-    uint32_t count = d->count;
+    uint32_t magic   = FSRS_MAGIC;
+    uint32_t ver     = FSRS_FILE_VER;
+    uint32_t count   = d->count;
     uint64_t cur_day = d->current_day;
-    uint32_t nt = d->new_today;
-    uint32_t rt = d->reviews_today;
+    uint32_t nt      = d->new_today;
+    uint32_t rt      = d->reviews_today;
 
     bool ok =
-        fwrite(&magic, 4, 1, f) == 1 &&
-        fwrite(&ver, 4, 1, f) == 1 &&
-        fwrite(&count, 4, 1, f) == 1 &&
+        fwrite(&magic,   4, 1, f) == 1 &&
+        fwrite(&ver,     4, 1, f) == 1 &&
+        fwrite(&count,   4, 1, f) == 1 &&
         fwrite(&cur_day, 8, 1, f) == 1 &&
-        fwrite(&nt, 4, 1, f) == 1 &&
-        fwrite(&rt, 4, 1, f) == 1 &&
+        fwrite(&nt,      4, 1, f) == 1 &&
+        fwrite(&rt,      4, 1, f) == 1 &&
         (count == 0 || fwrite(d->cards, sizeof(fsrs_card), count, f) == count);
 
     fclose(f);
@@ -1267,12 +1262,12 @@ fsrs_deck* fsrs_load(const char *path, const fsrs_params *params) {
     uint64_t cur_day;
     uint32_t nt, rt;
     bool ok =
-        fread(&magic, 4, 1, f) == 1 && magic == FSRS_MAGIC &&
-        fread(&ver, 4, 1, f) == 1 && ver == FSRS_FILE_VER &&
-        fread(&count, 4, 1, f) == 1 &&
+        fread(&magic,   4, 1, f) == 1 && magic == FSRS_MAGIC &&
+        fread(&ver,     4, 1, f) == 1 && ver   == FSRS_FILE_VER &&
+        fread(&count,   4, 1, f) == 1 &&
         fread(&cur_day, 8, 1, f) == 1 &&
-        fread(&nt, 4, 1, f) == 1 &&
-        fread(&rt, 4, 1, f) == 1;
+        fread(&nt,      4, 1, f) == 1 &&
+        fread(&rt,      4, 1, f) == 1;
 
     if (!ok) { fclose(f); return NULL; }
 
@@ -1287,8 +1282,8 @@ fsrs_deck* fsrs_load(const char *path, const fsrs_params *params) {
     fsrs_deck *d = fsrs_deck_create(max_id + 64, params);
     if (!d) { free(tmp); return NULL; }
 
-    d->current_day = cur_day;
-    d->new_today = nt;
+    d->current_day  = cur_day;
+    d->new_today    = nt;
     d->reviews_today = rt;
 
     for (uint32_t i = 0; i < count; ++i) {
@@ -1302,8 +1297,7 @@ fsrs_deck* fsrs_load(const char *path, const fsrs_params *params) {
         }
         uint32_t idx = d->count++;
         d->cards[idx] = tmp[i];
-        /* ensure heap positions valid (reset) */
-        d->cards[idx].heap_pos_due = -1;
+        d->cards[idx].heap_pos_due   = -1;
         d->cards[idx].heap_pos_learn = -1;
         _bitmap_set(d, id, true);
         d->id_to_index[id] = idx;

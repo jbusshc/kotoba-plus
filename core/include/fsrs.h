@@ -5,6 +5,7 @@
  *  - due_day (days since epoch) -> scheduling logic (FSRS)
  *  - due_ts  (unix seconds)     -> cooldown / ordering inside a day
  *  - per-card heap indices for O(log n) removals
+ *  - order_mode: MIXED / REVIEW_FIRST / NEW_FIRST
  */
 
 #ifndef FSRS_H
@@ -56,6 +57,16 @@ typedef enum {
     FSRS_FLAG_SNOOZED = 1 << 3
 } fsrs_flags;
 
+/*
+ * Order mode controls how new cards and reviews are interleaved.
+ * Learning / relearning steps always take priority regardless of mode.
+ */
+typedef enum {
+    FSRS_ORDER_MIXED        = 0,  /* default: reviews first, new cards interleaved via mix_burst_size */
+    FSRS_ORDER_REVIEW_FIRST = 1,  /* all due reviews before any new card */
+    FSRS_ORDER_NEW_FIRST    = 2   /* all new cards before any review */
+} fsrs_order_mode;
+
 typedef struct {
     float w[19];
     float desired_retention;
@@ -76,6 +87,8 @@ typedef struct {
     float new_review_ratio;
     uint32_t mix_burst_size;
     bool enable_fuzz;
+
+    fsrs_order_mode order_mode;
 } fsrs_params;
 
 /* Card structure: due_day is FSRS day index, due_ts is unix seconds for ordering/cooldown.

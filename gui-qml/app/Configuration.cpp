@@ -113,6 +113,7 @@ void saveConfiguration(const Configuration &c, const QString &filePath)
     s.setValue("app_version", c.appVersion);
     s.setValue("auto_save", c.autoSave);
     s.setValue("check_updates", c.checkUpdates);
+    s.setValue("first_run", c.firstRun);
     s.endGroup();
 
     s.beginGroup("Sync");
@@ -144,6 +145,7 @@ void saveConfiguration(const Configuration &c, const QString &filePath)
     s.setValue("page_size", c.pageSize);
     s.setValue("search_delay_ms", c.searchDelayMs);
     s.setValue("search_on_typing", c.searchOnTyping);
+    s.setValue("show_romaji", c.showRomaji);
     s.endGroup();
 
     s.beginGroup("Language");
@@ -167,6 +169,7 @@ void saveConfiguration(const Configuration &c, const QString &filePath)
     s.setValue("learningSteps", c.learningSteps);
     s.setValue("relearningSteps", c.relearningSteps);
     s.setValue("dayOffset", c.dayOffset);
+    s.setValue("order_mode", c.order_mode);
     s.endGroup();
 
     s.beginGroup("UI");
@@ -199,6 +202,7 @@ bool loadConfiguration(Configuration &c, const QString &filePath)
     c.appVersion = s.value("app_version", c.appVersion).toString();
     c.autoSave = s.value("auto_save", c.autoSave).toBool();
     c.checkUpdates = s.value("check_updates", c.checkUpdates).toBool();
+    c.firstRun = s.value("first_run", c.firstRun).toBool();
     s.endGroup();
 
     s.beginGroup("Sync");
@@ -230,6 +234,7 @@ bool loadConfiguration(Configuration &c, const QString &filePath)
     c.pageSize = s.value("page_size", c.pageSize).toInt();
     c.searchDelayMs = s.value("search_delay_ms", c.searchDelayMs).toInt();
     c.searchOnTyping = s.value("search_on_typing", c.searchOnTyping).toBool();
+    c.showRomaji = s.value("show_romaji", c.showRomaji).toBool();
     s.endGroup();
 
     s.beginGroup("Language");
@@ -250,9 +255,11 @@ bool loadConfiguration(Configuration &c, const QString &filePath)
     c.reviewsPerDay = s.value("reviewsPerDay", c.reviewsPerDay).toInt();
     c.leechThreshold = s.value("leechThreshold", c.leechThreshold).toInt();
     c.enableFuzz = s.value("enableFuzz", c.enableFuzz).toBool();
+    c.order_mode = s.value("order_mode", c.order_mode).toInt();
     c.learningSteps = s.value("learningSteps", c.learningSteps).toString();
     c.relearningSteps = s.value("relearningSteps", c.relearningSteps).toString();
     c.dayOffset = s.value("dayOffset", c.dayOffset).toInt();
+    c.order_mode = s.value("order_mode", c.order_mode).toInt();
     s.endGroup();
 
     s.beginGroup("UI");
@@ -274,6 +281,8 @@ bool loadConfiguration(Configuration &c, const QString &filePath)
     c.learningStepsParsed = parseSteps(c.learningSteps);
     c.relearningStepsParsed = parseSteps(c.relearningSteps);
 
+    if (c.firstRun)
+        c.firstRun = false; // si estamos cargando, ya no es el primer run
     return true;
 }
 
@@ -311,5 +320,8 @@ void ConfigWrapper::reloadFromDisk()
     emit leechThresholdChanged();
     emit maximumIntervalChanged();
     emit dayOffsetChanged();
+    emit firstRunChanged();
+    emit showRomajiChanged();
+    emit orderModeChanged();
 }
  

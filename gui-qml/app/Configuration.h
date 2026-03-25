@@ -22,6 +22,7 @@ struct Configuration {
     QString appVersion = "1.0";
     bool autoSave = true;
     bool checkUpdates = false;
+    bool firstRun = true;
 
     // ---------------- Sync ----------------
     uint64_t deviceId = 0;
@@ -70,6 +71,7 @@ struct Configuration {
     QString learningSteps    = "1m 10m";
     QString relearningSteps  = "10m";
     int     dayOffset        = 14400;
+    int     order_mode       = 0; // 0 = MIXED, 1 = REVIEW_FIRST, 2 = NEW_FIRST
 
     // ---------------- UI ----------------
     QString accentColor = "blue";
@@ -104,7 +106,7 @@ class ConfigWrapper : public QObject
     // ── Dictionary ──────────────────────────────────────────────────────────
     Q_PROPERTY(int     searchDelayMs    READ searchDelayMs    WRITE setSearchDelayMs    NOTIFY searchDelayMsChanged)
     Q_PROPERTY(bool    searchOnTyping   READ searchOnTyping   WRITE setSearchOnTyping   NOTIFY searchOnTypingChanged)
-
+    Q_PROPERTY(bool    showRomaji       READ showRomaji       WRITE setShowRomaji       NOTIFY showRomajiChanged)
     // ── Language ────────────────────────────────────────────────────────────
     Q_PROPERTY(QString glossLanguages   READ glossLanguages   WRITE setGlossLanguages   NOTIFY glossLanguagesChanged)
     Q_PROPERTY(QString fallbackLanguage READ fallbackLanguage WRITE setFallbackLanguage NOTIFY fallbackLanguageChanged)
@@ -118,13 +120,14 @@ class ConfigWrapper : public QObject
     Q_PROPERTY(int     leechThreshold   READ leechThreshold   WRITE setLeechThreshold   NOTIFY leechThresholdChanged)
     Q_PROPERTY(int     maximumInterval  READ maximumInterval  WRITE setMaximumInterval  NOTIFY maximumIntervalChanged)
     Q_PROPERTY(int     dayOffset        READ dayOffset        WRITE setDayOffset        NOTIFY dayOffsetChanged)
-
+    Q_PROPERTY(int     orderMode        READ orderMode        WRITE setOrderMode        NOTIFY orderModeChanged)
     // ── Read-only ────────────────────────────────────────────────────────────
     Q_PROPERTY(QString appVersion CONSTANT READ appVersion)
     Q_PROPERTY(quint64 deviceId   CONSTANT READ deviceId)
+    Q_PROPERTY(bool firstRun       CONSTANT READ firstRun)
 
 public:
-    explicit ConfigWrapper(QObject *parent = nullptr) : QObject(parent) {}
+    explicit ConfigWrapper(QObject *parent = nullptr) : QObject(parent) { memset(m_config.languages, 0, sizeof(m_config.languages)); m_config.languages[KOTOBA_LANG_EN] = true; }
 
     Configuration m_config;
     QString       m_configPath;   // set from main.cpp after loadConfiguration()
@@ -153,6 +156,9 @@ public:
     int     dayOffset()         const { return m_config.dayOffset; }
     QString appVersion()        const { return m_config.appVersion; }
     quint64 deviceId()          const { return static_cast<quint64>(m_config.deviceId); }
+    bool    firstRun()            const { return m_config.firstRun; }
+    bool    showRomaji()          const { return m_config.showRomaji; }
+    int     orderMode()           const { return m_config.order_mode; }
 
     // ── Setters ──────────────────────────────────────────────────────────────
     void setTheme(const QString &v)            { if (v != m_config.theme)            { m_config.theme            = v; emit themeChanged(); } }
@@ -173,6 +179,9 @@ public:
     void setLeechThreshold(int v)              { if (v != m_config.leechThreshold)   { m_config.leechThreshold   = v; emit leechThresholdChanged(); } }
     void setMaximumInterval(int v)             { if (v != m_config.maximumInterval)  { m_config.maximumInterval  = v; emit maximumIntervalChanged(); } }
     void setDayOffset(int v)                   { if (v != m_config.dayOffset)        { m_config.dayOffset        = v; emit dayOffsetChanged(); } }
+    void setFirstRun(bool v)                   { if (v != m_config.firstRun)         { m_config.firstRun         = v; emit firstRunChanged(); } }
+    void setShowRomaji(bool v)                 { if (v != m_config.showRomaji)       { m_config.showRomaji       = v; emit showRomajiChanged(); } }
+    void setOrderMode(int v)                  { if (v != m_config.order_mode)       { m_config.order_mode       = v; emit orderModeChanged(); } }
 
 signals:
     void themeChanged();
@@ -193,6 +202,9 @@ signals:
     void leechThresholdChanged();
     void maximumIntervalChanged();
     void dayOffsetChanged();
+    void firstRunChanged();
+    void showRomajiChanged();
+    void orderModeChanged();
 };
 
 

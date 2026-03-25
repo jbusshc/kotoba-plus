@@ -2,19 +2,9 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Controls.Material
+import Qt5Compat.GraphicalEffects
 import Kotoba 1.0
 
-// ──────────────────────────────────────────────────────────────────────────────
-// SettingsPage — Refactored
-//
-// Design principles:
-//   • All repeated patterns (toggle, stepper, row, section header) are inline
-//     components with clean, typed APIs.
-//   • No anchors inside ColumnLayout children — Layout.* only.
-//   • No raw RowLayout duplicated for every toggle — use SettingRow + ToggleControl.
-//   • StepperField is a single self-contained component used everywhere.
-//   • Dirty-detection and snapshot logic unchanged in behaviour, cleaned in style.
-// ──────────────────────────────────────────────────────────────────────────────
 
 Page {
     id: page
@@ -58,6 +48,8 @@ Page {
             leechThreshold:    appConfig.leechThreshold,
             dayOffset:         appConfig.dayOffset,
             enableFuzz:        appConfig.enableFuzz,
+            orderMode:         appConfig.orderMode,
+            showRomaji:        appConfig.showRomaji,
         }
     }
 
@@ -79,6 +71,8 @@ Page {
              || snapshot.leechThreshold    !== appConfig.leechThreshold
              || snapshot.dayOffset         !== appConfig.dayOffset
              || snapshot.enableFuzz        !== appConfig.enableFuzz
+             || snapshot.orderMode         !== appConfig.orderMode
+             || snapshot.showRomaji        !== appConfig.showRomaji
     }
 
     function markDirty() { if (ready) checkDirty() }
@@ -106,6 +100,8 @@ Page {
         appConfig.leechThreshold    = 8
         appConfig.dayOffset         = 14400
         appConfig.enableFuzz        = true
+        appConfig.orderMode         = 0
+        appConfig.showRomaji        = false
         checkDirty()
         applySettings()
     }
@@ -802,6 +798,18 @@ Page {
                             onValueChanged: { appConfig.searchDelayMs = value; page.markDirty() }
                         }
                     }
+                    RowDivider {}
+
+                    SettingRow {
+                        label: "Show Romaji"
+
+                        ToggleSwitch {
+                            anchors.right:          parent.right
+                            anchors.verticalCenter: parent.verticalCenter
+                            checked: appConfig.showRomaji
+                            onToggled: (v) => { appConfig.showRomaji = v; page.markDirty() }
+                        }
+                    }
 
 
                     // ── SPACED REPETITION ─────────────────────────────────────
@@ -906,7 +914,159 @@ Page {
                             onToggled: (v) => { appConfig.enableFuzz = v; page.markDirty() }
                         }
                     }
+                    
+                    RowDivider {}
 
+                    SettingRow {
+                        label:   "Scheduler Order"
+                        tip:     "Controls the order in which cards are reviewed first."
+                        compact: true
+
+                        ComboBox {
+                            id: combo
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: parent.width
+                            height: 30
+
+                            model: ["Mixed", "Review First", "New First"]
+                            currentIndex: appConfig.orderMode
+
+                            onCurrentIndexChanged: {
+                                appConfig.orderMode = currentIndex
+                                page.markDirty()
+                            }
+
+                            // ── Background ─────────────────────────────────────────
+                            background: Rectangle {
+                                radius: 6
+                                color: combo.pressed
+                                    ? Qt.rgba(1, 1, 1, 0.14)
+                                    : combo.hovered
+                                        ? Qt.rgba(1, 1, 1, 0.10)
+                                        : Qt.rgba(1, 1, 1, 0.05)
+                                border.width: 1
+                                border.color: combo.hovered
+                                    ? Qt.rgba(page.accentColor.r, page.accentColor.g, page.accentColor.b, 0.5)
+                                    : Qt.rgba(1, 1, 1, 0.10)
+                                Behavior on color       { ColorAnimation { duration: 100 } }
+                                Behavior on border.color { ColorAnimation { duration: 120 } }
+                            }
+
+                            // ── Texto seleccionado ──────────────────────────────────
+                            contentItem: Text {
+                                text:              combo.displayText
+                                font.pixelSize:    Theme.fontSizeSmall
+                                color:             page.textColor
+                                verticalAlignment: Text.AlignVCenter
+                                elide:             Text.ElideRight
+                                leftPadding:       10
+                                rightPadding:      24
+                            }
+
+                            // ── Flecha ─────────────────────────────────────────────
+                            indicator: Text {
+                                text:   "▾"
+                                font.pixelSize: 12
+                                color:  page.hintColor
+                                anchors.right:          parent.right
+                                anchors.rightMargin:    8
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+
+                            // ── Popup ───────────────────────────────────────────────
+                            popup: Popup {
+                                y:      combo.height + 4
+                                width:  combo.width
+                                height: combo.count * 36
+                                padding: 4
+
+                                // Cierra si se clickea fuera
+                                closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutsideParent
+
+                                background: Rectangle {
+                                    radius:       6
+                                    color:        Theme.cardBackground
+                                    border.width: 1
+                                    border.color: page.dividerColor
+
+                                    layer.enabled: true
+                                    layer.effect: DropShadow {
+                                        transparentBorder: true
+                                        radius:   12
+                                        samples:  17
+                                        color:    "#60000000"
+                                        verticalOffset: 4
+                                    }
+                                }
+
+                                contentItem: ListView {
+                                    clip:        true
+                                    interactive: false
+                                    model:       combo.delegateModel   // ← delegateModel, no combo.model
+
+                                    // Highlight animado entre items
+                                    highlight: Rectangle {
+                                        radius: 4
+                                        color: Qt.rgba(
+                                            page.accentColor.r,
+                                            page.accentColor.g,
+                                            page.accentColor.b,
+                                            0.20
+                                        )
+                                        Behavior on y { SmoothedAnimation { velocity: 200 } }
+                                    }
+                                    highlightFollowsCurrentItem: true
+                                    currentIndex: combo.highlightedIndex
+                                }
+                            }
+
+                            // ── Delegate ────────────────────────────────────────────
+                            delegate: ItemDelegate {
+                                width:  combo.width - 8   // margen para el padding del popup
+                                height: 36
+
+                                // Selecciona y cierra al hacer click
+                                onClicked: {
+                                    combo.currentIndex = index
+                                    combo.popup.close()
+                                }
+
+                                // Hover highlight
+                                background: Rectangle {
+                                    radius: 4
+                                    color: hovered
+                                        ? Qt.rgba(1, 1, 1, 0.08)
+                                        : "transparent"
+                                    Behavior on color { ColorAnimation { duration: 80 } }
+                                }
+
+                                contentItem: Row {
+                                    spacing:         8
+                                    leftPadding:     6
+                                    anchors.verticalCenter: parent.verticalCenter
+
+                                    // Checkmark en el item activo
+                                    Text {
+                                        text:           index === combo.currentIndex ? "✓" : ""
+                                        font.pixelSize: Theme.fontSizeSmall
+                                        color:          page.accentColor
+                                        width:          14
+                                        verticalAlignment: Text.AlignVCenter
+                                    }
+
+                                    Text {
+                                        text:              modelData
+                                        font.pixelSize:    Theme.fontSizeSmall
+                                        color:             index === combo.currentIndex
+                                                            ? page.accentColor
+                                                            : page.textColor
+                                        verticalAlignment: Text.AlignVCenter
+                                        Behavior on color { ColorAnimation { duration: 80 } }
+                                    }
+                                }
+                            }
+                        }
+                    }
 
                     // ── ABOUT ─────────────────────────────────────────────────
                     SectionHeader { title: "About" }
