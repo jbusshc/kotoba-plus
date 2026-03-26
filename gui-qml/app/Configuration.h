@@ -8,6 +8,8 @@
 
 #include <types.h>
 
+class SearchService;
+class SrsService;
 
 // ─────────────────────────────────────────────────────────────
 // Core config
@@ -45,11 +47,11 @@ struct Configuration {
     QString srsPath       = "profile.srs";
 
     // ---------------- Dictionary ----------------
-    bool highlightMatches = true;
-    int  maxResults       = 0;
-    int  pageSize         = 20;
+    bool highlightMatches = true; 
+    int  maxResults       = 0; 
+    int  pageSize         = 20; 
     int  searchDelayMs    = 150;
-    bool searchOnTyping   = true;
+    bool searchOnTyping   = true; 
     bool showRomaji       = false;
 
     // ---------------- Language ----------------
@@ -71,7 +73,7 @@ struct Configuration {
     QString learningSteps    = "1m 10m";
     QString relearningSteps  = "10m";
     int     dayOffset        = 14400;
-    int     order_mode       = 0; // 0 = MIXED, 1 = REVIEW_FIRST, 2 = NEW_FIRST
+    int     orderMode       = 0; // 0 = MIXED, 1 = REVIEW_FIRST, 2 = NEW_FIRST
 
     // ---------------- UI ----------------
     QString accentColor = "blue";
@@ -135,6 +137,8 @@ public:
     Q_INVOKABLE void saveToDisk();
     Q_INVOKABLE void reloadFromDisk();
 
+    void applyToServices();
+
     // ── Getters ──────────────────────────────────────────────────────────────
     QString theme()             const { return m_config.theme; }
     QString accentColor()       const { return m_config.accentColor; }
@@ -158,7 +162,7 @@ public:
     quint64 deviceId()          const { return static_cast<quint64>(m_config.deviceId); }
     bool    firstRun()            const { return m_config.firstRun; }
     bool    showRomaji()          const { return m_config.showRomaji; }
-    int     orderMode()           const { return m_config.order_mode; }
+    int     orderMode()           const { return m_config.orderMode; }
 
     // ── Setters ──────────────────────────────────────────────────────────────
     void setTheme(const QString &v)            { if (v != m_config.theme)            { m_config.theme            = v; emit themeChanged(); } }
@@ -181,7 +185,8 @@ public:
     void setDayOffset(int v)                   { if (v != m_config.dayOffset)        { m_config.dayOffset        = v; emit dayOffsetChanged(); } }
     void setFirstRun(bool v)                   { if (v != m_config.firstRun)         { m_config.firstRun         = v; emit firstRunChanged(); } }
     void setShowRomaji(bool v)                 { if (v != m_config.showRomaji)       { m_config.showRomaji       = v; emit showRomajiChanged(); } }
-    void setOrderMode(int v)                  { if (v != m_config.order_mode)       { m_config.order_mode       = v; emit orderModeChanged(); } }
+    void setOrderMode(int v)                   { if (v != m_config.orderMode)       { m_config.orderMode       = v; emit orderModeChanged(); } }
+    void setServices(SearchService *searchService, SrsService *srsService) { m_searchService = searchService; m_srsService = srsService; }
 
 signals:
     void themeChanged();
@@ -205,6 +210,9 @@ signals:
     void firstRunChanged();
     void showRomajiChanged();
     void orderModeChanged();
+    private:
+        SearchService *m_searchService;
+        SrsService *m_srsService;
 };
 
 

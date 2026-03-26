@@ -81,6 +81,7 @@ Page {
         appConfig.saveToDisk()
         takeSnapshot()
         dirty = false
+        appConfig.applyToServices()
     }
 
     function resetToDefaults() {

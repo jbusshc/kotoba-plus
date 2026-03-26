@@ -19,11 +19,12 @@ public:
     void queryNonPagination(const QString &q);   // nueva: query sin paginación (para obtener conteo total)
     void queryNextPage();
 
+    void updateConfig(const Configuration* config);
     // access to context (read-only)
     const SearchContext* searchCtx() const { return &m_ctx; }
 
 private:
     SearchContext m_ctx;
     kotoba_dict *m_dict;
-    Configuration* m_config;
+    const Configuration* m_config;
 };

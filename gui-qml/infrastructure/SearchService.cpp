@@ -66,3 +66,15 @@ void SearchService::queryNextPage()
     if (m_ctx.results_left)
         query_next_page(&m_ctx);
 }
+
+void SearchService::updateConfig(const Configuration* config)
+{
+    m_config = config; // actualizar puntero a config
+    // debug print
+    qDebug() << "SearchService::updateConfig called. New languages:";
+    for (int i = 0; i < KOTOBA_LANG_COUNT; ++i) {
+        if (config->languages[i] == 0) continue; // skip false entries;
+        qDebug() << i << " -" << config->languages[i];
+    }
+    update_search_config(&m_ctx, config->languages, config->pageSize);
+}

@@ -123,6 +123,8 @@ KOTOBA_API void query_next_page(struct SearchContext *ctx);
 KOTOBA_API
 void warm_up(struct SearchContext *ctx);
 
+KOTOBA_API void update_search_config(struct SearchContext *ctx, const bool *glosses_active, uint32_t page_size);
+
 
 
 #ifdef __cplusplus

@@ -6,6 +6,9 @@
 #include <QRegularExpression>
 #include <random>
 
+#include "../infrastructure/SearchService.h"
+#include "../infrastructure/SrsService.h"
+
 // ─────────────────────────────────────────
 // device id
 // ─────────────────────────────────────────
@@ -169,7 +172,7 @@ void saveConfiguration(const Configuration &c, const QString &filePath)
     s.setValue("learningSteps", c.learningSteps);
     s.setValue("relearningSteps", c.relearningSteps);
     s.setValue("dayOffset", c.dayOffset);
-    s.setValue("order_mode", c.order_mode);
+    s.setValue("order_mode", c.orderMode);
     s.endGroup();
 
     s.beginGroup("UI");
@@ -255,11 +258,10 @@ bool loadConfiguration(Configuration &c, const QString &filePath)
     c.reviewsPerDay = s.value("reviewsPerDay", c.reviewsPerDay).toInt();
     c.leechThreshold = s.value("leechThreshold", c.leechThreshold).toInt();
     c.enableFuzz = s.value("enableFuzz", c.enableFuzz).toBool();
-    c.order_mode = s.value("order_mode", c.order_mode).toInt();
     c.learningSteps = s.value("learningSteps", c.learningSteps).toString();
     c.relearningSteps = s.value("relearningSteps", c.relearningSteps).toString();
     c.dayOffset = s.value("dayOffset", c.dayOffset).toInt();
-    c.order_mode = s.value("order_mode", c.order_mode).toInt();
+    c.orderMode = s.value("order_mode", c.orderMode).toInt();
     s.endGroup();
 
     s.beginGroup("UI");
@@ -325,3 +327,11 @@ void ConfigWrapper::reloadFromDisk()
     emit orderModeChanged();
 }
  
+void ConfigWrapper::applyToServices()
+{
+    if (m_searchService)
+        m_searchService->updateConfig(&m_config);
+
+    if (m_srsService)
+        m_srsService->updateConfig(&m_config);
+}

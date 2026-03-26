@@ -1315,3 +1315,41 @@ const fsrs_card* fsrs_deck_card(const fsrs_deck *deck, uint32_t idx) {
 }
 
 uint64_t fsrs_now(void) { return (uint64_t)time(NULL); }
+
+
+void update_srs_config(fsrs_deck *deck, 
+    float *w, float desired_retention, uint32_t maximum_interval,
+        uint32_t leech_threshold, uint32_t day_offset_secs,
+        uint32_t new_cards_per_day, uint32_t reviews_per_day,
+        const uint32_t *learning_steps, uint32_t learning_steps_count,
+        const uint32_t *relearning_steps, uint32_t relearning_steps_count,
+        float new_review_ratio, uint32_t mix_burst_size, bool enable_fuzz,
+        fsrs_order_mode order_mode
+){
+
+    fsrs_params *params = &deck->params;
+
+    // ignore w for now, as it's not being updated dynamically in this implementation
+    if (params->w && w) {
+        memcpy(params->w, w, 9 * sizeof(float));
+    }
+
+    params->desired_retention = desired_retention;
+    params->maximum_interval = maximum_interval;
+    params->leech_threshold = leech_threshold;
+    params->day_offset_secs = day_offset_secs;
+    params->new_cards_per_day = new_cards_per_day;
+    params->reviews_per_day = reviews_per_day;
+    if (learning_steps && learning_steps_count > 0) {
+        params->learning_steps = learning_steps;
+        params->learning_steps_count = learning_steps_count;
+    }
+    if (relearning_steps && relearning_steps_count > 0) {
+        params->relearning_steps = relearning_steps;
+        params->relearning_steps_count = relearning_steps_count;
+    }
+    // params->new_review_ratio = new_review_ratio;
+    // params->mix_burst_size = mix_burst_size; not in config yet
+    params->enable_fuzz = enable_fuzz;
+    params->order_mode = order_mode;
+}

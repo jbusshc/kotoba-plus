@@ -95,6 +95,7 @@ int main(int argc, char **argv)
 
     std::string srsProfilePath = configWrapper.m_config.srsPath.toStdString();
 
+    configWrapper.setServices(searchSvc, srsSvc);
     printf("Loading SRS profile...\n");
     srsSvc->load(srsProfilePath.c_str());
 
@@ -110,6 +111,8 @@ int main(int argc, char **argv)
             configPath
         );
     });
+
+
     
     int result = app.exec();
 

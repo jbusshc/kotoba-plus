@@ -1,7 +1,7 @@
 #include "SrsService.h"
 #include "SrsHistoryLog.h"
 #include "../app/Configuration.h"
-
+#include "../../core/include/fsrs.h"
 #include <string>
 #include <cstring>
 
@@ -468,4 +468,23 @@ std::string SrsService::stateText(uint32_t entryId) const
         case FSRS_STATE_SUSPENDED:  return "Suspended";
         default:                    return "Unknown";
     }
+}
+
+void SrsService::updateConfig(const Configuration* config)
+{
+    if (!config) return;
+
+    m_config = config;
+
+    // srs 
+    update_srs_config(m_deck,
+        nullptr, // w no se actualiza dinámicamente 
+        config->desiredRetention, config->maximumInterval, config->leechThreshold,
+        config->dayOffset, config->newCardsPerDay, config->reviewsPerDay,
+        nullptr, 0, // learning steps no se actualizan dinámicamente
+        nullptr, 0, // relearning steps no se actualizan dinámicamente
+        0, 0, config->enableFuzz,
+        static_cast<fsrs_order_mode>(config->orderMode)
+    );
+
 }

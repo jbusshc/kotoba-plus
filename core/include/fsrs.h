@@ -188,6 +188,16 @@ uint32_t fsrs_deck_count(const fsrs_deck *deck);
 const fsrs_card* fsrs_deck_card(const fsrs_deck *deck, uint32_t idx);
 uint64_t fsrs_now(void);
 
+void update_srs_config(fsrs_deck *deck, 
+    float *w, float desired_retention, uint32_t maximum_interval,
+        uint32_t leech_threshold, uint32_t day_offset_secs,
+        uint32_t new_cards_per_day, uint32_t reviews_per_day,
+        const uint32_t *learning_steps, uint32_t learning_steps_count,
+        const uint32_t *relearning_steps, uint32_t relearning_steps_count,
+        float new_review_ratio, uint32_t mix_burst_size, bool enable_fuzz,
+        fsrs_order_mode order_mode
+);
+
 #ifdef __cplusplus
 }
 #endif

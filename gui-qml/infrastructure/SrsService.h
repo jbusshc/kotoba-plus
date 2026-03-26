@@ -71,6 +71,8 @@ public:
     bool undoLastAnswer();
     bool canUndo() const { return m_undoStack.has_value(); }
 
+    void updateConfig(const Configuration* config);
+
 private:
 
     struct UndoEntry {
@@ -93,7 +95,7 @@ private:
     fsrs_session m_session = {};
 
     uint32_t     m_dictSize = 0;
-    Configuration *m_config = nullptr;
+    const Configuration *m_config = nullptr;
     std::string  m_profilePath;
 
     std::unique_ptr<SrsHistoryLog> m_history;

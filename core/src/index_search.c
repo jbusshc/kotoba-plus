@@ -789,3 +789,13 @@ void warm_up(struct SearchContext *ctx)
         }
     }
 }
+
+void update_search_config(struct SearchContext *ctx, const bool *glosses_active, uint32_t page_size)
+{
+    if (page_size > 0 && page_size <= PAGE_SIZE_MAX)
+        ctx->page_size = page_size;
+    
+
+    if (glosses_active)
+        memcpy(ctx->is_gloss_active, glosses_active, sizeof(ctx->is_gloss_active));
+}
