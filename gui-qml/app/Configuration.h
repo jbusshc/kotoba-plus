@@ -137,7 +137,7 @@ public:
     Q_INVOKABLE void saveToDisk();
     Q_INVOKABLE void reloadFromDisk();
 
-    void applyToServices();
+    Q_INVOKABLE void applyToServices();
 
     // ── Getters ──────────────────────────────────────────────────────────────
     QString theme()             const { return m_config.theme; }

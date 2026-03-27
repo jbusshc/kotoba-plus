@@ -1351,5 +1351,9 @@ void update_srs_config(fsrs_deck *deck,
     // params->new_review_ratio = new_review_ratio;
     // params->mix_burst_size = mix_burst_size; not in config yet
     params->enable_fuzz = enable_fuzz;
+    if (order_mode != FSRS_ORDER_REVIEW_FIRST && order_mode != FSRS_ORDER_NEW_FIRST && order_mode != FSRS_ORDER_MIXED) {
+        order_mode = FSRS_ORDER_MIXED; // default to MIXED if invalid
+        LOG_DEBUG("Invalid order_mode provided=%d, defaulting to MIXED", order_mode);
+    }
     params->order_mode = order_mode;
 }

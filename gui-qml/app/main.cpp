@@ -7,7 +7,6 @@
 #include <QDebug>
 #include <QQuickStyle>
 
-
 #include "../infrastructure/DictionaryRepository.h"
 #include "../infrastructure/SearchService.h"
 #include "../infrastructure/SrsService.h"
@@ -111,8 +110,6 @@ int main(int argc, char **argv)
             configPath
         );
     });
-
-
     
     int result = app.exec();
 

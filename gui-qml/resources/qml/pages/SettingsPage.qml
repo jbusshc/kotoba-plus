@@ -77,7 +77,7 @@ Page {
 
     function markDirty() { if (ready) checkDirty() }
 
-    function applySettings() {
+    function applySettings() {  
         appConfig.saveToDisk()
         takeSnapshot()
         dirty = false

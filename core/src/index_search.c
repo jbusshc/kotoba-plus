@@ -126,9 +126,21 @@ void init_search_context(struct SearchContext *ctx,
         exit(1);
     }
 
+    static bool possible_glosses[KOTOBA_LANG_COUNT];
+    memset(possible_glosses, 0, sizeof(possible_glosses));
+    possible_glosses[KOTOBA_LANG_EN] = true;
+    possible_glosses[KOTOBA_LANG_ES] = true;
+    possible_glosses[KOTOBA_LANG_FR] = true;
+    possible_glosses[KOTOBA_LANG_DE] = true;
+    possible_glosses[KOTOBA_LANG_HU] = true;
+    possible_glosses[KOTOBA_LANG_NL] = true;
+    possible_glosses[KOTOBA_LANG_RU] = true;
+    possible_glosses[KOTOBA_LANG_SLV] = true;
+    possible_glosses[KOTOBA_LANG_SV] = true;
+
     for (int i = 0; i < KOTOBA_LANG_COUNT; ++i)
     {
-        if (!ctx->is_gloss_active[i])
+        if (!possible_glosses[i])
             continue;
 
         ctx->gloss_invxs[i] = malloc(sizeof(InvertedIndex));
@@ -148,6 +160,35 @@ void init_search_context(struct SearchContext *ctx,
         case KOTOBA_LANG_ES:
             strcpy(fname, "gloss_es.invx");
             break;
+
+        case KOTOBA_LANG_FR:
+            strcpy(fname, "gloss_fr.invx");
+            break;
+
+        case KOTOBA_LANG_DE:
+            strcpy(fname, "gloss_de.invx");
+            break;
+        
+        case KOTOBA_LANG_HU:
+            strcpy(fname, "gloss_hu.invx");
+            break;
+
+        case KOTOBA_LANG_NL:
+            strcpy(fname, "gloss_nl.invx");
+            break;
+        
+        case KOTOBA_LANG_RU:
+            strcpy(fname, "gloss_ru.invx");
+            break;
+
+        case KOTOBA_LANG_SLV:
+            strcpy(fname, "gloss_slv.invx");
+            break;
+
+        case KOTOBA_LANG_SV:
+            strcpy(fname, "gloss_sv.invx");
+            break;
+
         default:
             snprintf(fname, sizeof(fname), "gloss_%d.invx", i);
             break;
@@ -796,6 +837,8 @@ void update_search_config(struct SearchContext *ctx, const bool *glosses_active,
         ctx->page_size = page_size;
     
 
-    if (glosses_active)
+    if (glosses_active) {
+        memset(ctx->is_gloss_active, 0, sizeof(ctx->is_gloss_active)); // limpiar array
         memcpy(ctx->is_gloss_active, glosses_active, sizeof(ctx->is_gloss_active));
+    }
 }

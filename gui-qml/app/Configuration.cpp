@@ -329,9 +329,10 @@ void ConfigWrapper::reloadFromDisk()
  
 void ConfigWrapper::applyToServices()
 {
-    if (m_searchService)
+    if (m_searchService) {
+        parseGlossLanguages(m_config.glossLanguages, m_config.languages);
         m_searchService->updateConfig(&m_config);
-
+    }
     if (m_srsService)
         m_srsService->updateConfig(&m_config);
 }
