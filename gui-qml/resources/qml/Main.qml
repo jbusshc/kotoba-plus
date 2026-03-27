@@ -10,7 +10,7 @@ ApplicationWindow {
     width: 900
     height: 650
     visible: true
-    title: "Kotoba+"
+    title: "Kotoba Plus"
     color: Theme.background
 
     Material.theme: appConfig.theme === "dark" ? Material.Dark : Material.Light
@@ -33,11 +33,29 @@ ApplicationWindow {
         }
     }
 
-    // 0 = Dictionary, 1 = SRS, 2 = Settings
     property int currentTab: 0
+    property int pendingTab: -1   // tab al que se quiere ir mientras hay dirty
 
-    function switchTab(index) {
+    // Lee dirty directamente del item vivo en el stack
+    readonly property bool settingsDirty: {
+        if (stack.currentItem && typeof stack.currentItem.dirty !== "undefined")
+            return stack.currentItem.dirty
+        return false
+    }
+
+    // Intento de cambio de tab — pasa por el guard de dirty
+    function requestTabSwitch(index) {
         if (root.currentTab === index) return
+        if (root.settingsDirty) {
+            root.pendingTab = index
+            unsavedDialog.open()
+            return
+        }
+        root.switchTab(index)
+    }
+
+    // Cambio efectivo, sin guardar
+    function switchTab(index) {
         root.currentTab = index
         switch (index) {
             case 0: stack.replace(dictionaryPageComponent); break
@@ -57,15 +75,14 @@ ApplicationWindow {
 
             TabButton {
                 text: "Dictionary"
-                onClicked: root.switchTab(0)
+                onClicked: root.requestTabSwitch(0)
             }
             TabButton {
                 text: "SRS"
-                onClicked: root.switchTab(1)
+                onClicked: root.requestTabSwitch(1)
             }
         }
 
-        // Gear — mirrors TabButton active style
         Item {
             id: gearBtn
             anchors.right: parent.right
@@ -73,7 +90,6 @@ ApplicationWindow {
             anchors.bottom: parent.bottom
             width: 48
 
-            // Hover background
             Rectangle {
                 anchors.fill: parent
                 color: gearMouse.containsMouse ? Theme.surfaceHover : "transparent"
@@ -104,7 +120,7 @@ ApplicationWindow {
                 anchors.fill: parent
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
-                onClicked: root.switchTab(2)
+                onClicked: root.requestTabSwitch(2)
             }
         }
     }
@@ -115,7 +131,90 @@ ApplicationWindow {
         initialItem: dictionaryPageComponent
     }
 
-    Component { id: dictionaryPageComponent; DictionaryPage {}    }
-    Component { id: srsDashboardComponent;   SrsDashboard {}      }
-    Component { id: settingsPageComponent;   SettingsPage {}      }
+    Component { id: dictionaryPageComponent; DictionaryPage {}  }
+    Component { id: srsDashboardComponent;   SrsDashboard {}    }
+    Component { id: settingsPageComponent;   SettingsPage {}    }
+
+    // ── Dialog: cambios sin aplicar ──────────────────────────────────────────
+    Dialog {
+        id: unsavedDialog
+        title: "Unsaved changes"
+        width: 340
+        anchors.centerIn: Overlay.overlay
+        modal: true
+        closePolicy: Popup.CloseOnEscape
+
+        Text {
+            text: "You have unsaved settings changes.\nDo you want to discard them and leave?"
+            wrapMode: Text.Wrap
+            width: 292
+            color: Theme.textColor
+            font.pixelSize: Theme.fontSizeBody
+            lineHeight: 1.4
+        }
+
+        footer: DialogButtonBox {
+            alignment: Qt.AlignRight
+            spacing: 8
+            leftPadding: 16; rightPadding: 16
+            bottomPadding: 12; topPadding: 8
+
+            // Botón "Keep editing" — queda en settings
+            Button {
+                text: "Keep Editing"
+                flat: true
+                DialogButtonBox.buttonRole: DialogButtonBox.RejectRole
+                contentItem: Text {
+                    text: parent.text
+                    font.pixelSize: Theme.fontSizeSmall
+                    font.weight: Font.Medium
+                    color: Theme.hintColor
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+                background: Rectangle {
+                    radius: 6
+                    color: parent.hovered
+                        ? Theme.surfaceHover
+                        : "transparent"
+                    border.width: 1
+                    border.color: Theme.surfaceBorder
+                    Behavior on color { ColorAnimation { duration: 100 } }
+                }
+            }
+
+            // Botón "Discard" — descarta y navega
+            Button {
+                text: "Discard & Leave"
+                DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole
+                contentItem: Text {
+                    text: parent.text
+                    font.pixelSize: Theme.fontSizeSmall
+                    font.weight: Font.Medium
+                    color: "white"
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+                background: Rectangle {
+                    radius: 6
+                    color: parent.hovered ? "#e53935" : "#f44336"
+                    Behavior on color { ColorAnimation { duration: 100 } }
+                }
+            }
+        }
+
+        onRejected: {
+            root.pendingTab = -1
+            // Vuelve a seleccionar el gear visualmente (ya estaba en settings)
+            root.currentTab = 2
+        }
+
+        onAccepted: {
+            // Revierte appConfig al último estado guardado
+            appConfig.reloadFromDisk()
+            var target = root.pendingTab
+            root.pendingTab = -1
+            root.switchTab(target)
+        }
+    }
 }
