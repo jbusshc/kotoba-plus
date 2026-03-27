@@ -136,8 +136,10 @@ Page {
             anchors.fill: parent; radius: 9
             color: ma.containsMouse
                 ? Qt.rgba(page.accentColor.r, page.accentColor.g, page.accentColor.b, 0.25)
-                : Qt.rgba(1, 1, 1, 0.08)
-            border.width: 1; border.color: Qt.rgba(1, 1, 1, 0.15)
+                : Theme.surfaceSubtle
+            border.color: Theme.surfaceBorder
+
+            border.width: 1;
             Behavior on color { ColorAnimation { duration: 120 } }
 
             Text {
@@ -213,11 +215,11 @@ Page {
         radius: height / 2
         color: checked
             ? Qt.rgba(page.accentColor.r, page.accentColor.g, page.accentColor.b, 0.25)
-            : Qt.rgba(1, 1, 1, 0.08)
+            : Theme.surfaceSubtle
         border.width: 1
         border.color: checked
             ? Qt.rgba(page.accentColor.r, page.accentColor.g, page.accentColor.b, 0.6)
-            : Qt.rgba(1, 1, 1, 0.15)
+            : Theme.surfaceBorder
         Behavior on color       { ColorAnimation { duration: 150 } }
         Behavior on border.color { ColorAnimation { duration: 150 } }
 
@@ -226,7 +228,7 @@ Page {
             width: 20; height: 20; radius: 10
             anchors.verticalCenter: parent.verticalCenter
             x: toggle.checked ? parent.width - width - 6 : 6
-            color: toggle.checked ? page.accentColor : Qt.rgba(1, 1, 1, 0.4)
+            color: toggle.checked ? page.accentColor : Theme.surfaceInactive
             Behavior on x     { NumberAnimation { duration: 150; easing.type: Easing.OutQuad } }
             Behavior on color { ColorAnimation  { duration: 150 } }
         }

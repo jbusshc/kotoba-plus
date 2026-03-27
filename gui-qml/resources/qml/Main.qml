@@ -73,12 +73,10 @@ ApplicationWindow {
             anchors.bottom: parent.bottom
             width: 48
 
-            // Hover background — adapta al tema
+            // Hover background
             Rectangle {
                 anchors.fill: parent
-                color: gearMouse.containsMouse
-                    ? (appConfig.theme === "dark" ? Qt.rgba(1,1,1,0.08) : Qt.rgba(0,0,0,0.08))
-                    : "transparent"
+                color: gearMouse.containsMouse ? Theme.surfaceHover : "transparent"
                 Behavior on color { ColorAnimation { duration: 120 } }
             }
 
@@ -87,24 +85,17 @@ ApplicationWindow {
                 anchors.verticalCenterOffset: -1
                 text: "⚙"
                 font.pixelSize: 17
-                color: {
-                    if (appConfig.theme === "dark") {
-                        return root.currentTab === 2 ? "white" : Qt.rgba(1, 1, 1, 0.60)
-                    } else {
-                        return root.currentTab === 2 ? "#212121" : Qt.rgba(0, 0, 0, 0.54)
-                    }
-                }
+                color: root.currentTab === 2 ? Theme.textColor : Theme.hintColor
                 Behavior on color { ColorAnimation { duration: 120 } }
             }
 
-            // Active underline — usa el color primary del Material (igual que TabBar)
             Rectangle {
                 anchors.bottom: parent.bottom
                 anchors.horizontalCenter: parent.horizontalCenter
                 width: root.currentTab === 2 ? 24 : 0
                 height: 2
                 radius: 1
-                color: appConfig.theme === "dark" ? "white" : Material.color(Material.primary)
+                color: Theme.accentColor
                 Behavior on width { NumberAnimation { duration: 150; easing.type: Easing.OutQuad } }
             }
 

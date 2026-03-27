@@ -2,37 +2,6 @@ pragma Singleton
 import QtQuick
 import QtQuick.Controls.Material
 
-QtObject {
-    property bool darkTheme: appConfig.theme === "dark"
-
-    property color background:    darkTheme ? "#121212" : "#fafafa"
-    property color textColor:     darkTheme ? "#ECEFF1" : "#212121"
-    property color hintColor:     darkTheme ? "#B0BEC5" : "#757575"
-    property color accentColor: {
-        switch (appConfig.accentColor.toLowerCase()) {
-        case "blue":   return Material.color(Material.Blue)
-        case "red":    return Material.color(Material.Red)
-        case "green":  return Material.color(Material.Green)
-        case "indigo": return Material.color(Material.Indigo)
-        default:       return Material.color(Material.Blue)
-        }
-    }
-    property color dividerColor:   darkTheme ? "#424242" : "#E0E0E0"
-    property color cardBackground: darkTheme ? "#222222" : "#ffffff"
-    property color errorColor:     Material.color(Material.Red)
-    property color successColor:   Material.color(Material.Green)
-    property color warningColor:   Material.color(Material.Orange)
-    property color againColor:     Material.color(Material.Red)
-    property color hardColor:      Material.color(Material.BlueGrey)
-    property color goodColor:      Material.color(Material.Green)
-    property color easyColor:      Material.color(Material.Blue)
-
-    // ── Font scale ────────────────────────────────────────────────────────────
-    // Comes from appConfig.fontScale (0.85 | 1.0 | 1.15)
-    // All font sizes in the app derive from these — never hardcode pixelSize.
-    property real   fontScale:  appConfig.fontScale
-    property string fontFamily: appConfig.fontFamily === "default" ? "" : appConfig.fontFamily
-    // fontFamily="" means Qt uses the system default — no override needed
 
     // Semantic scale — map every hardcoded value to a named token:
     //
@@ -51,6 +20,45 @@ QtObject {
     //  36 → fontSizeDisplay (stat card number in SrsLibrary delegate)
     //  42 → fontSizeCard    (flashcard word during study)
     //  48 → fontSizeGlyph   (empty state decorative kanji)
+
+QtObject {
+    property bool darkTheme: appConfig.theme === "dark"
+
+    property color background:    darkTheme ? "#121212" : "#f0f2f5"
+    property color textColor:     darkTheme ? "#ECEFF1" : "#212121"
+    property color hintColor:     darkTheme ? "#B0BEC5" : "#757575"
+    property color accentColor: {
+        switch (appConfig.accentColor.toLowerCase()) {
+        case "blue":   return Material.color(Material.Blue)
+        case "red":    return Material.color(Material.Red)
+        case "green":  return Material.color(Material.Green)
+        case "indigo": return Material.color(Material.Indigo)
+        default:       return Material.color(Material.Blue)
+        }
+    }
+    property color dividerColor:   darkTheme ? "#424242" : "#d0d4da"
+    property color cardBackground: darkTheme ? "#222222" : "#ffffff"
+
+    // ── Nuevos tokens de superficie ──────────────────────────────────────────
+    // Reemplazan todos los Qt.rgba(1,1,1,...) hardcodeados
+    property color surfaceHover:   darkTheme ? Qt.rgba(1,1,1,0.06) : Qt.rgba(0,0,0,0.05)
+    property color surfacePress:   darkTheme ? Qt.rgba(1,1,1,0.10) : Qt.rgba(0,0,0,0.08)
+    property color surfaceSubtle:  darkTheme ? Qt.rgba(1,1,1,0.08) : Qt.rgba(0,0,0,0.06)
+    property color surfaceBorder:  darkTheme ? Qt.rgba(1,1,1,0.10) : Qt.rgba(0,0,0,0.12)
+    property color surfaceInactive:darkTheme ? Qt.rgba(1,1,1,0.25) : Qt.rgba(0,0,0,0.20)
+    property color surfaceClear:   darkTheme ? Qt.rgba(1,1,1,0.10) : Qt.rgba(0,0,0,0.08)
+    // ────────────────────────────────────────────────────────────────────────
+
+    property color errorColor:     Material.color(Material.Red)
+    property color successColor:   Material.color(Material.Green)
+    property color warningColor:   Material.color(Material.Orange)
+    property color againColor:     Material.color(Material.Red)
+    property color hardColor:      Material.color(Material.BlueGrey)
+    property color goodColor:      Material.color(Material.Green)
+    property color easyColor:      Material.color(Material.Blue)
+
+    property real   fontScale:  appConfig.fontScale
+    property string fontFamily: appConfig.fontFamily === "default" ? "" : appConfig.fontFamily
 
     property real fontSizeTiny:    Math.round(10 * fontScale)
     property real fontSizeXSmall:  Math.round(11 * fontScale)

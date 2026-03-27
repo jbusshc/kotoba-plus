@@ -58,7 +58,7 @@ Page {
                     id: backBg
                     anchors.fill: parent
                     radius: 6
-                    color: backMouse.containsMouse ? Qt.rgba(1,1,1,0.06) : "transparent"
+                    color: backMouse.containsMouse ? Theme.surfaceHover : "transparent"
                     Behavior on color { ColorAnimation { duration: 120 } }
                 }
 
@@ -97,10 +97,11 @@ Page {
                 radius: 6
                 color: inSrs
                     ? Qt.rgba(accentColor.r, accentColor.g, accentColor.b, 0.15)
-                    : Qt.rgba(1, 1, 1, 0.05)
+                    : Theme.surfaceSubtle
                 border.width: 1
-                border.color: inSrs ? Qt.rgba(accentColor.r, accentColor.g, accentColor.b, 0.5)
-                                    : Qt.rgba(1, 1, 1, 0.10)
+                border.color: inSrs
+                    ? Qt.rgba(accentColor.r, accentColor.g, accentColor.b, 0.5)
+                    : Theme.surfaceBorder
 
                 Behavior on color { ColorAnimation { duration: 180 } }
 
@@ -111,7 +112,7 @@ Page {
 
                     Rectangle {
                         width: 7; height: 7; radius: 4
-                        color: inSrs ? accentColor : Qt.rgba(1,1,1,0.25)
+                        color: inSrs ? accentColor : Theme.surfaceInactive
                         Behavior on color { ColorAnimation { duration: 180 } }
                     }
 

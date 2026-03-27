@@ -130,7 +130,7 @@ Page {
             spacing: 4
 
             Text {
-                text: "Study Queue"
+                text: "Study Session"
                 font.pixelSize: Theme.fontSizeTitle
                 font.weight: Font.Bold
                 color: textColor

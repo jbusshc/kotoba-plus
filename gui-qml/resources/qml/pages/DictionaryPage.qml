@@ -66,7 +66,7 @@ Page {
                 // Clear button
                 Rectangle {
                     width: 20; height: 20; radius: 10
-                    color: Qt.rgba(1,1,1,0.10)
+                    color: Theme.surfaceClear
                     visible: searchField.text.length > 0
 
                     Text {
@@ -109,7 +109,7 @@ Page {
                     color: delegateRoot.pressed
                         ? Qt.rgba(accentColor.r, accentColor.g, accentColor.b, 0.10)
                         : delegateRoot.hovered
-                            ? Qt.rgba(1,1,1,0.04)
+                            ? Theme.surfaceHover
                             : "transparent"
                     Behavior on color { ColorAnimation { duration: 100 } }
                 }
