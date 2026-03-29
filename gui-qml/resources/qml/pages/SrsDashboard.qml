@@ -7,44 +7,37 @@ Page {
     id: page
     padding: 0
 
-    property bool darkTheme: Theme.darkTheme
-    property color textColor: Theme.textColor
-    property color hintColor: Theme.hintColor
-    property color accentColor: Theme.accentColor
+    property color textColor:    Theme.textColor
+    property color hintColor:    Theme.hintColor
+    property color accentColor:  Theme.accentColor
     property color dividerColor: Theme.dividerColor
 
     background: Rectangle { color: Theme.background }
 
-    // ── Stat card component ──────────────────────────────────────────────────
+    // ── Stat card ─────────────────────────────────────────────────────────────
     component StatCard: Rectangle {
-        property string label: ""
-        property string value: "0"
-        property color  accent: "white"
-        property string sublabel: ""
+        property string label:  ""
+        property string value:  "0"
+        property color  accent: Theme.accentColor
 
+        Layout.fillWidth: true
+        implicitHeight: 96
         radius: 10
         color: Theme.cardBackground
         border.width: 1
-        border.color: Qt.rgba(accent.r, accent.g, accent.b, 0.25)
+        border.color: Qt.rgba(accent.r, accent.g, accent.b, 0.22)
 
-        Layout.fillWidth: true
-        Layout.preferredHeight: 110
-
-        // Top accent line
         Rectangle {
             anchors.top: parent.top
-            anchors.left: parent.left
-            anchors.right: parent.right
-            height: 2
-            radius: 1
-            color: accent
-            opacity: 0.7
+            anchors.left: parent.left; anchors.right: parent.right
+            height: 2; radius: 1
+            color: parent.accent; opacity: 0.75
         }
 
         Column {
             anchors.fill: parent
-            anchors.margins: 16
-            spacing: 6
+            anchors.margins: 14
+            spacing: 5
 
             Text {
                 text: value
@@ -53,80 +46,88 @@ Page {
                 font.letterSpacing: -1
                 color: accent
             }
-
             Text {
                 text: label.toUpperCase()
-                font.pixelSize: Theme.fontSizeSmall
+                font.pixelSize: Theme.fontSizeXSmall
                 font.weight: Font.Medium
-                font.letterSpacing: 0.6
-                color: Qt.rgba(hintColor.r, hintColor.g, hintColor.b, 0.7)
+                font.letterSpacing: 0.8
+                color: Qt.rgba(hintColor.r, hintColor.g, hintColor.b, 0.65)
             }
         }
     }
 
-    // ── Action button component ──────────────────────────────────────────────
+    // ── Action button ─────────────────────────────────────────────────────────
     component ActionButton: Rectangle {
-        property string label: ""
+        id: actionBtn
+        property string label:    ""
         property string sublabel: ""
-        property color  accent: accentColor
-        property bool   primary: false
-        property bool   enabled: true
+        property color  accent:   accentColor
+        property bool   primary:  false
+        property bool   enabled:  true
         signal clicked()
 
-        height: 60
+        implicitHeight: 60
         radius: 8
-        color: primary
-            ? (btnMouse.containsMouse && enabled ? Qt.lighter(accent, 1.15) : accent)
-            : (btnMouse.containsMouse && enabled ? Qt.rgba(1,1,1,0.08) : Qt.rgba(1,1,1,0.04))
+        opacity: actionBtn.enabled ? 1.0 : 0.35
 
-        border.width: primary ? 0 : 1
-        border.color: Qt.rgba(1,1,1,0.10)
+        color: actionBtn.primary
+            ? (btnMa.pressed && actionBtn.enabled
+                ? Qt.darker(actionBtn.accent, 1.08)
+                : btnMa.containsMouse && actionBtn.enabled
+                    ? Qt.lighter(actionBtn.accent, 1.12)
+                    : actionBtn.accent)
+            : (btnMa.pressed && actionBtn.enabled
+                ? Theme.surfacePress
+                : btnMa.containsMouse && actionBtn.enabled
+                    ? Theme.surfaceHover
+                    : Theme.surfaceSubtle)
 
-        opacity: enabled ? 1.0 : 0.35
+        border.width: actionBtn.primary ? 0 : 1
+        border.color: Theme.surfaceBorder
 
         Behavior on color { ColorAnimation { duration: 120 } }
 
-        ColumnLayout {
+        Column {
             anchors.centerIn: parent
-            spacing: 2
+            spacing: 3
 
             Text {
-                Layout.alignment: Qt.AlignHCenter
-                text: label
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: actionBtn.label
                 font.pixelSize: Theme.fontSizeBody
                 font.weight: Font.DemiBold
-                color: primary ? "white" : textColor
+                color: actionBtn.primary ? "white" : textColor
             }
-
             Text {
-                Layout.alignment: Qt.AlignHCenter
-                text: sublabel
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: actionBtn.sublabel
                 font.pixelSize: Theme.fontSizeTiny
-                color: primary ? Qt.rgba(1,1,1,0.65) : hintColor
-                visible: sublabel.length > 0
+                color: actionBtn.primary ? Qt.rgba(1, 1, 1, 0.65) : hintColor
+                visible: actionBtn.sublabel.length > 0
             }
         }
 
         MouseArea {
-            id: btnMouse
+            id: btnMa
             anchors.fill: parent
             hoverEnabled: true
-            cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-            onClicked: if (parent.enabled) parent.clicked()
+            cursorShape: actionBtn.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+            onClicked: if (actionBtn.enabled) actionBtn.clicked()
         }
     }
 
-    // ── Layout ───────────────────────────────────────────────────────────────
+    // ── Layout ────────────────────────────────────────────────────────────────
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: 24
-        spacing: 24
+        spacing: 0
 
-            Item { Layout.fillHeight: true }
+        Item { Layout.fillHeight: true }
 
         // Header
         Column {
             Layout.fillWidth: true
+            Layout.bottomMargin: 24
             spacing: 4
 
             Text {
@@ -135,7 +136,6 @@ Page {
                 font.weight: Font.Bold
                 color: textColor
             }
-
             Text {
                 text: {
                     if (!srsVM) return ""
@@ -148,45 +148,46 @@ Page {
             }
         }
 
-        // Stats row
+        // Stats row: Due | New | Reviewed today
         GridLayout {
             Layout.fillWidth: true
+            Layout.bottomMargin: 20
             columns: 3
-            columnSpacing: 12
-            rowSpacing: 12
+            columnSpacing: 10
+            rowSpacing: 10
 
             StatCard {
-                label: "Due"
-                value: srsVM ? String(srsVM.dueCount ?? 0) : "0"
+                label:  "Due"
+                value:  srsVM ? String(srsVM.dueCount        ?? 0) : "0"
                 accent: "#F87171"
             }
-
             StatCard {
-                label: "Total"
-                value: srsVM ? String(srsVM.totalCount ?? 0) : "0"
+                // Rename srsVM.newCount to match your VM property if needed
+                label:  "New"
+                value:  srsVM ? String(srsVM.newCount        ?? 0) : "0"
                 accent: "#60A5FA"
             }
-
             StatCard {
-                label: "Today"
-                value: srsVM ? String(srsVM.reviewTodayCount ?? 0) : "0"
+                label:  "Reviewed"
+                value:  srsVM ? String(srsVM.reviewTodayCount ?? 0) : "0"
                 accent: "#34D399"
             }
         }
 
-        // Action buttons
+        // Buttons
         ColumnLayout {
             Layout.fillWidth: true
             spacing: 10
 
             ActionButton {
                 Layout.fillWidth: true
-                primary: true
-                label: srsVM && srsVM.dueCount > 0 ? "Start Study Session" : "Nothing Due"
-                sublabel: srsVM && srsVM.dueCount > 0 ? srsVM.dueCount + " cards in queue" : "Check back later"
-                accent: accentColor
-                enabled: srsVM && srsVM.dueCount > 0
-
+                primary:  true
+                label:    srsVM && srsVM.dueCount > 0 ? "Start Study Session" : "Nothing Due"
+                sublabel: srsVM && srsVM.dueCount > 0
+                    ? srsVM.dueCount + " card" + (srsVM.dueCount === 1 ? "" : "s") + " in queue"
+                    : "Check back later"
+                accent:  accentColor
+                enabled: srsVM ? srsVM.dueCount > 0 : false
                 onClicked: {
                     if (stack && srsVM && srsVM.dueCount > 0) {
                         srsVM.startSession()
@@ -197,13 +198,10 @@ Page {
 
             ActionButton {
                 Layout.fillWidth: true
-                label: "Browse Cards"
-                sublabel: srsVM ? ((parseInt(srsVM.totalCount) || 0) + " cards in deck") : ""
-                enabled: true
-
-                onClicked: {
-                    if (stack) stack.push("qrc:/qml/pages/SrsLibrary.qml")
-                }
+                label:    "Browse Cards"
+                sublabel: srsVM ? (String(parseInt(srsVM.totalCount) || 0) + " cards in deck") : ""
+                enabled:  true
+                onClicked: { if (stack) stack.push("qrc:/qml/pages/SrsLibrary.qml") }
             }
         }
 

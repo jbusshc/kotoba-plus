@@ -2,30 +2,27 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Controls.Material
-import Qt5Compat.GraphicalEffects
+import QtQuick.Effects          // MultiEffect — replaces Qt5Compat.GraphicalEffects
 import Kotoba 1.0
-
 
 Page {
     id: page
     padding: 0
 
-    // ── Aliases into Theme so child components don't need to qualify ──────────
     readonly property color textColor:    Theme.textColor
     readonly property color hintColor:    Theme.hintColor
     readonly property color accentColor:  Theme.accentColor
     readonly property color dividerColor: Theme.dividerColor
 
-    // ── Layout constants ──────────────────────────────────────────────────────
-    readonly property int rowH:    56   // standard row height
-    readonly property int ctrlH:   32   // control height (stepper, toggle, pill row)
-    readonly property int ctrlW:  220   // right-column width
-    readonly property int unitW:   52   // unit label width (ms / days / sec / %)
-    readonly property int secGap:  24   // vertical gap between sections
+    readonly property int rowH:   56
+    readonly property int ctrlH:  32
+    readonly property int ctrlW: 220
+    readonly property int unitW:  52
+    readonly property int secGap: 24
 
     background: Rectangle { color: Theme.background }
 
-    // ── Snapshot-based dirty detection ───────────────────────────────────────
+    // ── Snapshot-based dirty detection ────────────────────────────────────────
     property bool ready:    false
     property bool dirty:    false
     property var  snapshot: ({})
@@ -77,7 +74,7 @@ Page {
 
     function markDirty() { if (ready) checkDirty() }
 
-    function applySettings() {  
+    function applySettings() {
         appConfig.saveToDisk()
         takeSnapshot()
         dirty = false
@@ -116,30 +113,28 @@ Page {
 
     onVisibleChanged: {
         if (visible) {
-            page.ready = false
-            page.dirty = false
+            page.ready = false; page.dirty = false
             initTimer.restart()
         }
     }
 
     // ══════════════════════════════════════════════════════════════════════════
-    // REUSABLE COMPONENTS
+    // REUSABLE INLINE COMPONENTS
     // ══════════════════════════════════════════════════════════════════════════
 
     // ── Tooltip badge ─────────────────────────────────────────────────────────
     component InfoBadge: Item {
         id: badge
         property string tip: ""
-        implicitWidth: 18; implicitHeight: 18
+        implicitWidth: Theme.minTapTarget; implicitHeight: Theme.minTapTarget
 
         Rectangle {
-            anchors.fill: parent; radius: 9
+            anchors.centerIn: parent
+            width: 18; height: 18; radius: 9
             color: ma.containsMouse
                 ? Qt.rgba(page.accentColor.r, page.accentColor.g, page.accentColor.b, 0.25)
                 : Theme.surfaceSubtle
-            border.color: Theme.surfaceBorder
-
-            border.width: 1;
+            border.width: 1; border.color: Theme.surfaceBorder
             Behavior on color { ColorAnimation { duration: 120 } }
 
             Text {
@@ -150,7 +145,6 @@ Page {
             }
         }
 
-        // Floating tooltip bubble
         Rectangle {
             visible: ma.containsMouse
             z: 999
@@ -160,8 +154,7 @@ Page {
             color: Theme.cardBackground
             border.width: 1; border.color: page.dividerColor
             anchors.right: parent.right
-            anchors.bottom: parent.top
-            anchors.bottomMargin: 6
+            anchors.bottom: parent.top; anchors.bottomMargin: 6
 
             Text {
                 id: tipText
@@ -176,7 +169,7 @@ Page {
         MouseArea { id: ma; anchors.fill: parent; hoverEnabled: true }
     }
 
-    // ── Section header with label + rule ─────────────────────────────────────
+    // ── Section header ────────────────────────────────────────────────────────
     component SectionHeader: Item {
         property string title: ""
         Layout.fillWidth: true
@@ -197,7 +190,7 @@ Page {
         }
     }
 
-    // ── Thin row divider ──────────────────────────────────────────────────────
+    // ── Row divider ───────────────────────────────────────────────────────────
     component RowDivider: Rectangle {
         Layout.fillWidth: true
         implicitHeight: 1
@@ -205,7 +198,6 @@ Page {
     }
 
     // ── Toggle switch ─────────────────────────────────────────────────────────
-    //    Self-contained; bind `checked` two-way via onCheckedChanged.
     component ToggleSwitch: Rectangle {
         id: toggle
         property bool checked: false
@@ -220,7 +212,7 @@ Page {
         border.color: checked
             ? Qt.rgba(page.accentColor.r, page.accentColor.g, page.accentColor.b, 0.6)
             : Theme.surfaceBorder
-        Behavior on color       { ColorAnimation { duration: 150 } }
+        Behavior on color        { ColorAnimation { duration: 150 } }
         Behavior on border.color { ColorAnimation { duration: 150 } }
 
         Rectangle {
@@ -239,22 +231,24 @@ Page {
         }
     }
 
-    // ── Single stepper button (−/+) ───────────────────────────────────────────
+    // ── Step button (−/+) ─────────────────────────────────────────────────────
     component StepButton: Rectangle {
         property string label: "+"
         signal clicked()
 
-        implicitWidth: 28; implicitHeight: page.ctrlH
+        implicitWidth: Math.max(28, Theme.minTapTarget - 16)
+        implicitHeight: page.ctrlH
         radius: 6
-        color: stepMa.containsMouse ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(1, 1, 1, 0.05)
-        border.width: 1; border.color: Qt.rgba(1, 1, 1, 0.10)
+        color: stepMa.pressed
+            ? Theme.surfacePress
+            : stepMa.containsMouse ? Theme.surfaceHover : Theme.surfaceSubtle
+        border.width: 1; border.color: Theme.surfaceBorder
         Behavior on color { ColorAnimation { duration: 100 } }
 
         Text {
             anchors.centerIn: parent
             text: parent.label
-            font.pixelSize: Theme.fontSizeBody
-            color: page.hintColor
+            font.pixelSize: Theme.fontSizeBody; color: page.hintColor
         }
         MouseArea {
             id: stepMa; anchors.fill: parent
@@ -263,16 +257,14 @@ Page {
         }
     }
 
-    // ── Numeric stepper (−  [value]  +) with optional unit label ─────────────
-    //    Usage: StepperField { value: ...; min: 0; max: 9999; unit: " ms";
-    //                          zeroLabel: "∞"; onValueChanged: ... }
+    // ── Stepper field ─────────────────────────────────────────────────────────
     component StepperField: RowLayout {
         id: sf
-        property int    value:      0
-        property int    min:        0
-        property int    max:        99999
-        property string zeroLabel:  ""      // displayed when value === 0
-        property string unit:       ""      // optional trailing unit label
+        property int    value:     0
+        property int    min:       0
+        property int    max:       99999
+        property string zeroLabel: ""
+        property string unit:      ""
 
         spacing: 0
 
@@ -281,11 +273,10 @@ Page {
             onClicked: if (sf.value > sf.min) sf.value--
         }
 
-        // Value display / text input
         Rectangle {
             implicitWidth: 72; implicitHeight: page.ctrlH
-            color: Qt.rgba(1, 1, 1, 0.04)
-            border.width: 1; border.color: Qt.rgba(1, 1, 1, 0.10)
+            color: Theme.surfaceInput
+            border.width: 1; border.color: Theme.surfaceBorder
 
             TextInput {
                 anchors.centerIn: parent
@@ -301,8 +292,7 @@ Page {
                         sf.value = 0
                     } else {
                         var v = parseInt(text)
-                        if (!isNaN(v))
-                            sf.value = Math.max(sf.min, Math.min(sf.max, v))
+                        if (!isNaN(v)) sf.value = Math.max(sf.min, Math.min(sf.max, v))
                     }
                 }
             }
@@ -313,7 +303,6 @@ Page {
             onClicked: if (sf.value < sf.max) sf.value++
         }
 
-        // Optional unit label, right-aligned within ctrlW
         Text {
             visible: sf.unit !== ""
             Layout.preferredWidth: page.unitW
@@ -324,10 +313,7 @@ Page {
         }
     }
 
-    // ── Generic setting row ───────────────────────────────────────────────────
-    //    Item wrapper with explicit height — the inner RowLayout just handles
-    //    horizontal distribution. This is the only reliable way to fix height
-    //    in a parent ColumnLayout: RowLayout children ignore preferredHeight.
+    // ── Setting row ───────────────────────────────────────────────────────────
     component SettingRow: Item {
         id: sr
         property string label:    ""
@@ -338,25 +324,21 @@ Page {
         default property alias content: controlSlot.data
 
         Layout.fillWidth: true
-        // Height is owned by THIS Item, not by the inner RowLayout.
         implicitHeight: subtitle !== "" ? 64 : (compact ? 44 : page.rowH)
 
         RowLayout {
             anchors.fill: parent
             spacing: 16
 
-            // Left: label + optional subtitle
             Column {
-                Layout.fillWidth: true
-                Layout.alignment: Qt.AlignVCenter
+                Layout.fillWidth: true; Layout.alignment: Qt.AlignVCenter
                 spacing: 3
 
                 Text {
                     width: parent.width
                     text: sr.label
                     font.pixelSize: Theme.fontSizeBody; font.weight: Font.Medium
-                    color: page.textColor
-                    elide: Text.ElideRight
+                    color: page.textColor; elide: Text.ElideRight
                 }
                 Text {
                     visible: sr.subtitle !== ""
@@ -368,7 +350,6 @@ Page {
                 }
             }
 
-            // Centre: tooltip badge — always 18 px wide to keep columns aligned
             InfoBadge {
                 tip:     sr.tip
                 visible: sr.tip !== ""
@@ -376,11 +357,10 @@ Page {
             }
             Item {
                 visible: sr.tip === ""
-                Layout.preferredWidth: 18; Layout.preferredHeight: 1
+                Layout.preferredWidth: Theme.minTapTarget; Layout.preferredHeight: 1
                 Layout.alignment: Qt.AlignVCenter
             }
 
-            // Right: fixed-width control slot
             Item {
                 id: controlSlot
                 Layout.preferredWidth: page.ctrlW
@@ -390,7 +370,7 @@ Page {
         }
     }
 
-    // ── Pill toggle button (for multi-select / single-select groups) ──────────
+    // ── Pill ─────────────────────────────────────────────────────────────────
     component Pill: Rectangle {
         property string pillLabel:    ""
         property bool   pillSelected: false
@@ -401,11 +381,11 @@ Page {
         radius: 6
         color: pillSelected
             ? Qt.rgba(page.accentColor.r, page.accentColor.g, page.accentColor.b, 0.20)
-            : Qt.rgba(1, 1, 1, 0.05)
+            : Theme.surfaceSubtle
         border.width: 1
         border.color: pillSelected
             ? Qt.rgba(page.accentColor.r, page.accentColor.g, page.accentColor.b, 0.55)
-            : Qt.rgba(1, 1, 1, 0.10)
+            : Theme.surfaceBorder
         Behavior on color { ColorAnimation { duration: 120 } }
 
         Text {
@@ -417,7 +397,11 @@ Page {
                                        : Qt.rgba(page.hintColor.r, page.hintColor.g, page.hintColor.b, 0.7)
         }
         MouseArea {
-            anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+            // Expand tap area without changing visual height
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.verticalCenter:   parent.verticalCenter
+            width: parent.width; height: Theme.minTapTarget
+            cursorShape: Qt.PointingHandCursor
             onClicked: parent.pillClicked()
         }
     }
@@ -432,20 +416,19 @@ Page {
 
         width: 30; height: 30; radius: 15
         color: chipColor
-        border.width: chipSelected ? 2 : 0; border.color: "white"
+        border.width: chipSelected ? 2 : 0
+        border.color: Theme.textColor   // adapts to light/dark
         opacity: chipSelected ? 1.0 : 0.5
-        Behavior on opacity       { NumberAnimation { duration: 120 } }
-        Behavior on border.width  { NumberAnimation { duration: 120 } }
+        Behavior on opacity      { NumberAnimation { duration: 120 } }
+        Behavior on border.width { NumberAnimation { duration: 120 } }
 
-        // Selected dot
         Rectangle {
             anchors.centerIn: parent
             width: 8; height: 8; radius: 4
-            color: "white"
+            color: Theme.textColor
             visible: parent.chipSelected
         }
 
-        // Hover label
         Rectangle {
             anchors.horizontalCenter: parent.horizontalCenter
             anchors.top: parent.bottom; anchors.topMargin: 4
@@ -458,13 +441,15 @@ Page {
                 id: hoverLbl
                 anchors.centerIn: parent
                 text: parent.parent.chipLabel
-                font.pixelSize: 9
-                color: page.hintColor
+                font.pixelSize: 9; color: page.hintColor
             }
         }
 
         MouseArea {
-            id: chipMa; anchors.fill: parent
+            id: chipMa
+            // Expand tap area
+            anchors.centerIn: parent
+            width: Theme.minTapTarget; height: Theme.minTapTarget
             hoverEnabled: true; cursorShape: Qt.PointingHandCursor
             onClicked: parent.chipClicked()
         }
@@ -477,7 +462,6 @@ Page {
     Item {
         anchors.fill: parent
 
-        // ── Scrollable content ────────────────────────────────────────────────
         ScrollView {
             anchors.fill: parent
             anchors.bottomMargin: page.dirty ? 56 : 0
@@ -492,7 +476,7 @@ Page {
                 ColumnLayout {
                     id: col
                     anchors.horizontalCenter: parent.horizontalCenter
-                    width: Math.min(parent.width - 64, 680)
+                    width: Math.min(parent.width - 32, 680)
                     spacing: 0
 
                     Item { Layout.fillWidth: true; implicitHeight: 20 }
@@ -500,12 +484,11 @@ Page {
                     // ── APPEARANCE ────────────────────────────────────────────
                     SectionHeader { title: "Appearance" }
 
-                    // Theme
                     SettingRow {
                         label: "Theme"
 
                         Row {
-                            anchors.right:          parent.right
+                            anchors.right: parent.right
                             anchors.verticalCenter: parent.verticalCenter
                             spacing: 8
 
@@ -525,7 +508,6 @@ Page {
                     }
                     RowDivider {}
 
-                    // Accent color — free-height layout (chips wrap naturally)
                     ColumnLayout {
                         Layout.fillWidth: true
                         spacing: 10
@@ -579,50 +561,38 @@ Page {
                     }
                     RowDivider {}
 
-                    // Text Scale
                     SettingRow {
                         label:    "Text Scale"
                         subtitle: "Current: " + Math.round(appConfig.fontScale * 100) + "%  (default: 100%)"
                         tip:      "Scales all text proportionally. 85% = smaller, 100% = default, 115% = larger."
 
                         StepperField {
-                            anchors.left:           parent.left
-                            anchors.verticalCenter: parent.verticalCenter
+                            anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter
                             value: Math.round(appConfig.fontScale * 100)
-                            min:   70
-                            max:   200
-                            unit:  " %"
+                            min: 70; max: 200; unit: " %"
                             onValueChanged: { appConfig.fontScale = value / 100.0; page.markDirty() }
                         }
                     }
                     RowDivider {}
 
-                    // Furigana
                     SettingRow {
-                        label:   "Show Furigana"
+                        label: "Show Furigana"
 
                         ToggleSwitch {
-                            anchors.right:          parent.right
-                            anchors.verticalCenter: parent.verticalCenter
+                            anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
                             checked: appConfig.showFurigana
                             onToggled: (v) => { appConfig.showFurigana = v; page.markDirty() }
                         }
                     }
 
-
                     // ── LANGUAGE ──────────────────────────────────────────────
                     SectionHeader { title: "Language" }
 
-                    // Gloss languages (multi-select pill group)
                     ColumnLayout {
-                        Layout.fillWidth: true
-                        spacing: 10
+                        Layout.fillWidth: true; spacing: 10
 
                         RowLayout {
-                            Layout.fillWidth: true
-                            Layout.minimumHeight: 36
-                            spacing: 16
-
+                            Layout.fillWidth: true; Layout.minimumHeight: 36; spacing: 16
                             Text {
                                 text: "Gloss Languages"
                                 font.pixelSize: Theme.fontSizeBody; font.weight: Font.Medium
@@ -637,19 +607,16 @@ Page {
 
                         Flow {
                             id: glossFlow
-                            Layout.fillWidth: true
-                            spacing: 6
+                            Layout.fillWidth: true; spacing: 6
 
                             readonly property var langs:  ["de","en","es","fr","hu","nl","ru","slv","sv"]
                             readonly property var labels: ["DE","EN","ES","FR","HU","NL","RU","SLV","SV"]
 
                             function active(lang) {
                                 return appConfig.glossLanguages
-                                    .split(",")
-                                    .map(function(s) { return s.trim() })
+                                    .split(",").map(function(s) { return s.trim() })
                                     .indexOf(lang) >= 0
                             }
-
                             function toggle(lang) {
                                 var set = {}
                                 appConfig.glossLanguages.split(",").forEach(function(t) {
@@ -680,16 +647,11 @@ Page {
                     Item { Layout.fillWidth: true; implicitHeight: 12 }
                     RowDivider {}
 
-                    // Fallback language (single-select pill group)
                     ColumnLayout {
-                        Layout.fillWidth: true
-                        spacing: 10
+                        Layout.fillWidth: true; spacing: 10
 
                         RowLayout {
-                            Layout.fillWidth: true
-                            Layout.minimumHeight: 36
-                            spacing: 16
-
+                            Layout.fillWidth: true; Layout.minimumHeight: 36; spacing: 16
                             Text {
                                 text: "Fallback Language"
                                 font.pixelSize: Theme.fontSizeBody; font.weight: Font.Medium
@@ -703,9 +665,7 @@ Page {
                         }
 
                         Flow {
-                            Layout.fillWidth: true
-                            spacing: 6
-
+                            Layout.fillWidth: true; spacing: 6
                             Repeater {
                                 model: ["de","en","es","fr","hu","nl","ru","slv","sv"]
                                 Pill {
@@ -721,20 +681,13 @@ Page {
                     Item { Layout.fillWidth: true; implicitHeight: 12 }
                     RowDivider {}
 
-                    // Interface language (single-select pill group)
                     ColumnLayout {
-                        Layout.fillWidth: true
-                        spacing: 10
+                        Layout.fillWidth: true; spacing: 10
 
                         RowLayout {
-                            Layout.fillWidth: true
-                            Layout.minimumHeight: 36
-                            spacing: 16
-
+                            Layout.fillWidth: true; Layout.minimumHeight: 36; spacing: 16
                             Column {
-                                Layout.fillWidth: true; Layout.alignment: Qt.AlignVCenter
-                                spacing: 2
-
+                                Layout.fillWidth: true; Layout.alignment: Qt.AlignVCenter; spacing: 2
                                 Text {
                                     text: "Interface Language"
                                     font.pixelSize: Theme.fontSizeBody; font.weight: Font.Medium
@@ -754,8 +707,7 @@ Page {
 
                         Flow {
                             id: ifaceFlow
-                            Layout.fillWidth: true
-                            spacing: 6
+                            Layout.fillWidth: true; spacing: 6
 
                             readonly property var langs:  ["en","fr","de","ru","es","pt","it","nl","hu","sv","cs","pl","ro","he","ar","tr","th","vi","id","ms","ko","zh","zh-cn","zh-tw","fa","eo","slv"]
                             readonly property var labels: ["EN","FR","DE","RU","ES","PT","IT","NL","HU","SV","CS","PL","RO","HE","AR","TR","TH","VI","ID","MS","KO","ZH","ZH-CN","ZH-TW","FA","EO","SLV"]
@@ -779,10 +731,8 @@ Page {
 
                     SettingRow {
                         label: "Search on Typing"
-
                         ToggleSwitch {
-                            anchors.right:          parent.right
-                            anchors.verticalCenter: parent.verticalCenter
+                            anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
                             checked: appConfig.searchOnTyping
                             onToggled: (v) => { appConfig.searchOnTyping = v; page.markDirty() }
                         }
@@ -792,12 +742,9 @@ Page {
                     SettingRow {
                         label: "Search Delay"
                         tip:   "Milliseconds after typing before triggering search.\n\nDefault: 150 ms"
-
                         StepperField {
-                            anchors.left:           parent.left
-                            anchors.verticalCenter: parent.verticalCenter
-                            value: appConfig.searchDelayMs
-                            min:   0; max: 2000; unit: " ms"
+                            anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter
+                            value: appConfig.searchDelayMs; min: 0; max: 2000; unit: " ms"
                             onValueChanged: { appConfig.searchDelayMs = value; page.markDirty() }
                         }
                     }
@@ -805,15 +752,12 @@ Page {
 
                     SettingRow {
                         label: "Show Romaji"
-
                         ToggleSwitch {
-                            anchors.right:          parent.right
-                            anchors.verticalCenter: parent.verticalCenter
+                            anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
                             checked: appConfig.showRomaji
                             onToggled: (v) => { appConfig.showRomaji = v; page.markDirty() }
                         }
                     }
-
 
                     // ── SPACED REPETITION ─────────────────────────────────────
                     SectionHeader { title: "Spaced Repetition" }
@@ -821,12 +765,9 @@ Page {
                     SettingRow {
                         label: "New Cards / Day"
                         tip:   "Maximum new cards per day. 0 = unlimited.\n\nDefault: 20"
-
                         StepperField {
-                            anchors.left:           parent.left
-                            anchors.verticalCenter: parent.verticalCenter
-                            value:     appConfig.newCardsPerDay
-                            min: 0; max: 9999; zeroLabel: "∞"
+                            anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter
+                            value: appConfig.newCardsPerDay; min: 0; max: 9999; zeroLabel: "∞"
                             onValueChanged: { appConfig.newCardsPerDay = value; page.markDirty() }
                         }
                     }
@@ -835,26 +776,20 @@ Page {
                     SettingRow {
                         label: "Reviews / Day"
                         tip:   "Maximum review cards per day. 0 = unlimited.\n\nDefault: 200"
-
                         StepperField {
-                            anchors.left:           parent.left
-                            anchors.verticalCenter: parent.verticalCenter
-                            value:     appConfig.reviewsPerDay
-                            min: 0; max: 9999; zeroLabel: "∞"
+                            anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter
+                            value: appConfig.reviewsPerDay; min: 0; max: 9999; zeroLabel: "∞"
                             onValueChanged: { appConfig.reviewsPerDay = value; page.markDirty() }
                         }
                     }
                     RowDivider {}
 
-                    // Desired Retention — slider row
                     SettingRow {
                         label:    "Desired Retention"
                         subtitle: Math.round(appConfig.desiredRetention * 100) + "% recall target"
                         tip:      "Target recall probability at review time. Higher = more reviews.\n\nRecommended: 85–92%. Default: 90%."
-
                         Slider {
-                            anchors.left:           parent.left
-                            anchors.right:          parent.right
+                            anchors.left: parent.left; anchors.right: parent.right
                             anchors.verticalCenter: parent.verticalCenter
                             from: 0.70; to: 0.97; stepSize: 0.01
                             value: appConfig.desiredRetention
@@ -866,12 +801,9 @@ Page {
                     SettingRow {
                         label: "Maximum Interval"
                         tip:   "Longest gap between reviews in days. Default: 36500 (≈100 years)."
-
                         StepperField {
-                            anchors.left:           parent.left
-                            anchors.verticalCenter: parent.verticalCenter
-                            value:     appConfig.maximumInterval
-                            min: 1; max: 99999; unit: " days"
+                            anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter
+                            value: appConfig.maximumInterval; min: 1; max: 99999; unit: " days"
                             onValueChanged: { appConfig.maximumInterval = value; page.markDirty() }
                         }
                     }
@@ -880,12 +812,9 @@ Page {
                     SettingRow {
                         label: "Leech Threshold"
                         tip:   "Lapses before a card is flagged as a leech.\n\nDefault: 8"
-
                         StepperField {
-                            anchors.left:           parent.left
-                            anchors.verticalCenter: parent.verticalCenter
-                            value:     appConfig.leechThreshold
-                            min: 2; max: 99; unit: " lapses"
+                            anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter
+                            value: appConfig.leechThreshold; min: 2; max: 99; unit: " lapses"
                             onValueChanged: { appConfig.leechThreshold = value; page.markDirty() }
                         }
                     }
@@ -894,12 +823,9 @@ Page {
                     SettingRow {
                         label: "Day Offset"
                         tip:   "Seconds after midnight when the SRS day starts. 14400 = 4:00 AM.\n\nDefault: 14400"
-
                         StepperField {
-                            anchors.left:           parent.left
-                            anchors.verticalCenter: parent.verticalCenter
-                            value:     appConfig.dayOffset
-                            min: 0; max: 86399; unit: " sec"
+                            anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter
+                            value: appConfig.dayOffset; min: 0; max: 86399; unit: " sec"
                             onValueChanged: { appConfig.dayOffset = value; page.markDirty() }
                         }
                     }
@@ -909,15 +835,12 @@ Page {
                         label:   "Interval Fuzz"
                         tip:     "Randomizes intervals slightly to avoid review clustering."
                         compact: true
-
                         ToggleSwitch {
-                            anchors.right:          parent.right
-                            anchors.verticalCenter: parent.verticalCenter
+                            anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
                             checked: appConfig.enableFuzz
                             onToggled: (v) => { appConfig.enableFuzz = v; page.markDirty() }
                         }
                     }
-                    
                     RowDivider {}
 
                     SettingRow {
@@ -928,94 +851,71 @@ Page {
                         ComboBox {
                             id: combo
                             anchors.verticalCenter: parent.verticalCenter
-                            width: parent.width
-                            height: 30
-
+                            width: parent.width; height: 30
                             model: ["Mixed", "Review First", "New First"]
                             currentIndex: appConfig.orderMode
+                            onCurrentIndexChanged: { appConfig.orderMode = currentIndex; page.markDirty() }
 
-                            onCurrentIndexChanged: {
-                                appConfig.orderMode = currentIndex
-                                page.markDirty()
-                            }
-
-                            // ── Background ─────────────────────────────────────────
                             background: Rectangle {
                                 radius: 6
                                 color: combo.pressed
-                                    ? Qt.rgba(1, 1, 1, 0.14)
-                                    : combo.hovered
-                                        ? Qt.rgba(1, 1, 1, 0.10)
-                                        : Qt.rgba(1, 1, 1, 0.05)
+                                    ? Theme.surfacePress
+                                    : combo.hovered ? Theme.surfaceHover : Theme.surfaceSubtle
                                 border.width: 1
                                 border.color: combo.hovered
                                     ? Qt.rgba(page.accentColor.r, page.accentColor.g, page.accentColor.b, 0.5)
-                                    : Qt.rgba(1, 1, 1, 0.10)
-                                Behavior on color       { ColorAnimation { duration: 100 } }
+                                    : Theme.surfaceBorder
+                                Behavior on color        { ColorAnimation { duration: 100 } }
                                 Behavior on border.color { ColorAnimation { duration: 120 } }
                             }
 
-                            // ── Texto seleccionado ──────────────────────────────────
                             contentItem: Text {
-                                text:              combo.displayText
-                                font.pixelSize:    Theme.fontSizeSmall
-                                color:             page.textColor
+                                text: combo.displayText
+                                font.pixelSize: Theme.fontSizeSmall
+                                color: page.textColor
                                 verticalAlignment: Text.AlignVCenter
-                                elide:             Text.ElideRight
-                                leftPadding:       10
-                                rightPadding:      24
+                                elide: Text.ElideRight
+                                leftPadding: 10; rightPadding: 24
                             }
 
-                            // ── Flecha ─────────────────────────────────────────────
                             indicator: Text {
-                                text:   "▾"
-                                font.pixelSize: 12
-                                color:  page.hintColor
-                                anchors.right:          parent.right
-                                anchors.rightMargin:    8
+                                text: "▾"; font.pixelSize: 12; color: page.hintColor
+                                anchors.right: parent.right; anchors.rightMargin: 8
                                 anchors.verticalCenter: parent.verticalCenter
                             }
 
-                            // ── Popup ───────────────────────────────────────────────
                             popup: Popup {
-                                y:      combo.height + 4
-                                width:  combo.width
+                                y: combo.height + 4
+                                width: combo.width
                                 height: combo.count * 36
                                 padding: 4
-
-                                // Cierra si se clickea fuera
                                 closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutsideParent
 
                                 background: Rectangle {
-                                    radius:       6
-                                    color:        Theme.cardBackground
-                                    border.width: 1
-                                    border.color: page.dividerColor
+                                    radius: 6
+                                    color: Theme.cardBackground
+                                    border.width: 1; border.color: page.dividerColor
 
+                                    // MultiEffect replaces DropShadow from Qt5Compat.GraphicalEffects
                                     layer.enabled: true
-                                    layer.effect: DropShadow {
-                                        transparentBorder: true
-                                        radius:   12
-                                        samples:  17
-                                        color:    "#60000000"
-                                        verticalOffset: 4
+                                    layer.effect: MultiEffect {
+                                        shadowEnabled:     true
+                                        shadowColor:       "#60000000"
+                                        shadowBlur:        0.6
+                                        shadowVerticalOffset: 4
+                                        shadowHorizontalOffset: 0
                                     }
                                 }
 
                                 contentItem: ListView {
-                                    clip:        true
-                                    interactive: false
-                                    model:       combo.delegateModel   // ← delegateModel, no combo.model
+                                    clip: true; interactive: false
+                                    model: combo.delegateModel
 
-                                    // Highlight animado entre items
                                     highlight: Rectangle {
                                         radius: 4
                                         color: Qt.rgba(
-                                            page.accentColor.r,
-                                            page.accentColor.g,
-                                            page.accentColor.b,
-                                            0.20
-                                        )
+                                            page.accentColor.r, page.accentColor.g,
+                                            page.accentColor.b, 0.20)
                                         Behavior on y { SmoothedAnimation { velocity: 200 } }
                                     }
                                     highlightFollowsCurrentItem: true
@@ -1023,46 +923,28 @@ Page {
                                 }
                             }
 
-                            // ── Delegate ────────────────────────────────────────────
                             delegate: ItemDelegate {
-                                width:  combo.width - 8   // margen para el padding del popup
-                                height: 36
+                                width: combo.width - 8; height: 36
+                                onClicked: { combo.currentIndex = index; combo.popup.close() }
 
-                                // Selecciona y cierra al hacer click
-                                onClicked: {
-                                    combo.currentIndex = index
-                                    combo.popup.close()
-                                }
-
-                                // Hover highlight
                                 background: Rectangle {
                                     radius: 4
-                                    color: hovered
-                                        ? Qt.rgba(1, 1, 1, 0.08)
-                                        : "transparent"
+                                    color: hovered ? Theme.surfaceHover : "transparent"
                                     Behavior on color { ColorAnimation { duration: 80 } }
                                 }
-
                                 contentItem: Row {
-                                    spacing:         8
-                                    leftPadding:     6
+                                    spacing: 8; leftPadding: 6
                                     anchors.verticalCenter: parent.verticalCenter
 
-                                    // Checkmark en el item activo
                                     Text {
-                                        text:           index === combo.currentIndex ? "✓" : ""
-                                        font.pixelSize: Theme.fontSizeSmall
-                                        color:          page.accentColor
-                                        width:          14
-                                        verticalAlignment: Text.AlignVCenter
+                                        text: index === combo.currentIndex ? "✓" : ""
+                                        font.pixelSize: Theme.fontSizeSmall; color: page.accentColor
+                                        width: 14; verticalAlignment: Text.AlignVCenter
                                     }
-
                                     Text {
-                                        text:              modelData
-                                        font.pixelSize:    Theme.fontSizeSmall
-                                        color:             index === combo.currentIndex
-                                                            ? page.accentColor
-                                                            : page.textColor
+                                        text: modelData
+                                        font.pixelSize: Theme.fontSizeSmall
+                                        color: index === combo.currentIndex ? page.accentColor : page.textColor
                                         verticalAlignment: Text.AlignVCenter
                                         Behavior on color { ColorAnimation { duration: 80 } }
                                     }
@@ -1076,11 +958,9 @@ Page {
 
                     SettingRow {
                         label: "Version"
-
                         Text {
-                            anchors.right:          parent.right
-                            anchors.verticalCenter: parent.verticalCenter
-                            text:  appConfig.appVersion
+                            anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
+                            text: appConfig.appVersion
                             font.pixelSize: Theme.fontSizeBody
                             color: Qt.rgba(page.hintColor.r, page.hintColor.g, page.hintColor.b, 0.6)
                         }
@@ -1090,26 +970,20 @@ Page {
                     SettingRow {
                         label:    "Device ID"
                         subtitle: "Used for sync identification"
-
                         Text {
-                            anchors.right:          parent.right
-                            anchors.verticalCenter: parent.verticalCenter
+                            anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
                             text: appConfig.deviceId.toString(16).toUpperCase().substring(0, 8) + "…"
-                            font.pixelSize: Theme.fontSizeSmall
-                            font.family:    "monospace"
+                            font.pixelSize: Theme.fontSizeSmall; font.family: "monospace"
                             color: Qt.rgba(page.hintColor.r, page.hintColor.g, page.hintColor.b, 0.5)
                         }
                     }
                     RowDivider {}
 
-                    // Reset to defaults
                     SettingRow {
                         label:    qsTr("Reset to Defaults")
                         subtitle: "Restore all settings to their original values"
 
-                        // Override label color for destructive action
                         Component.onCompleted: {
-                            // Find the first Text child of the Column and re-colour it
                             for (var i = 0; i < children.length; i++) {
                                 var c = children[i]
                                 if (c && c.children) {
@@ -1124,18 +998,16 @@ Page {
                         }
 
                         Rectangle {
-                            anchors.right:          parent.right
-                            anchors.verticalCenter: parent.verticalCenter
-                            width:  rstLbl.implicitWidth + 20; height: 30; radius: 6
-                            color:  rstMa.containsMouse
-                                    ? Qt.rgba(0.97, 0.44, 0.44, 0.22)
-                                    : Qt.rgba(0.97, 0.44, 0.44, 0.10)
+                            anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
+                            width: rstLbl.implicitWidth + 20; height: 30; radius: 6
+                            color: rstMa.containsMouse
+                                ? Qt.rgba(0.97, 0.44, 0.44, 0.22)
+                                : Qt.rgba(0.97, 0.44, 0.44, 0.10)
                             border.width: 1; border.color: Qt.rgba(0.97, 0.44, 0.44, 0.40)
                             Behavior on color { ColorAnimation { duration: 100 } }
 
                             Text {
-                                id:   rstLbl
-                                anchors.centerIn: parent
+                                id: rstLbl; anchors.centerIn: parent
                                 text: "Reset"
                                 font.pixelSize: Theme.fontSizeSmall; font.weight: Font.Medium
                                 color: "#F87171"
@@ -1153,14 +1025,12 @@ Page {
             }
         }
 
-        // ── Apply / Discard bar — slides in from bottom when dirty ────────────
+        // ── Apply / Discard bar ───────────────────────────────────────────────
         Rectangle {
             id: applyBar
             anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
             height: page.dirty ? 56 : 0
-            clip: true
-            color: Theme.cardBackground
-            z: 10
+            clip: true; color: Theme.cardBackground; z: 10
             Behavior on height { NumberAnimation { duration: 200; easing.type: Easing.OutQuad } }
 
             Rectangle { anchors.top: parent.top; width: parent.width; height: 1; color: page.dividerColor }
@@ -1178,11 +1048,10 @@ Page {
                     Layout.fillWidth: true; Layout.alignment: Qt.AlignVCenter
                 }
 
-                // Discard button
                 Rectangle {
                     width: dscLbl.implicitWidth + 20; height: 30; radius: 6
-                    color: dscMa.containsMouse ? Qt.rgba(1, 1, 1, 0.08) : "transparent"
-                    border.width: 1; border.color: Qt.rgba(1, 1, 1, 0.10)
+                    color: dscMa.containsMouse ? Theme.surfaceHover : "transparent"
+                    border.width: 1; border.color: Theme.surfaceBorder
                     Layout.alignment: Qt.AlignVCenter
                     Behavior on color { ColorAnimation { duration: 100 } }
 
@@ -1199,7 +1068,6 @@ Page {
                     }
                 }
 
-                // Apply button
                 Rectangle {
                     width: aplLbl.implicitWidth + 24; height: 30; radius: 6
                     color: aplMa.containsMouse ? Qt.lighter(page.accentColor, 1.15) : page.accentColor
@@ -1222,7 +1090,7 @@ Page {
         }
     }
 
-    // ── Confirmation dialog ───────────────────────────────────────────────────
+    // ── Reset confirmation dialog ─────────────────────────────────────────────
     Dialog {
         id: resetConfirmDialog
         title: "Reset to defaults?"
@@ -1233,10 +1101,8 @@ Page {
         Text {
             text: "All settings will be restored to their default values."
             wrapMode: Text.Wrap; width: 260
-            color: page.textColor
-            font.pixelSize: Theme.fontSizeBody
+            color: page.textColor; font.pixelSize: Theme.fontSizeBody
         }
-
         standardButtons: Dialog.Ok | Dialog.Cancel
         onAccepted: page.resetToDefaults()
     }

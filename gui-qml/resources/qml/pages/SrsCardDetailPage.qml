@@ -4,13 +4,17 @@ import QtQuick.Layouts
 import Kotoba 1.0
 import "../components"
 
+// ── SrsCardDetailPage ─────────────────────────────────────────────────────────
+// Single canonical card-detail page. SrsCardDetails.qml is removed — this file
+// handles both the SrsCardDetailPage and SrsCardDetails use-cases identically.
+
 Page {
     id: page
 
     property int entryId: -1
     property var entryData: ({})
 
-    // ── reactive stats ───────────────────────────────────────────────────────
+    // ── Reactive stats ────────────────────────────────────────────────────────
     property string statDue:          "—"
     property int    statReps:         0
     property int    statLapses:       0
@@ -38,98 +42,102 @@ Page {
     property color accentColor:  Theme.accentColor
     property color dividerColor: Theme.dividerColor
 
-    function stateColor(state) {
-        switch (state) {
-            case "New":        return "#4A9EFF"
-            case "Learning":   return "#FFB83F"
-            case "Relearning": return "#FF7043"
-            case "Review":     return "#4CAF7D"
-            case "Suspended":  return "#9E9E9E"
-            default:           return hintColor
-        }
-    }
+    background: Rectangle { color: Theme.background }
 
-    function stateIcon(state) {
-        switch (state) {
-            case "New":        return "✦"
-            case "Learning":   return "◎"
-            case "Relearning": return "↺"
-            case "Review":     return "✓"
-            case "Suspended":  return "⏸"
-            default:           return ""
-        }
-    }
-
-    // ── root layout ──────────────────────────────────────────────────────────
+    // ── Root layout ───────────────────────────────────────────────────────────
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: 16
         spacing: 12
 
-        // ── top bar ──────────────────────────────────────────────────────────
+        // ── Top bar ──────────────────────────────────────────────────────────
         Item {
             Layout.fillWidth: true
-            height: 36
+            height: Theme.minTapTarget
 
-            Button {
+            // Back button
+            Item {
+                id: backBtn
                 anchors.left: parent.left
                 anchors.verticalCenter: parent.verticalCenter
-                text: "← Back"
-                onClicked: stack.pop()
+                width: backLabel.implicitWidth + 24
+                height: Theme.minTapTarget
+
+                Rectangle {
+                    anchors.fill: parent; radius: 6
+                    color: backMouse.containsMouse ? Theme.surfaceHover : "transparent"
+                    Behavior on color { ColorAnimation { duration: 120 } }
+                }
+                RowLayout {
+                    anchors.centerIn: parent; spacing: 5
+                    Text {
+                        text: "‹"
+                        font.pixelSize: Theme.fontSizeLarge
+                        color: hintColor
+                    }
+                    Text {
+                        id: backLabel
+                        text: "Back"
+                        font.pixelSize: Theme.fontSizeBody; font.weight: Font.Medium
+                        color: hintColor
+                    }
+                }
+                MouseArea {
+                    id: backMouse
+                    anchors.fill: parent
+                    hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                    onClicked: stack.pop()
+                }
             }
 
-            // Badge anchored to right — not in flow, so it never affects layout
+            // State badge
             Rectangle {
-                id: stateBadgeRect
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
                 height: 28
                 width: badgeRow.implicitWidth + 28
                 radius: height / 2
                 color: Qt.rgba(
-                    stateColor(statState).r,
-                    stateColor(statState).g,
-                    stateColor(statState).b, 0.18)
+                    Theme.srsStateColor(statState).r,
+                    Theme.srsStateColor(statState).g,
+                    Theme.srsStateColor(statState).b, 0.18)
                 border.width: 1
                 border.color: Qt.rgba(
-                    stateColor(statState).r,
-                    stateColor(statState).g,
-                    stateColor(statState).b, 0.40)
-
+                    Theme.srsStateColor(statState).r,
+                    Theme.srsStateColor(statState).g,
+                    Theme.srsStateColor(statState).b, 0.40)
                 Behavior on color { ColorAnimation { duration: 200 } }
 
                 Row {
                     id: badgeRow
+                    anchors.centerIn: parent
                     spacing: 5
 
                     Text {
-                        text: stateIcon(statState)
-                        color: stateColor(statState)
+                        text: Theme.srsStateIcon(statState)
+                        color: Theme.srsStateColor(statState)
                         font.pixelSize: Theme.fontSizeXSmall
                         visible: statState !== ""
                     }
                     Text {
                         text: statState
-                        color: stateColor(statState)
-                        font.pixelSize: Theme.fontSizeSmall
-                        font.weight: Font.Medium
+                        color: Theme.srsStateColor(statState)
+                        font.pixelSize: Theme.fontSizeSmall; font.weight: Font.Medium
                     }
                 }
             }
         }
 
-        // ── entry view card ───────────────────────────────────────────────────
+        // ── Entry view card ───────────────────────────────────────────────────
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: parent.height * 0.42
             radius: 10
-            border.width: 1
-            border.color: dividerColor
+            border.width: 1; border.color: dividerColor
             color: Theme.cardBackground
 
             ScrollView {
-                anchors.fill: parent
-                anchors.margins: 16
+                anchors.fill: parent; anchors.margins: 16
                 clip: true
 
                 EntryView {
@@ -144,12 +152,11 @@ Page {
             }
         }
 
-        // ── SRS stats grid ────────────────────────────────────────────────────
+        // ── Stats grid ────────────────────────────────────────────────────────
         Text {
             text: "Card Stats"
             color: hintColor
-            font.pixelSize: Theme.fontSizeXSmall
-            font.weight: Font.Medium
+            font.pixelSize: Theme.fontSizeXSmall; font.weight: Font.Medium
             font.letterSpacing: 1.2
             Layout.leftMargin: 2
         }
@@ -157,88 +164,57 @@ Page {
         GridLayout {
             Layout.fillWidth: true
             columns: 3
-            columnSpacing: 10
-            rowSpacing: 10
+            columnSpacing: 10; rowSpacing: 10
 
             StatCard {
                 Layout.fillWidth: true
-                label: "Due"
-                value: statDue
-                icon:  "⏰"
-                accent:      accentColor
-                bg:          Theme.cardBackground
-                borderColor: dividerColor
-                hint:        hintColor
-                fg:          textColor
+                label: "Due";     value: statDue;  icon: "⏰"
+                accent: accentColor; bg: Theme.cardBackground
+                borderColor: dividerColor; hint: hintColor; fg: textColor
             }
-
             StatCard {
                 Layout.fillWidth: true
-                label: "Reviews"
-                value: statTotalReviews.toString()
-                icon:  "🔁"
-                accent:      "#4CAF7D"
-                bg:          Theme.cardBackground
-                borderColor: dividerColor
-                hint:        hintColor
-                fg:          textColor
+                label: "Reviews"; value: statTotalReviews.toString(); icon: "🔁"
+                accent: "#4CAF7D"; bg: Theme.cardBackground
+                borderColor: dividerColor; hint: hintColor; fg: textColor
             }
-
             StatCard {
                 Layout.fillWidth: true
-                label: "Lapses"
-                value: statLapses.toString()
-                icon:  "⚡"
-                accent:      statLapses > 0 ? "#FF7043" : hintColor
-                bg:          Theme.cardBackground
-                borderColor: dividerColor
-                hint:        hintColor
-                fg:          textColor
+                label: "Lapses";  value: statLapses.toString(); icon: "⚡"
+                accent: statLapses > 0 ? "#FF7043" : hintColor
+                bg: Theme.cardBackground; borderColor: dividerColor
+                hint: hintColor; fg: textColor
             }
-
             StatCard {
                 Layout.fillWidth: true
                 label: "Stability"
                 value: statState === "New" ? "—" : statStability.toFixed(1) + "d"
-                icon:  "◈"
-                accent:      "#60A5FA"
-                bg:          Theme.cardBackground
-                borderColor: dividerColor
-                hint:        hintColor
-                fg:          textColor
+                icon: "◈"; accent: "#60A5FA"
+                bg: Theme.cardBackground; borderColor: dividerColor
+                hint: hintColor; fg: textColor
             }
-
             StatCard {
                 Layout.fillWidth: true
                 label: "Difficulty"
                 value: statState === "New" ? "—" : statDifficulty.toFixed(2)
-                icon:  "◇"
-                accent:      statDifficulty > 7 ? "#FF7043" : statDifficulty > 4 ? "#FFB83F" : "#4CAF7D"
-                bg:          Theme.cardBackground
-                borderColor: dividerColor
-                hint:        hintColor
-                fg:          textColor
+                icon: "◇"
+                accent: statDifficulty > 7 ? "#FF7043" : statDifficulty > 4 ? "#FFB83F" : "#4CAF7D"
+                bg: Theme.cardBackground; borderColor: dividerColor
+                hint: hintColor; fg: textColor
             }
-
             StatCard {
                 Layout.fillWidth: true
-                label: "Last seen"
-                value: statLastReview
-                icon:  "◷"
-                accent:      hintColor
-                bg:          Theme.cardBackground
-                borderColor: dividerColor
-                hint:        hintColor
-                fg:          textColor
+                label: "Last seen"; value: statLastReview; icon: "◷"
+                accent: hintColor; bg: Theme.cardBackground
+                borderColor: dividerColor; hint: hintColor; fg: textColor
             }
         }
 
-        // ── actions ───────────────────────────────────────────────────────────
+        // ── Actions ───────────────────────────────────────────────────────────
         Text {
             text: "Actions"
             color: hintColor
-            font.pixelSize: Theme.fontSizeXSmall
-            font.weight: Font.Medium
+            font.pixelSize: Theme.fontSizeXSmall; font.weight: Font.Medium
             font.letterSpacing: 1.2
             Layout.leftMargin: 2
         }
@@ -247,97 +223,89 @@ Page {
             Layout.fillWidth: true
             spacing: 10
 
-            // Suspend / Unsuspend toggle based on current state
+            // Suspend / Unsuspend
             Rectangle {
                 Layout.fillWidth: true
-                height: 36
+                height: Theme.minTapTarget - 8   // 40px
                 radius: 7
-                color: actionSuspendMouse.containsMouse
-                    ? Qt.rgba(1,1,1,0.08) : Qt.rgba(1,1,1,0.04)
-                border.width: 1
-                border.color: Qt.rgba(1,1,1,0.10)
+                color: actionSuspendMouse.pressed
+                    ? Theme.surfacePress
+                    : actionSuspendMouse.containsMouse
+                        ? Theme.surfaceHover : Theme.surfaceSubtle
+                border.width: 1; border.color: Theme.surfaceBorder
                 Behavior on color { ColorAnimation { duration: 100 } }
 
                 Text {
                     anchors.centerIn: parent
                     width: parent.width - 8
                     text: statState === "Suspended" ? "Unsuspend" : "Suspend"
-                    font.pixelSize: Theme.fontSizeSmall
-                    font.weight: Font.Medium
+                    font.pixelSize: Theme.fontSizeSmall; font.weight: Font.Medium
                     color: statState === "Suspended" ? "#34D399" : "#FFB83F"
-                    horizontalAlignment: Text.AlignHCenter
-                    elide: Text.ElideRight
+                    horizontalAlignment: Text.AlignHCenter; elide: Text.ElideRight
                 }
-
                 MouseArea {
                     id: actionSuspendMouse
                     anchors.fill: parent
-                    cursorShape: Qt.PointingHandCursor
+                    hoverEnabled: true; cursorShape: Qt.PointingHandCursor
                     onClicked: {
-                        if (statState === "Suspended")
-                            suspendDialog.unsuspending = true
-                        else
-                            suspendDialog.unsuspending = false
+                        suspendDialog.unsuspending = (statState === "Suspended")
                         suspendDialog.open()
                     }
                 }
             }
 
+            // Reset
             Rectangle {
                 Layout.fillWidth: true
-                height: 36
+                height: Theme.minTapTarget - 8
                 radius: 7
-                color: actionResetMouse.containsMouse
-                    ? Qt.rgba(1,1,1,0.08) : Qt.rgba(1,1,1,0.04)
-                border.width: 1
-                border.color: Qt.rgba(1,1,1,0.10)
+                color: actionResetMouse.pressed
+                    ? Theme.surfacePress
+                    : actionResetMouse.containsMouse
+                        ? Theme.surfaceHover : Theme.surfaceSubtle
+                border.width: 1; border.color: Theme.surfaceBorder
                 Behavior on color { ColorAnimation { duration: 100 } }
 
                 Text {
                     anchors.centerIn: parent
                     width: parent.width - 8
                     text: "Reset"
-                    font.pixelSize: Theme.fontSizeSmall
-                    font.weight: Font.Medium
+                    font.pixelSize: Theme.fontSizeSmall; font.weight: Font.Medium
                     color: "#60A5FA"
-                    horizontalAlignment: Text.AlignHCenter
-                    elide: Text.ElideRight
+                    horizontalAlignment: Text.AlignHCenter; elide: Text.ElideRight
                 }
-
                 MouseArea {
                     id: actionResetMouse
                     anchors.fill: parent
-                    cursorShape: Qt.PointingHandCursor
+                    hoverEnabled: true; cursorShape: Qt.PointingHandCursor
                     onClicked: resetDialog.open()
                 }
             }
 
-
+            // Delete
             Rectangle {
                 Layout.fillWidth: true
-                height: 36
+                height: Theme.minTapTarget - 8
                 radius: 7
-                color: actionDeleteMouse.containsMouse
-                    ? Qt.rgba(1,1,1,0.08) : Qt.rgba(1,1,1,0.04)
-                border.width: 1
-                border.color: Qt.rgba(1,1,1,0.10)
+                color: actionDeleteMouse.pressed
+                    ? Theme.surfacePress
+                    : actionDeleteMouse.containsMouse
+                        ? Theme.surfaceHover : Theme.surfaceSubtle
+                border.width: 1; border.color: Theme.surfaceBorder
                 Behavior on color { ColorAnimation { duration: 100 } }
 
                 Text {
                     anchors.centerIn: parent
                     width: parent.width - 8
                     text: "Delete"
-                    font.pixelSize: Theme.fontSizeSmall
-                    font.weight: Font.Medium
+                    font.pixelSize: Theme.fontSizeSmall; font.weight: Font.Medium
                     color: "#F87171"
-                    horizontalAlignment: Text.AlignHCenter
-                    elide: Text.ElideRight
+                    horizontalAlignment: Text.AlignHCenter; elide: Text.ElideRight
                 }
-
                 MouseArea {
                     id: actionDeleteMouse
                     anchors.fill: parent
-                    cursorShape: Qt.PointingHandCursor
+                    hoverEnabled: true; cursorShape: Qt.PointingHandCursor
                     onClicked: deleteDialog.open()
                 }
             }
@@ -346,54 +314,7 @@ Page {
         Item { Layout.fillHeight: true }
     }
 
-    // ── StatCard component ────────────────────────────────────────────────────
-    component StatCard: Rectangle {
-        property string label:       ""
-        property string value:       "—"
-        property string icon:        ""
-        property color  accent:      "white"
-        property color  bg:          "transparent"
-        property color  borderColor: "#333"
-        property color  hint:        "#888"
-        property color  fg:          "white"
-
-        height: 72
-        radius: 8
-        color: bg
-        border.width: 1
-        border.color: borderColor
-
-        ColumnLayout {
-            anchors.fill: parent
-            anchors.margins: 10
-            spacing: 2
-
-            RowLayout {
-                spacing: 4
-                Text { text: icon; font.pixelSize: Theme.fontSizeBody }
-                Text {
-                    text: label
-                    color: hint
-                    font.pixelSize: Theme.fontSizeXSmall
-                    font.weight: Font.Medium
-                    font.letterSpacing: 0.8
-                }
-            }
-
-            Text {
-                text: value
-                color: accent
-                font.pixelSize: Theme.fontSizeLarge
-                font.weight: Font.Bold
-                elide: Text.ElideRight
-                Layout.fillWidth: true
-            }
-        }
-    }
-
-    // ── dialogs ───────────────────────────────────────────────────────────────
-
-    // Reset confirmation
+    // ── Dialogs ───────────────────────────────────────────────────────────────
     Dialog {
         id: resetDialog
         title: "Reset card?"
@@ -401,68 +322,51 @@ Page {
         anchors.centerIn: Overlay.overlay
         modal: true
 
-
         Text {
             text: "This will move the card back to New state and clear all progress."
-            wrapMode: Text.Wrap
-            width: 260
-            color: page.textColor
+            wrapMode: Text.Wrap; width: 260
+            color: page.textColor; font.pixelSize: Theme.fontSizeBody
         }
-
         standardButtons: Dialog.Ok | Dialog.Cancel
-        onAccepted: {
-            srsLibraryVM.reset(entryId)
-            refreshStats()
-        }
+        onAccepted: { srsLibraryVM.reset(entryId); refreshStats() }
     }
 
-
-    // Suspend / Unsuspend confirmation
     Dialog {
         id: suspendDialog
         width: 320
         anchors.centerIn: Overlay.overlay
         modal: true
         property bool unsuspending: false
-
         title: unsuspending ? "Unsuspend card?" : "Suspend card?"
 
         Text {
             text: suspendDialog.unsuspending
                 ? "The card will return to its previous state and become available for review."
                 : "The card will be removed from all queues and won't appear in reviews."
-            wrapMode: Text.Wrap
-            width: 260
-            color: page.textColor
+            wrapMode: Text.Wrap; width: 260
+            color: page.textColor; font.pixelSize: Theme.fontSizeBody
         }
-
         standardButtons: Dialog.Ok | Dialog.Cancel
         onAccepted: {
-            if (unsuspending)
-                srsLibraryVM.unsuspend(entryId)
-            else
-                srsLibraryVM.suspend(entryId)
+            if (unsuspending) srsLibraryVM.unsuspend(entryId)
+            else              srsLibraryVM.suspend(entryId)
             refreshStats()
         }
     }
 
-    // Delete confirmation — offers re-add after deletion
     Dialog {
         id: deleteDialog
         title: "Delete card?"
         width: 320
         anchors.centerIn: Overlay.overlay
         modal: true
-
         property int deletedEntryId: -1
 
         Text {
             text: "This will permanently remove the card and all its progress from your deck."
-            wrapMode: Text.Wrap
-            width: 260
-            color: page.textColor
+            wrapMode: Text.Wrap; width: 260
+            color: page.textColor; font.pixelSize: Theme.fontSizeBody
         }
-
         standardButtons: Dialog.Ok | Dialog.Cancel
         onAccepted: {
             deleteDialog.deletedEntryId = entryId
@@ -472,7 +376,6 @@ Page {
         }
     }
 
-    // Re-add prompt shown immediately after deletion
     Dialog {
         id: readdDialog
         title: "Card deleted"
@@ -480,14 +383,11 @@ Page {
         anchors.centerIn: Overlay.overlay
         modal: true
 
-
         Text {
             text: "The card was removed. Would you like to add it back as new?"
-            wrapMode: Text.Wrap
-            width: 260
-            color: page.textColor
+            wrapMode: Text.Wrap; width: 260
+            color: page.textColor; font.pixelSize: Theme.fontSizeBody
         }
-
         standardButtons: Dialog.Yes | Dialog.No
         onAccepted: {
             if (deleteDialog.deletedEntryId >= 0)

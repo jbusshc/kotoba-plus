@@ -7,10 +7,9 @@ Page {
     id: page
     padding: 0
 
-    property bool darkTheme: Theme.darkTheme
-    property color textColor: Theme.textColor
-    property color hintColor: Theme.hintColor
-    property color accentColor: Theme.accentColor
+    property color textColor:    Theme.textColor
+    property color hintColor:    Theme.hintColor
+    property color accentColor:  Theme.accentColor
     property color dividerColor: Theme.dividerColor
 
     background: Rectangle { color: Theme.background }
@@ -24,27 +23,24 @@ Page {
             Layout.fillWidth: true
             height: 56
             color: Theme.cardBackground
-            border.width: 0
 
-            // Bottom border only
             Rectangle {
                 anchors.bottom: parent.bottom
-                width: parent.width
-                height: 1
+                width: parent.width; height: 1
                 color: dividerColor
             }
 
             RowLayout {
                 anchors.fill: parent
-                anchors.leftMargin: 16
-                anchors.rightMargin: 16
+                anchors.leftMargin: 16; anchors.rightMargin: 16
                 spacing: 10
 
-                // Search icon
                 Text {
                     text: "⌕"
                     font.pixelSize: Theme.fontSizeLarge
-                    color: searchField.activeFocus ? accentColor : Qt.rgba(hintColor.r, hintColor.g, hintColor.b, 0.5)
+                    color: searchField.activeFocus
+                        ? accentColor
+                        : Qt.rgba(hintColor.r, hintColor.g, hintColor.b, 0.5)
                     Behavior on color { ColorAnimation { duration: 150 } }
                 }
 
@@ -56,10 +52,8 @@ Page {
                     color: textColor
                     placeholderTextColor: Qt.rgba(hintColor.r, hintColor.g, hintColor.b, 0.45)
                     font.pixelSize: Theme.fontSizeBase
-
                     background: Rectangle { color: "transparent" }
                     leftPadding: 0
-
                     onTextChanged: if (searchVM) searchVM.query = text
                 }
 
@@ -75,7 +69,6 @@ Page {
                         font.pixelSize: Theme.fontSizeSmall
                         color: hintColor
                     }
-
                     MouseArea {
                         anchors.fill: parent
                         cursorShape: Qt.PointingHandCursor
@@ -100,7 +93,6 @@ Page {
                 width: listView.width
                 height: rowContent.implicitHeight + 20
 
-                // Hover + press state
                 property bool hovered: false
                 property bool pressed: false
 
@@ -116,14 +108,11 @@ Page {
 
                 RowLayout {
                     id: rowContent
-                    anchors.left: parent.left
-                    anchors.right: parent.right
+                    anchors.left: parent.left; anchors.right: parent.right
                     anchors.verticalCenter: parent.verticalCenter
-                    anchors.leftMargin: 16
-                    anchors.rightMargin: 16
+                    anchors.leftMargin: 16; anchors.rightMargin: 16
                     spacing: 12
 
-                    // Left accent bar on hover
                     Rectangle {
                         width: 3
                         height: wordText.implicitHeight
@@ -146,7 +135,6 @@ Page {
                             wrapMode: Text.Wrap
                             width: parent.width
                         }
-
                         Text {
                             text: gloss
                             font.pixelSize: Theme.fontSizeSmall
@@ -167,15 +155,12 @@ Page {
                     }
                 }
 
-                // Divider
                 Rectangle {
                     anchors.bottom: parent.bottom
-                    anchors.left: parent.left
-                    anchors.right: parent.right
+                    anchors.left: parent.left; anchors.right: parent.right
                     anchors.leftMargin: 16
                     height: 1
-                    color: dividerColor
-                    opacity: 0.5
+                    color: dividerColor; opacity: 0.5
                 }
 
                 MouseArea {
@@ -220,7 +205,7 @@ Page {
                 }
             }
 
-            // Prompt state (no query yet)
+            // Prompt state
             Item {
                 anchors.centerIn: parent
                 visible: listView.count === 0 && searchField.text.length === 0

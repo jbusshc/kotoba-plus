@@ -9,62 +9,63 @@ Page {
     title: "SRS Library"
     padding: 0
 
-    property bool darkTheme: Theme.darkTheme
-    property color textColor: Theme.textColor
-    property color hintColor: Theme.hintColor
-    property color accentColor: Theme.accentColor
+    property color textColor:    Theme.textColor
+    property color hintColor:    Theme.hintColor
+    property color accentColor:  Theme.accentColor
     property color dividerColor: Theme.dividerColor
 
     background: Rectangle { color: Theme.background }
 
     Component.onCompleted: {
-        if (srsLibraryVM)
-            srsLibraryVM.setFilter("All")
+        if (srsLibraryVM) srsLibraryVM.setFilter("All")
     }
 
-    // ── Filter pill component ────────────────────────────────────────────────
+    // ── Filter pill ───────────────────────────────────────────────────────────
     component FilterPill: Rectangle {
-        property string label: ""
+        property string label:  ""
         property bool   active: false
         signal clicked()
 
         function pillColor(state) {
             switch (state) {
-                case "New":       return "#4A9EFF"
-                case "Learning":  return "#FFB83F"
-                case "Review":    return "#34D399"
-                case "Suspended": return "#9CA3AF"
-                default:          return accentColor
+            case "New":       return "#4A9EFF"
+            case "Learning":  return "#FFB83F"
+            case "Review":    return "#34D399"
+            case "Suspended": return "#9CA3AF"
+            default:          return accentColor
             }
         }
 
-        height: 28
-        width: pillLabel.implicitWidth + 20
+        height: Theme.minTapTarget - 20   // 28 px — pill stays compact, tap area below
+        width: pillLbl.implicitWidth + 20
         radius: height / 2
 
         color: active
             ? Qt.rgba(pillColor(label).r, pillColor(label).g, pillColor(label).b, 0.20)
-            : Qt.rgba(1, 1, 1, 0.05)
-
+            : Theme.surfaceSubtle
         border.width: 1
         border.color: active
             ? Qt.rgba(pillColor(label).r, pillColor(label).g, pillColor(label).b, 0.55)
-            : Qt.rgba(1, 1, 1, 0.10)
-
+            : Theme.surfaceBorder
         Behavior on color { ColorAnimation { duration: 130 } }
 
         Text {
-            id: pillLabel
+            id: pillLbl
             anchors.centerIn: parent
             text: label
-            font.pixelSize: Theme.fontSizeXSmall
-            font.weight: Font.Medium
-            color: active ? pillColor(label) : Qt.rgba(hintColor.r, hintColor.g, hintColor.b, 0.7)
+            font.pixelSize: Theme.fontSizeXSmall; font.weight: Font.Medium
+            color: active
+                ? pillColor(label)
+                : Qt.rgba(hintColor.r, hintColor.g, hintColor.b, 0.7)
             Behavior on color { ColorAnimation { duration: 130 } }
         }
 
         MouseArea {
-            anchors.fill: parent
+            // Expand tap target to minTapTarget height without changing visual size
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.verticalCenter:   parent.verticalCenter
+            width:  parent.width
+            height: Theme.minTapTarget
             cursorShape: Qt.PointingHandCursor
             onClicked: parent.clicked()
         }
@@ -74,24 +75,21 @@ Page {
         anchors.fill: parent
         spacing: 0
 
-        // ── Top bar: search + filters ────────────────────────────────────────
+        // ── Top bar ───────────────────────────────────────────────────────────
         Rectangle {
             Layout.fillWidth: true
             color: Theme.cardBackground
             height: searchCol.implicitHeight + 20
 
-            // Bottom border
             Rectangle {
                 anchors.bottom: parent.bottom
-                width: parent.width
-                height: 1
+                width: parent.width; height: 1
                 color: dividerColor
             }
 
             Column {
                 id: searchCol
-                anchors.fill: parent
-                anchors.margins: 14
+                anchors.fill: parent; anchors.margins: 14
                 spacing: 10
 
                 // Back button
@@ -99,26 +97,31 @@ Page {
                     width: parent.width
 
                     Item {
-                        width: backLabel.implicitWidth + 20
-                        height: 32
+                        width: Math.max(backLabel.implicitWidth + 24, Theme.minTapTarget)
+                        height: Theme.minTapTarget
 
                         Rectangle {
-                            anchors.fill: parent
-                            radius: 6
-                            color: backMouse.containsMouse ? Qt.rgba(1,1,1,0.06) : "transparent"
+                            anchors.fill: parent; radius: 6
+                            color: backMouse.containsMouse ? Theme.surfaceHover : "transparent"
                             Behavior on color { ColorAnimation { duration: 120 } }
                         }
                         RowLayout {
-                            anchors.centerIn: parent
-                            spacing: 4
-                            Text { text: "‹"; font.pixelSize: Theme.fontSizeMedium; color: hintColor }
-                            Text { id: backLabel; text: "Back"; font.pixelSize: Theme.fontSizeSmall; font.weight: Font.Medium; color: hintColor }
+                            anchors.centerIn: parent; spacing: 4
+                            Text {
+                                text: "‹"
+                                font.pixelSize: Theme.fontSizeMedium; color: hintColor
+                            }
+                            Text {
+                                id: backLabel
+                                text: "Back"
+                                font.pixelSize: Theme.fontSizeSmall
+                                font.weight: Font.Medium; color: hintColor
+                            }
                         }
                         MouseArea {
                             id: backMouse
                             anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
+                            hoverEnabled: true; cursorShape: Qt.PointingHandCursor
                             onClicked: stack.pop()
                         }
                     }
@@ -128,21 +131,18 @@ Page {
 
                 // Search row
                 Rectangle {
-                    width: parent.width
-                    height: 36
+                    width: parent.width; height: 36
                     radius: 7
-                    color: Qt.rgba(1,1,1,0.05)
+                    color: Theme.surfaceInput
                     border.width: 1
                     border.color: searchField.activeFocus
                         ? Qt.rgba(accentColor.r, accentColor.g, accentColor.b, 0.5)
-                        : Qt.rgba(1,1,1,0.08)
-
+                        : Theme.surfaceBorder
                     Behavior on border.color { ColorAnimation { duration: 150 } }
 
                     RowLayout {
                         anchors.fill: parent
-                        anchors.leftMargin: 10
-                        anchors.rightMargin: 10
+                        anchors.leftMargin: 10; anchors.rightMargin: 10
                         spacing: 8
 
                         Text {
@@ -165,14 +165,13 @@ Page {
 
                         Rectangle {
                             width: 18; height: 18; radius: 9
-                            color: Qt.rgba(1,1,1,0.12)
+                            color: Theme.surfaceClear
                             visible: searchField.text.length > 0
 
                             Text {
                                 anchors.centerIn: parent
                                 text: "×"
-                                font.pixelSize: Theme.fontSizeXSmall
-                                color: hintColor
+                                font.pixelSize: Theme.fontSizeXSmall; color: hintColor
                             }
                             MouseArea {
                                 anchors.fill: parent
@@ -183,15 +182,13 @@ Page {
                     }
                 }
 
-                // Filter pills row
+                // Filter pills
                 Row {
                     spacing: 6
-
                     Repeater {
                         model: ["All", "New", "Learning", "Review", "Suspended"]
-
                         FilterPill {
-                            label: modelData
+                            label:  modelData
                             active: filterBox.currentFilter === modelData
                             onClicked: {
                                 filterBox.currentFilter = modelData
@@ -203,45 +200,38 @@ Page {
             }
         }
 
-        // Hidden state tracker for filters (replaces ComboBox)
+        // Filter state tracker
         QtObject {
             id: filterBox
             property string currentFilter: "All"
         }
 
-        // ── Count bar ────────────────────────────────────────────────────────
+        // ── Count bar ─────────────────────────────────────────────────────────
         Rectangle {
             Layout.fillWidth: true
-            height: 32
-            color: "transparent"
+            height: 32; color: "transparent"
 
-            // We put this inside a RowLayout
             RowLayout {
                 anchors.fill: parent
-                anchors.leftMargin: 16
-                anchors.rightMargin: 16
+                anchors.leftMargin: 16; anchors.rightMargin: 16
 
                 Text {
-                    font.pixelSize: Theme.fontSizeXSmall
-                    font.weight: Font.Medium
+                    font.pixelSize: Theme.fontSizeXSmall; font.weight: Font.Medium
                     color: Qt.rgba(hintColor.r, hintColor.g, hintColor.b, 0.55)
                     font.letterSpacing: 0.5
                     text: cardList.count + (cardList.count === 1 ? " CARD" : " CARDS")
                 }
-
                 Item { Layout.fillWidth: true }
             }
 
             Rectangle {
                 anchors.bottom: parent.bottom
-                width: parent.width
-                height: 1
-                color: dividerColor
-                opacity: 0.4
+                width: parent.width; height: 1
+                color: dividerColor; opacity: 0.4
             }
         }
 
-        // ── Card list ────────────────────────────────────────────────────────
+        // ── Card list ─────────────────────────────────────────────────────────
         Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
@@ -250,10 +240,8 @@ Page {
                 id: cardList
                 anchors.fill: parent
                 model: srsLibraryVM
-                clip: true
-                spacing: 0
-                reuseItems: false
-                cacheBuffer: 400
+                clip: true; spacing: 0
+                reuseItems: false; cacheBuffer: 400
 
                 delegate: SrsCardDelegate {
                     width: cardList.width
@@ -262,17 +250,14 @@ Page {
                     cardState: model.state
                     due:       model.due
                     entryId:   model.entryId
-
                     onOpenDetails: function(id) {
-                        stack.push("qrc:/qml/pages/SrsCardDetails.qml", { entryId: id })
+                        stack.push("qrc:/qml/pages/SrsCardDetailPage.qml", { entryId: id })
                     }
                 }
 
-                // Scroll fade at bottom
                 Rectangle {
                     anchors.bottom: parent.bottom
-                    width: parent.width
-                    height: 40
+                    width: parent.width; height: 40
                     gradient: Gradient {
                         GradientStop { position: 0.0; color: "transparent" }
                         GradientStop { position: 1.0; color: Theme.background }
@@ -282,7 +267,6 @@ Page {
                 }
             }
 
-            // Empty state
             Column {
                 anchors.centerIn: parent
                 spacing: 10

@@ -7,15 +7,13 @@ import "../components"
 Page {
     id: page
 
-    property bool darkTheme: Theme.darkTheme
-    property color textColor: Theme.textColor
-    property color hintColor: Theme.hintColor
-    property color accentColor: Theme.accentColor
+    property color textColor:    Theme.textColor
+    property color hintColor:    Theme.hintColor
+    property color accentColor:  Theme.accentColor
     property color dividerColor: Theme.dividerColor
 
     property int docId: -1
     property var entryData: ({})
-
     property bool inSrs: false
 
     function updateSrsState() {
@@ -32,8 +30,7 @@ Page {
     Connections {
         target: srsVM
         function onContainsChanged(changedId) {
-            if (changedId === docId)
-                updateSrsState()
+            if (changedId === docId) updateSrsState()
         }
     }
 
@@ -49,19 +46,17 @@ Page {
             Layout.fillWidth: true
             spacing: 0
 
-            // Back button — minimal, text-only
+            // Back button
             Item {
                 width: backLabel.implicitWidth + 24
-                height: 36
+                height: Theme.minTapTarget
 
                 Rectangle {
                     id: backBg
-                    anchors.fill: parent
-                    radius: 6
+                    anchors.fill: parent; radius: 6
                     color: backMouse.containsMouse ? Theme.surfaceHover : "transparent"
                     Behavior on color { ColorAnimation { duration: 120 } }
                 }
-
                 RowLayout {
                     anchors.centerIn: parent
                     spacing: 5
@@ -73,17 +68,14 @@ Page {
                     Text {
                         id: backLabel
                         text: "Back"
-                        font.pixelSize: Theme.fontSizeBody
-                        font.weight: Font.Medium
+                        font.pixelSize: Theme.fontSizeBody; font.weight: Font.Medium
                         color: hintColor
                     }
                 }
-
                 MouseArea {
                     id: backMouse
                     anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
+                    hoverEnabled: true; cursorShape: Qt.PointingHandCursor
                     onClicked: stack.pop()
                 }
             }
@@ -93,8 +85,7 @@ Page {
             // SRS toggle button
             Rectangle {
                 width: srsRowLayout.implicitWidth + 24
-                height: 34
-                radius: 6
+                height: 34; radius: 6
                 color: inSrs
                     ? Qt.rgba(accentColor.r, accentColor.g, accentColor.b, 0.15)
                     : Theme.surfaceSubtle
@@ -102,7 +93,6 @@ Page {
                 border.color: inSrs
                     ? Qt.rgba(accentColor.r, accentColor.g, accentColor.b, 0.5)
                     : Theme.surfaceBorder
-
                 Behavior on color { ColorAnimation { duration: 180 } }
 
                 RowLayout {
@@ -115,11 +105,9 @@ Page {
                         color: inSrs ? accentColor : Theme.surfaceInactive
                         Behavior on color { ColorAnimation { duration: 180 } }
                     }
-
                     Text {
                         text: inSrs ? "In SRS" : "Add to SRS"
-                        font.pixelSize: Theme.fontSizeSmall
-                        font.weight: Font.Medium
+                        font.pixelSize: Theme.fontSizeSmall; font.weight: Font.Medium
                         color: inSrs ? accentColor : hintColor
                         Behavior on color { ColorAnimation { duration: 180 } }
                     }
@@ -142,12 +130,10 @@ Page {
             Layout.fillHeight: true
             radius: 10
             color: Theme.cardBackground
-            border.width: 1
-            border.color: dividerColor
+            border.width: 1; border.color: dividerColor
 
             ScrollView {
-                anchors.fill: parent
-                anchors.margins: 20
+                anchors.fill: parent; anchors.margins: 20
                 clip: true
 
                 EntryView {

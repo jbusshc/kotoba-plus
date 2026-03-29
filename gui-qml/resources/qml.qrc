@@ -6,12 +6,14 @@
         <file>qml/pages/SrsDashboard.qml</file>
         <file>qml/pages/SrsStudy.qml</file>
         <file>qml/pages/SrsLibrary.qml</file>
-        <file>qml/pages/SrsCardDetails.qml</file>
         <file>qml/components/SrsCardDelegate.qml</file>
         <file>qml/theme/Theme.qml</file>
         <file>qml/components/EntryView.qml</file>
         <file>qml/components/SenseItem.qml</file>
         <file>qml/components/Tag.qml</file>
         <file>qml/pages/SettingsPage.qml</file>
+        <file>qml/components/ActionButton.qml</file>
+        <file>qml/components/StatCard.qml</file>
+        <file>qml/pages/SrsCardDetailPage.qml</file>
     </qresource>
 </RCC>
