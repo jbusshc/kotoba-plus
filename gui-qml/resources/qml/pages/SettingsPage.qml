@@ -3,7 +3,8 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Controls.Material
 import QtQuick.Effects          // MultiEffect — replaces Qt5Compat.GraphicalEffects
-import Kotoba 1.0
+
+import "../theme"
 
 Page {
     id: page

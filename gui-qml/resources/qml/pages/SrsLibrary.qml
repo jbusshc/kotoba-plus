@@ -2,8 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import "../components"
-import Kotoba 1.0
-
+import "../theme"
 Page {
     id: page
     title: "SRS Library"

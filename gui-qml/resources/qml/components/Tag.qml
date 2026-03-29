@@ -1,9 +1,6 @@
 import QtQuick
 import "../theme"
 
-import Kotoba 1.0
-
-
 Rectangle {
     id: root
     property string label: ""

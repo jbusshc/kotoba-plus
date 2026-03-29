@@ -18,105 +18,109 @@
 #include "../viewmodels/SrsLibraryViewModel.h"
 
 #include "Configuration.h"
+#include "AppPaths.h"
 
 #include <stdlib.h>
 
 int main(int argc, char **argv)
 {
     srand(static_cast<unsigned int>(time(nullptr)));
-    ConfigWrapper configWrapper;
 
-    // Ruta de config en la misma carpeta del ejecutable
-    QString exeDir = QCoreApplication::applicationDirPath();
-    QString configPath = QDir(exeDir).filePath("config.ini");
-
-    qDebug() << "Config file path:" << configPath;
-    qDebug() << "File exists:" << QFile::exists(configPath);
-
-    bool b = loadConfiguration(configWrapper.m_config, configPath);
-    configWrapper.m_configPath = configPath;
-    QQuickStyle::setStyle("Material");
+    // ── QGuiApplication must be created before QStandardPaths on Android ─────
     QGuiApplication app(argc, argv);
     app.setApplicationName("KotobaPlus");
+    app.setOrganizationName("KotobaPlus");   // required for correct AppDataLocation on Android
 
-    qDebug() << "Working dir:" << QDir::currentPath();
-    qDebug() << "App dir:" << QCoreApplication::applicationDirPath();
+    QQuickStyle::setStyle("Material");
 
-    // create app-data folder
-    QString appData = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
-    if (appData.isEmpty()) appData = QDir::currentPath();
-    //QDir().mkpath(appData); // No need to create: AppDataLocation
+    // ── Resolve all platform-specific paths ───────────────────────────────────
+    AppPaths paths = AppPaths::resolve();
 
-    QString base = QCoreApplication::applicationDirPath();
+    qDebug() << "Config path:"   << paths.configPath;
+    qDebug() << "Data dir:"      << paths.dataDir;
+    qDebug() << "SRS profile:"   << paths.srsPath;
 
-    // Determine dict path: prefer appData, fallback to cwd
-    QString dictFile = base + "/dict.kotoba";
-    QString dictIdxFile = base + "/dict.kotoba.idx";
-    if (!QFile::exists(dictFile))
-        dictFile = QDir::current().filePath("dict.kotoba");
-    if (!QFile::exists(dictIdxFile))
-        dictIdxFile = QDir::current().filePath("dict.kotoba.idx");
+    // ── On Android: extract bundled assets to writable storage on first run ───
+    // Assets in Qt Android are inside the APK and cannot be opened with
+    // fopen(). They must be copied to a writable location first.
+#ifdef Q_OS_ANDROID
+    AppPaths::extractAssetsIfNeeded(paths.dataDir);
+#endif
 
-    // Repository (wraps loader)
+    // ── Configuration ─────────────────────────────────────────────────────────
+    ConfigWrapper configWrapper;
+    loadConfiguration(configWrapper.m_config, paths.configPath);
+    configWrapper.m_configPath = paths.configPath;
+
+    // Override data paths from resolved AppPaths so the config struct always
+    // points to writable, correct locations regardless of platform.
+    configWrapper.m_config.dictPath      = paths.dictPath;
+    configWrapper.m_config.dictIndexPath = paths.dictIndexPath;
+    configWrapper.m_config.srsPath       = paths.srsPath;
+    configWrapper.m_config.glossEnPath   = paths.glossPath("en");
+    configWrapper.m_config.glossEsPath   = paths.glossPath("es");
+    configWrapper.m_config.glossDePath   = paths.glossPath("de");
+    configWrapper.m_config.glossFrPath   = paths.glossPath("fr");
+    configWrapper.m_config.glossHuPath   = paths.glossPath("hu");
+    configWrapper.m_config.glossNlPath   = paths.glossPath("nl");
+    configWrapper.m_config.glossRuPath   = paths.glossPath("ru");
+    configWrapper.m_config.glossSlvPath  = paths.glossPath("slv");
+    configWrapper.m_config.glossSvPath   = paths.glossPath("sv");
+    configWrapper.m_config.jpPath        = paths.glossPath("jp");
+
+    // ── Dictionary ────────────────────────────────────────────────────────────
     DictionaryRepository *repo = new DictionaryRepository();
-    if (!repo->open(dictFile, dictIdxFile)) {
-        qWarning("Failed to open dictionary files. Ensure dict.kotoba and dict.kotoba.idx are present.");
-        // proceed anyway: SearchService will be invalid (guarded)
+    if (!repo->open(configWrapper.m_config.dictPath,
+                    configWrapper.m_config.dictIndexPath)) {
+        qWarning("Failed to open dictionary. Ensure data files are present.");
+        return -1;
     }
-
     kotoba_dict *dict = repo->dict();
 
-    // Services
+    // ── Services ──────────────────────────────────────────────────────────────
     SearchService *searchSvc = new SearchService(dict, &configWrapper.m_config);
-    SrsService *srsSvc = new SrsService(dict->entry_count, &configWrapper.m_config);
+    SrsService    *srsSvc    = new SrsService(dict->entry_count, &configWrapper.m_config);
 
-    // Models & ViewModels
-    SearchResultModel *searchModel = new SearchResultModel();
-    SearchViewModel *searchVM = new SearchViewModel(searchSvc, searchModel, dict);
-    EntryDetailsViewModel *detailsVM = new EntryDetailsViewModel(dict, &configWrapper.m_config);
-    SrsViewModel *srsVM = new SrsViewModel(srsSvc, dict, detailsVM);
+    // ── ViewModels ────────────────────────────────────────────────────────────
+    SearchResultModel     *searchModel = new SearchResultModel();
+    SearchViewModel       *searchVM   = new SearchViewModel(searchSvc, searchModel, dict);
+    EntryDetailsViewModel *detailsVM  = new EntryDetailsViewModel(dict, &configWrapper.m_config);
+    SrsViewModel          *srsVM      = new SrsViewModel(srsSvc, dict, detailsVM);
+    SrsLibraryViewModel   *libVM      = new SrsLibraryViewModel(srsSvc, dict, searchSvc);
 
-    SrsLibraryViewModel* libVM = new SrsLibraryViewModel(srsSvc, dict, searchSvc);
-
+    // ── QML engine ────────────────────────────────────────────────────────────
     QQmlApplicationEngine engine;
 
-    engine.rootContext()->setContextProperty("searchVM", searchVM);
+    engine.rootContext()->setContextProperty("searchVM",    searchVM);
     engine.rootContext()->setContextProperty("searchModel", searchModel);
-    engine.rootContext()->setContextProperty("detailsVM", detailsVM);
-    engine.rootContext()->setContextProperty("srsVM", srsVM);
-    engine.rootContext()->setContextProperty("appDataPath", appData);   
-    engine.rootContext()->setContextProperty("appConfig", &configWrapper);
+    engine.rootContext()->setContextProperty("detailsVM",   detailsVM);
+    engine.rootContext()->setContextProperty("srsVM",       srsVM);
+    engine.rootContext()->setContextProperty("appConfig",   &configWrapper);
     engine.rootContext()->setContextProperty("srsLibraryVM", libVM);
 
-
+    // QML is always loaded from the Qt resource system (qrc:/) — identical
+    // on desktop and Android. No platform-specific URL needed.
     engine.load(QUrl(QStringLiteral("qrc:/qml/Main.qml")));
     if (engine.rootObjects().isEmpty()) return -1;
 
-    std::string srsProfilePath = configWrapper.m_config.srsPath.toStdString();
-
+    // ── Load SRS profile ──────────────────────────────────────────────────────
     configWrapper.setServices(searchSvc, srsSvc);
-    printf("Loading SRS profile...\n");
+    std::string srsProfilePath = configWrapper.m_config.srsPath.toStdString();
     srsSvc->load(srsProfilePath.c_str());
 
-     // Ensure profile is saved on exit (persisting any sync state)
+    // ── Persist on exit ───────────────────────────────────────────────────────
     QObject::connect(&app, &QCoreApplication::aboutToQuit, [&]() {
-
-        printf("Saving SRS profile...\n");
-
         srsSvc->save(srsProfilePath.c_str());
-
-        saveConfiguration(
-            configWrapper.m_config,
-            configPath
-        );
+        saveConfiguration(configWrapper.m_config, paths.configPath);
     });
-    
+
     int result = app.exec();
 
     delete searchVM;
     delete searchModel;
     delete detailsVM;
     delete srsVM;
+    delete libVM;
     delete searchSvc;
     delete srsSvc;
     delete repo;

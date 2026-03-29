@@ -1,9 +1,8 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import Kotoba 1.0
 import "../components"
-
+import "../theme"
 // ── SrsCardDetailPage ─────────────────────────────────────────────────────────
 // Single canonical card-detail page. SrsCardDetails.qml is removed — this file
 // handles both the SrsCardDetailPage and SrsCardDetails use-cases identically.

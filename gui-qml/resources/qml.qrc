@@ -15,5 +15,6 @@
         <file>qml/components/ActionButton.qml</file>
         <file>qml/components/StatCard.qml</file>
         <file>qml/pages/SrsCardDetailPage.qml</file>
+        <file>qml/theme/qmldir</file>
     </qresource>
 </RCC>

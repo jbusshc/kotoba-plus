@@ -1,7 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
-import Kotoba 1.0
-
+import "../theme"
 // ── ActionButton ──────────────────────────────────────────────────────────────
 // Used in SrsDashboard for "Start Study Session" / "Browse Cards".
 // primary=true  → filled accent background
@@ -14,7 +13,7 @@ Rectangle {
     property string sublabel: ""
     property color  accent:   Theme.accentColor
     property bool   primary:  false
-    property bool   enabled:  true
+    property bool   interactive: true  // renamed: avoids QQuickItem::enabled override
 
     signal clicked()
 
@@ -22,21 +21,21 @@ Rectangle {
     radius: 8
 
     color: root.primary
-        ? (btnMouse.pressed && root.enabled
+        ? (btnMouse.pressed && root.interactive
             ? Qt.darker(root.accent, 1.10)
-            : btnMouse.containsMouse && root.enabled
+            : btnMouse.containsMouse && root.interactive
                 ? Qt.lighter(root.accent, 1.15)
                 : root.accent)
-        : (btnMouse.pressed && root.enabled
+        : (btnMouse.pressed && root.interactive
             ? Theme.surfacePress
-            : btnMouse.containsMouse && root.enabled
+            : btnMouse.containsMouse && root.interactive
                 ? Theme.surfaceHover
                 : Theme.surfaceSubtle)
 
     border.width: root.primary ? 0 : 1
     border.color: Theme.surfaceBorder
 
-    opacity: root.enabled ? 1.0 : 0.35
+    opacity: root.interactive ? 1.0 : 0.35
 
     Behavior on color { ColorAnimation { duration: 120 } }
 
@@ -67,7 +66,7 @@ Rectangle {
         id: btnMouse
         anchors.fill: parent
         hoverEnabled: true
-        cursorShape: root.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-        onClicked: if (root.enabled) root.clicked()
+        cursorShape: root.interactive ? Qt.PointingHandCursor : Qt.ArrowCursor
+        onClicked: if (root.interactive) root.clicked()
     }
 }

@@ -28,12 +28,10 @@ uint64_t generateDeviceId()
 QVector<uint32_t> parseSteps(const QString &steps)
 {
     QVector<uint32_t> result;
-
     QStringList tokens = steps.split(" ", Qt::SkipEmptyParts);
     QRegularExpression re(R"((\d+)([smhd]))");
 
-    for (const QString &t : tokens)
-    {
+    for (const QString &t : tokens) {
         auto match = re.match(t.trimmed());
         if (!match.hasMatch()) continue;
 
@@ -41,30 +39,22 @@ QVector<uint32_t> parseSteps(const QString &steps)
         QString unit = match.captured(2);
 
         uint32_t seconds = 0;
-
-        if (unit == "s") seconds = value;
+        if      (unit == "s") seconds = value;
         else if (unit == "m") seconds = value * 60;
         else if (unit == "h") seconds = value * 3600;
         else if (unit == "d") seconds = value * 86400;
 
-        if (seconds > 0)
-            result.push_back(seconds);
+        if (seconds > 0) result.push_back(seconds);
     }
-
     return result;
 }
 
 static void parseGlossLanguages(const QString &glossLangs, bool *langArray)
 {
-    memset(langArray, 0, KOTOBA_LANG_COUNT); // limpiar array
+    memset(langArray, 0, KOTOBA_LANG_COUNT);
     QStringList langs = glossLangs.split(",", Qt::SkipEmptyParts);
-    // debug print
-    qDebug() << "Parsing gloss languages:" << glossLangs;
-    qDebug() << "Split into:" << langs;
-    for (const QString &l : langs)
-    {       
+    for (const QString &l : langs) {
         int8_t langId = str_to_lang(l.trimmed().toUtf8().constData());
-        qDebug() << "Language:" << l.trimmed() << "-> ID:" << langId;
         if (langId >= 0)
             langArray[langId] = true;
     }
@@ -106,6 +96,8 @@ static void validateConfig(Configuration &c)
 
 // ─────────────────────────────────────────
 // save
+// Note: data file paths (dict, gloss, srs) are NOT persisted in config —
+// they are always resolved at startup by AppPaths::resolve().
 // ─────────────────────────────────────────
 
 void saveConfiguration(const Configuration &c, const QString &filePath)
@@ -113,74 +105,60 @@ void saveConfiguration(const Configuration &c, const QString &filePath)
     QSettings s(filePath, QSettings::IniFormat);
 
     s.beginGroup("App");
-    s.setValue("app_version", c.appVersion);
-    s.setValue("auto_save", c.autoSave);
-    s.setValue("check_updates", c.checkUpdates);
-    s.setValue("first_run", c.firstRun);
+    s.setValue("app_version",  c.appVersion);
+    s.setValue("auto_save",    c.autoSave);
+    s.setValue("check_updates",c.checkUpdates);
+    s.setValue("first_run",    c.firstRun);
     s.endGroup();
 
     s.beginGroup("Sync");
-    s.setValue("device_id", static_cast<qulonglong>(c.deviceId));
-    s.setValue("backup_enabled", c.backupEnabled);
-    s.setValue("backup_interval_days", c.backupIntervalDays);
+    s.setValue("device_id",           static_cast<qulonglong>(c.deviceId));
+    s.setValue("backup_enabled",      c.backupEnabled);
+    s.setValue("backup_interval_days",c.backupIntervalDays);
     s.endGroup();
 
-    s.beginGroup("Data");
-    s.setValue("dict_index_path", c.dictIndexPath);
-    s.setValue("dict_path", c.dictPath);
-    s.setValue("gloss_en_path", c.glossEnPath);
-    s.setValue("gloss_es_path", c.glossEsPath);
-    s.setValue("gloss_de_path", c.glossDePath);
-    s.setValue("gloss_fr_path", c.glossFrPath);
-    s.setValue("gloss_hu_path", c.glossHuPath);
-    s.setValue("gloss_nl_path", c.glossNlPath);
-    s.setValue("gloss_ru_path", c.glossRuPath);
-    s.setValue("gloss_slv_path", c.glossSlvPath);
-    s.setValue("gloss_sv_path", c.glossSvPath);
-
-    s.setValue("jp_path", c.jpPath);
-    s.setValue("srs_path", c.srsPath);
-    s.endGroup();
+    // [Data] section intentionally omitted — paths are platform-resolved,
+    // storing them would cause stale absolute paths on Android after reinstall.
 
     s.beginGroup("Dictionary");
     s.setValue("highlight_matches", c.highlightMatches);
-    s.setValue("max_results", c.maxResults);
-    s.setValue("page_size", c.pageSize);
-    s.setValue("search_delay_ms", c.searchDelayMs);
-    s.setValue("search_on_typing", c.searchOnTyping);
-    s.setValue("show_romaji", c.showRomaji);
+    s.setValue("max_results",       c.maxResults);
+    s.setValue("page_size",         c.pageSize);
+    s.setValue("search_delay_ms",   c.searchDelayMs);
+    s.setValue("search_on_typing",  c.searchOnTyping);
+    s.setValue("show_romaji",       c.showRomaji);
     s.endGroup();
 
     s.beginGroup("Language");
     s.setValue("fallback_language", c.fallbackLanguage);
-    s.setValue("gloss_languages", c.glossLanguages);
-    s.setValue("interface", c.interface);
+    s.setValue("gloss_languages",   c.glossLanguages);
+    s.setValue("interface",         c.interface);
     s.endGroup();
 
     s.beginGroup("Session");
-    s.setValue("daily_new_cards", c.dailyNewCards);
-    s.setValue("daily_review_limit", c.dailyReviewLimit);
+    s.setValue("daily_new_cards",   c.dailyNewCards);
+    s.setValue("daily_review_limit",c.dailyReviewLimit);
     s.endGroup();
 
     s.beginGroup("FSRS");
-    s.setValue("desiredRetention", c.desiredRetention);
-    s.setValue("maximumInterval", c.maximumInterval);
-    s.setValue("newCardsPerDay", c.newCardsPerDay);
-    s.setValue("reviewsPerDay", c.reviewsPerDay);
-    s.setValue("leechThreshold", c.leechThreshold);
-    s.setValue("enableFuzz", c.enableFuzz);
-    s.setValue("learningSteps", c.learningSteps);
-    s.setValue("relearningSteps", c.relearningSteps);
-    s.setValue("dayOffset", c.dayOffset);
-    s.setValue("order_mode", c.orderMode);
+    s.setValue("desiredRetention",  c.desiredRetention);
+    s.setValue("maximumInterval",   c.maximumInterval);
+    s.setValue("newCardsPerDay",    c.newCardsPerDay);
+    s.setValue("reviewsPerDay",     c.reviewsPerDay);
+    s.setValue("leechThreshold",    c.leechThreshold);
+    s.setValue("enableFuzz",        c.enableFuzz);
+    s.setValue("learningSteps",     c.learningSteps);
+    s.setValue("relearningSteps",   c.relearningSteps);
+    s.setValue("dayOffset",         c.dayOffset);
+    s.setValue("order_mode",        c.orderMode);
     s.endGroup();
 
     s.beginGroup("UI");
-    s.setValue("accent_color", c.accentColor);
+    s.setValue("accent_color",  c.accentColor);
     s.setValue("primary_color", c.primaryColor);
-    s.setValue("theme", c.theme);
-    s.setValue("font_family", c.fontFamily);
-    s.setValue("fontScale", c.fontScale);
+    s.setValue("theme",         c.theme);
+    s.setValue("font_family",   c.fontFamily);
+    s.setValue("fontScale",     c.fontScale);
     s.setValue("show_furigana", c.showFurigana);
     s.endGroup();
 
@@ -202,107 +180,120 @@ bool loadConfiguration(Configuration &c, const QString &filePath)
     QSettings s(filePath, QSettings::IniFormat);
 
     s.beginGroup("App");
-    c.appVersion = s.value("app_version", c.appVersion).toString();
-    c.autoSave = s.value("auto_save", c.autoSave).toBool();
-    c.checkUpdates = s.value("check_updates", c.checkUpdates).toBool();
-    c.firstRun = s.value("first_run", c.firstRun).toBool();
+    c.appVersion   = s.value("app_version",   c.appVersion).toString();
+    c.autoSave     = s.value("auto_save",      c.autoSave).toBool();
+    c.checkUpdates = s.value("check_updates",  c.checkUpdates).toBool();
+    c.firstRun     = s.value("first_run",      c.firstRun).toBool();
     s.endGroup();
 
     s.beginGroup("Sync");
-    c.deviceId = s.value("device_id", (qulonglong)c.deviceId).toULongLong();
-    c.backupEnabled = s.value("backup_enabled", c.backupEnabled).toBool();
-    c.backupIntervalDays = s.value("backup_interval_days", c.backupIntervalDays).toInt();
+    c.deviceId          = s.value("device_id",            (qulonglong)c.deviceId).toULongLong();
+    c.backupEnabled     = s.value("backup_enabled",        c.backupEnabled).toBool();
+    c.backupIntervalDays= s.value("backup_interval_days",  c.backupIntervalDays).toInt();
     s.endGroup();
 
-    s.beginGroup("Data");
-    c.dictIndexPath = s.value("dict_index_path", c.dictIndexPath).toString();
-    c.dictPath = s.value("dict_path", c.dictPath).toString();
-    c.glossEnPath = s.value("gloss_en_path", c.glossEnPath).toString();
-    c.glossEsPath = s.value("gloss_es_path", c.glossEsPath).toString();
-    c.glossDePath = s.value("gloss_de_path", c.glossDePath).toString();
-    c.glossFrPath = s.value("gloss_fr_path", c.glossFrPath).toString();
-    c.glossHuPath = s.value("gloss_hu_path", c.glossHuPath).toString();
-    c.glossNlPath = s.value("gloss_nl_path", c.glossNlPath).toString();
-    c.glossRuPath = s.value("gloss_ru_path", c.glossRuPath).toString();
-    c.glossSlvPath = s.value("gloss_slv_path", c.glossSlvPath).toString();
-    c.glossSvPath = s.value("gloss_sv_path", c.glossSvPath).toString();
-
-    c.jpPath = s.value("jp_path", c.jpPath).toString();
-    c.srsPath = s.value("srs_path", c.srsPath).toString();
-    s.endGroup();
+    // [Data] paths intentionally NOT loaded — AppPaths::resolve() sets them
+    // before loadConfiguration() is called in main.cpp.
 
     s.beginGroup("Dictionary");
     c.highlightMatches = s.value("highlight_matches", c.highlightMatches).toBool();
-    c.maxResults = s.value("max_results", c.maxResults).toInt();
-    c.pageSize = s.value("page_size", c.pageSize).toInt();
-    c.searchDelayMs = s.value("search_delay_ms", c.searchDelayMs).toInt();
-    c.searchOnTyping = s.value("search_on_typing", c.searchOnTyping).toBool();
-    c.showRomaji = s.value("show_romaji", c.showRomaji).toBool();
+    c.maxResults       = s.value("max_results",       c.maxResults).toInt();
+    c.pageSize         = s.value("page_size",         c.pageSize).toInt();
+    c.searchDelayMs    = s.value("search_delay_ms",   c.searchDelayMs).toInt();
+    c.searchOnTyping   = s.value("search_on_typing",  c.searchOnTyping).toBool();
+    c.showRomaji       = s.value("show_romaji",       c.showRomaji).toBool();
     s.endGroup();
 
     s.beginGroup("Language");
     c.fallbackLanguage = s.value("fallback_language", c.fallbackLanguage).toString();
-    c.glossLanguages = s.value("gloss_languages", c.glossLanguages).toString();
-    c.interface = s.value("interface", c.interface).toString();
+    c.glossLanguages   = s.value("gloss_languages",   c.glossLanguages).toString();
+    c.interface        = s.value("interface",         c.interface).toString();
     s.endGroup();
 
     s.beginGroup("Session");
-    c.dailyNewCards = s.value("daily_new_cards", c.dailyNewCards).toInt();
+    c.dailyNewCards    = s.value("daily_new_cards",    c.dailyNewCards).toInt();
     c.dailyReviewLimit = s.value("daily_review_limit", c.dailyReviewLimit).toInt();
     s.endGroup();
 
     s.beginGroup("FSRS");
-    c.desiredRetention = s.value("desiredRetention", c.desiredRetention).toDouble();
-    c.maximumInterval = s.value("maximumInterval", c.maximumInterval).toInt();
-    c.newCardsPerDay = s.value("newCardsPerDay", c.newCardsPerDay).toInt();
-    c.reviewsPerDay = s.value("reviewsPerDay", c.reviewsPerDay).toInt();
-    c.leechThreshold = s.value("leechThreshold", c.leechThreshold).toInt();
-    c.enableFuzz = s.value("enableFuzz", c.enableFuzz).toBool();
-    c.learningSteps = s.value("learningSteps", c.learningSteps).toString();
-    c.relearningSteps = s.value("relearningSteps", c.relearningSteps).toString();
-    c.dayOffset = s.value("dayOffset", c.dayOffset).toInt();
-    c.orderMode = s.value("order_mode", c.orderMode).toInt();
+    c.desiredRetention = s.value("desiredRetention",  c.desiredRetention).toDouble();
+    c.maximumInterval  = s.value("maximumInterval",   c.maximumInterval).toInt();
+    c.newCardsPerDay   = s.value("newCardsPerDay",    c.newCardsPerDay).toInt();
+    c.reviewsPerDay    = s.value("reviewsPerDay",     c.reviewsPerDay).toInt();
+    c.leechThreshold   = s.value("leechThreshold",   c.leechThreshold).toInt();
+    c.enableFuzz       = s.value("enableFuzz",        c.enableFuzz).toBool();
+    c.learningSteps    = s.value("learningSteps",     c.learningSteps).toString();
+    c.relearningSteps  = s.value("relearningSteps",   c.relearningSteps).toString();
+    c.dayOffset        = s.value("dayOffset",          c.dayOffset).toInt();
+    c.orderMode        = s.value("order_mode",         c.orderMode).toInt();
     s.endGroup();
 
     s.beginGroup("UI");
-    c.accentColor = s.value("accent_color", c.accentColor).toString();
+    c.accentColor  = s.value("accent_color",  c.accentColor).toString();
     c.primaryColor = s.value("primary_color", c.primaryColor).toString();
-    c.theme = s.value("theme", c.theme).toString();
-    c.fontFamily = s.value("font_family", c.fontFamily).toString();
-    c.fontScale = s.value("fontScale", c.fontScale).toDouble();
+    c.theme        = s.value("theme",         c.theme).toString();
+    c.fontFamily   = s.value("font_family",   c.fontFamily).toString();
+    c.fontScale    = s.value("fontScale",     c.fontScale).toDouble();
     c.showFurigana = s.value("show_furigana", c.showFurigana).toBool();
     s.endGroup();
 
-    // ── VALIDACIÓN FINAL ──
     validateConfig(c);
-
-    // ── parse gloss languages ──
     parseGlossLanguages(c.glossLanguages, c.languages);
 
-    // ── cache steps ──
-    c.learningStepsParsed = parseSteps(c.learningSteps);
+    c.learningStepsParsed   = parseSteps(c.learningSteps);
     c.relearningStepsParsed = parseSteps(c.relearningSteps);
 
-    if (c.firstRun)
-        c.firstRun = false; // si estamos cargando, ya no es el primer run
+    if (c.firstRun) c.firstRun = false;
     return true;
 }
 
 // ─────────────────────────────────────────
-// ConfigWrapper (exponer a QML)
+// ConfigWrapper (expose to QML)
 // ─────────────────────────────────────────
+
 void ConfigWrapper::saveToDisk()
 {
     if (!m_configPath.isEmpty())
         saveConfiguration(m_config, m_configPath);
 }
- 
+
 void ConfigWrapper::reloadFromDisk()
 {
     if (m_configPath.isEmpty()) return;
- 
+
+    // Preserve the platform-resolved data paths — they must not be overwritten
+    // by loadConfiguration() since [Data] is not stored in the ini.
+    QString savedDict      = m_config.dictPath;
+    QString savedDictIdx   = m_config.dictIndexPath;
+    QString savedSrs       = m_config.srsPath;
+    QString savedGlossEn   = m_config.glossEnPath;
+    QString savedGlossEs   = m_config.glossEsPath;
+    QString savedGlossDe   = m_config.glossDePath;
+    QString savedGlossFr   = m_config.glossFrPath;
+    QString savedGlossHu   = m_config.glossHuPath;
+    QString savedGlossNl   = m_config.glossNlPath;
+    QString savedGlossRu   = m_config.glossRuPath;
+    QString savedGlossSlv  = m_config.glossSlvPath;
+    QString savedGlossSv   = m_config.glossSvPath;
+    QString savedJp        = m_config.jpPath;
+
     loadConfiguration(m_config, m_configPath);
- 
+
+    // Restore data paths
+    m_config.dictPath      = savedDict;
+    m_config.dictIndexPath = savedDictIdx;
+    m_config.srsPath       = savedSrs;
+    m_config.glossEnPath   = savedGlossEn;
+    m_config.glossEsPath   = savedGlossEs;
+    m_config.glossDePath   = savedGlossDe;
+    m_config.glossFrPath   = savedGlossFr;
+    m_config.glossHuPath   = savedGlossHu;
+    m_config.glossNlPath   = savedGlossNl;
+    m_config.glossRuPath   = savedGlossRu;
+    m_config.glossSlvPath  = savedGlossSlv;
+    m_config.glossSvPath   = savedGlossSv;
+    m_config.jpPath        = savedJp;
+
     // Notify QML of all changed properties so bindings update
     emit themeChanged();
     emit accentColorChanged();
@@ -326,7 +317,7 @@ void ConfigWrapper::reloadFromDisk()
     emit showRomajiChanged();
     emit orderModeChanged();
 }
- 
+
 void ConfigWrapper::applyToServices()
 {
     if (m_searchService) {

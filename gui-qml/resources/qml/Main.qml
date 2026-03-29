@@ -3,7 +3,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Controls.Material
 import "pages"
-import Kotoba 1.0
+import "theme"
 
 ApplicationWindow {
     id: root

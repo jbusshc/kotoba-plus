@@ -1,8 +1,8 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import Kotoba 1.0
 import "../components"
+import "../theme"
 
 Page {
     id: page

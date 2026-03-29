@@ -12,6 +12,9 @@ qt_policy(SET QTP0001 NEW)
 qt_policy(SET QTP0004 NEW)
 qt_standard_project_setup()
 
+# ─────────────────────────────────────────
+# Sources
+# ─────────────────────────────────────────
 file(GLOB_RECURSE GUIQML_SOURCES
     CONFIGURE_DEPENDS
     app/*.cpp
@@ -19,10 +22,16 @@ file(GLOB_RECURSE GUIQML_SOURCES
     viewmodels/*.cpp
 )
 
+# ─────────────────────────────────────────
+# QML resources (SOLO QML, nada de data pesada)
+# ─────────────────────────────────────────
 qt_add_resources(GUIQML_RES
     resources/qml.qrc
 )
 
+# ─────────────────────────────────────────
+# Executable
+# ─────────────────────────────────────────
 qt_add_executable(kotoba-qml
     ${GUIQML_SOURCES}
     ${GUIQML_RES}
@@ -36,15 +45,36 @@ target_link_libraries(kotoba-qml
         core
 )
 
+# ─────────────────────────────────────────
+# QML module
+# ─────────────────────────────────────────
 set_source_files_properties(
     resources/qml/theme/Theme.qml
     PROPERTIES QT_QML_SINGLETON_TYPE TRUE
 )
+set(QT_QUICK_CONTROLS_STYLE "Material")
 
-qt_add_qml_module(kotoba-qml
-    URI Kotoba
-    VERSION 1.0
 
-    QML_FILES
-        resources/qml/theme/Theme.qml
-)
+# ─────────────────────────────────────────
+# DESKTOP: copiar data al lado del ejecutable
+# ─────────────────────────────────────────
+if(NOT ANDROID)
+
+    add_custom_command(TARGET kotoba-qml POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${CMAKE_CURRENT_SOURCE_DIR}/data
+            $<TARGET_FILE_DIR:kotoba-qml>
+    )
+    target_sources(kotoba-qml PRIVATE app/app.rc)
+endif()
+
+# ─────────────────────────────────────────
+# ANDROID: meter archivos como assets reales
+# ─────────────────────────────────────────
+if(ANDROID)
+    set_target_properties(kotoba-qml PROPERTIES
+        QT_ANDROID_EXTRA_FILES "${ANDROID_ASSETS}"
+        QT_ANDROID_PACKAGE_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/android
+    )
+    set(ANDROID_ABI arm64-v8a)
+endif()

@@ -10,6 +10,7 @@
 #include <errno.h>
 #endif
 
+
 /* ---------- utilities ---------- */
 
 uint32_t fnv1a(const void *data, size_t len)
@@ -70,6 +71,50 @@ typedef struct
     uint8_t len;
     uint8_t common;
 } Pair;
+
+
+typedef struct {
+    uint32_t doc;
+    uint8_t m1, m2, c, len;
+    Pair **pairs;
+    size_t *pcount;
+    size_t *pcap;
+} BuildGramUD;
+
+static void build_capture_cb(const uint8_t *p, size_t len, void *ud)
+{
+    BuildGramUD *g = (BuildGramUD*)ud;
+
+    if (*g->pcount == *g->pcap) {
+        *g->pcap = *g->pcap ? (*g->pcap * 2) : 65536;
+        *g->pairs = realloc(*g->pairs, (*g->pcap) * sizeof(Pair));
+        if (!*g->pairs) {
+            perror("realloc");
+            exit(1);
+        }
+    }
+
+    Pair *dst = &(*g->pairs)[(*g->pcount)++];
+
+    dst->hash   = fnv1a(p, len);
+    dst->doc_id = g->doc;
+    dst->meta1  = g->m1;
+    dst->meta2  = g->m2;
+    dst->common = g->c;
+    dst->len    = g->len;
+}
+
+static int cmp_pair_full(const void *a, const void *b)
+{
+    const Pair *x = a, *y = b;
+    if (x->hash != y->hash) return (x->hash < y->hash) ? -1 : 1;
+    if (x->doc_id != y->doc_id) return (x->doc_id < y->doc_id) ? -1 : 1;
+    if (x->meta1 != y->meta1) return (x->meta1 < y->meta1) ? -1 : 1;
+    if (x->meta2 != y->meta2) return (x->meta2 < y->meta2) ? -1 : 1;
+    if (x->common != y->common) return (x->common < y->common) ? -1 : 1;
+    return 0;
+}
+
 
 static int cmp_pair(const void *a, const void *b)
 {
@@ -389,7 +434,6 @@ void utf8_ngrams_cb(const char *s, int n, gram_cb cb, void *ud)
         p += len;
     }
 }
-
 int index_build_from_pairs(
     const char *out_path,
     const char **texts,
@@ -400,103 +444,115 @@ int index_build_from_pairs(
     size_t count,
     GramMode gram_mode)
 {
-    Pair *pairs = NULL; size_t pcap = 0, pcount = 0;
+    Pair *pairs = NULL;
+    size_t pcap = 0, pcount = 0;
 
-    struct GramUD { uint32_t doc; uint8_t m1; uint8_t m2; uint8_t c; uint8_t len; }; 
-    void capture_cb(const uint8_t *p, size_t len, void *ud) {
-        struct GramUD *g = (struct GramUD*)ud;
-        uint32_t h = fnv1a(p, len);
-        if (pcount == pcap) { pcap = pcap ? pcap*2 : 65536; pairs = realloc(pairs, pcap*sizeof(Pair)); if(!pairs){perror("realloc");exit(1);} }
-        pairs[pcount].hash = h; 
-        pairs[pcount].doc_id = g->doc; 
-        pairs[pcount].meta1 = g->m1; 
-        pairs[pcount].meta2 = g->m2; 
-        pairs[pcount].common = g->c;
-        pairs[pcount].len = g->len; 
-        pcount++;
-    }
-
-    for(size_t i=0;i<count;++i)
+    for (size_t i = 0; i < count; ++i)
     {
-        const char *txt = texts[i]; if(!txt) continue;
+        const char *txt = texts[i];
+        if (!txt) continue;
+
         size_t len = utf8_strlen(txt);
-        struct GramUD ud = { 
-            doc_ids ? doc_ids[i] : 0, 
-            meta1 ? meta1[i] : META_NONE, 
-            meta2 ? meta2[i] : META_NONE, 
-            common ? common[i] : 0, 
-            (uint8_t)len 
+
+        BuildGramUD ud = {
+            .doc = doc_ids ? doc_ids[i] : 0,
+            .m1  = meta1 ? meta1[i] : META_NONE,
+            .m2  = meta2 ? meta2[i] : META_NONE,
+            .c   = common ? common[i] : 0,
+            .len = (uint8_t)len,
+            .pairs = &pairs,
+            .pcount = &pcount,
+            .pcap = &pcap
         };
 
-        if(gram_mode==GRAM_JP_ALL)
-        {
-            // siempre generar uni+bi+tri grams
-            utf8_ngrams_cb(txt,1,capture_cb,&ud);
-            utf8_ngrams_cb(txt,2,capture_cb,&ud);
-            utf8_ngrams_cb(txt,3,capture_cb,&ud);
+        if (gram_mode == GRAM_JP_ALL) {
+            utf8_ngrams_cb(txt,1,build_capture_cb,&ud);
+            utf8_ngrams_cb(txt,2,build_capture_cb,&ud);
+            utf8_ngrams_cb(txt,3,build_capture_cb,&ud);
         }
-        else if(gram_mode==GRAM_GLOSS_AUTO)
-        {
-            // auto según longitud, como antes
-            if(len==1) utf8_ngrams_cb(txt,1,capture_cb,&ud);
-            else if(len==2) utf8_ngrams_cb(txt,2,capture_cb,&ud);
-            else utf8_ngrams_cb(txt,3,capture_cb,&ud);
+        else if (gram_mode == GRAM_GLOSS_AUTO) {
+            if (len == 1) utf8_ngrams_cb(txt,1,build_capture_cb,&ud);
+            else if (len == 2) utf8_ngrams_cb(txt,2,build_capture_cb,&ud);
+            else utf8_ngrams_cb(txt,3,build_capture_cb,&ud);
         }
-        else
-        {
-            utf8_ngrams_cb(txt, gram_mode, capture_cb,&ud);
+        else {
+            utf8_ngrams_cb(txt, gram_mode, build_capture_cb, &ud);
         }
     }
 
-    if(pcount==0){fprintf(stderr,"index_build: no grams generated\n");free(pairs);return -1;}
-
-    /* --- sort y dedupe --- */
-    int cmp_pair(const void *a,const void *b)
-    {
-        const Pair *x=a,*y=b;
-        if(x->hash!=y->hash) return x->hash<y->hash?-1:1;
-        if(x->doc_id!=y->doc_id) return x->doc_id<y->doc_id?-1:1;
-        if(x->meta1!=y->meta1) return x->meta1<y->meta1?-1:1;
-        if(x->meta2!=y->meta2) return x->meta2<y->meta2?-1:1;
-        if(x->common!=y->common) return x->common<y->common?-1:1;
-        return 0;
+    if (pcount == 0) {
+        fprintf(stderr,"index_build: no grams generated\n");
+        free(pairs);
+        return -1;
     }
-    qsort(pairs,pcount,sizeof(Pair),cmp_pair);
 
-    /* --- generar terms y postings --- */
-    size_t term_count=0; for(size_t i=0;i<pcount;)
-    {
-        size_t j=i+1; while(j<pcount && pairs[j].hash==pairs[i].hash) j++; term_count++; i=j;
+    qsort(pairs, pcount, sizeof(Pair), cmp_pair_full);
+
+    size_t term_count = 0;
+    for (size_t i = 0; i < pcount;) {
+        size_t j = i + 1;
+        while (j < pcount && pairs[j].hash == pairs[i].hash) j++;
+        term_count++;
+        i = j;
     }
 
     Term *terms = malloc(term_count*sizeof(Term));
     Posting *postings = malloc(pcount*sizeof(Posting));
-    if(!terms||!postings){perror("malloc");exit(1);}
+    if (!terms || !postings) {
+        perror("malloc");
+        exit(1);
+    }
 
-    size_t ti=0,pi=0;
-    for(size_t i=0;i<pcount;)
+    size_t ti = 0, pi = 0;
+
+    for (size_t i = 0; i < pcount;)
     {
-        size_t j=i; uint32_t last_doc=0xFFFFFFFFu; uint8_t last_m1=0xFF,last_m2=0xFF,last_c=0xFF;
-        size_t group_start=pi;
-        while(j<pcount && pairs[j].hash==pairs[i].hash)
+        size_t j = i;
+        uint32_t last_doc = 0xFFFFFFFFu;
+        uint8_t last_m1 = 0xFF, last_m2 = 0xFF, last_c = 0xFF;
+
+        size_t start = pi;
+
+        while (j < pcount && pairs[j].hash == pairs[i].hash)
         {
-            uint32_t doc=pairs[j].doc_id; uint8_t m1=pairs[j].meta1,m2=pairs[j].meta2,c=pairs[j].common;
-            if(!(doc==last_doc && m1==last_m1 && m2==last_m2 && c==last_c))
+            Pair *p = &pairs[j];
+
+            if (!(p->doc_id == last_doc &&
+                  p->meta1 == last_m1 &&
+                  p->meta2 == last_m2 &&
+                  p->common == last_c))
             {
-                postings[pi].doc_id=doc; postings[pi].meta1=m1; postings[pi].meta2=m2; postings[pi].common=c; postings[pi].len=pairs[j].len; pi++;
-                last_doc=doc; last_m1=m1; last_m2=m2; last_c=c;
+                postings[pi].doc_id = p->doc_id;
+                postings[pi].meta1  = p->meta1;
+                postings[pi].meta2  = p->meta2;
+                postings[pi].common = p->common;
+                postings[pi].len    = p->len;
+                pi++;
+
+                last_doc = p->doc_id;
+                last_m1  = p->meta1;
+                last_m2  = p->meta2;
+                last_c   = p->common;
             }
             j++;
         }
-        terms[ti].gram_hash=pairs[i].hash;
-        terms[ti].postings_offset=(uint32_t)group_start;
-        terms[ti].postings_count=(uint32_t)(pi-group_start);
-        ti++; i=j;
+
+        terms[ti].gram_hash = pairs[i].hash;
+        terms[ti].postings_offset = (uint32_t)start;
+        terms[ti].postings_count  = (uint32_t)(pi - start);
+
+        ti++;
+        i = j;
     }
 
-    FILE *out=fopen(out_path,"wb");
-    if(!out){perror("fopen");free(pairs);free(terms);free(postings);return -1;}
-    IndexHeader hdr={IDX_MAGIC,IDX_VERSION,(uint32_t)ti,(uint32_t)pi};
+    FILE *out = fopen(out_path,"wb");
+    if (!out) {
+        perror("fopen");
+        free(pairs); free(terms); free(postings);
+        return -1;
+    }
+
+    IndexHeader hdr = {IDX_MAGIC,IDX_VERSION,(uint32_t)ti,(uint32_t)pi};
     fwrite(&hdr,sizeof(hdr),1,out);
     fwrite(terms,sizeof(Term),ti,out);
     fwrite(postings,sizeof(Posting),pi,out);
@@ -509,27 +565,25 @@ int index_build_from_pairs(
 size_t query_gram_hashes_mode(const char *q, GramMode mode, uint32_t *out_hashes, size_t max)
 {
     if(!q||!out_hashes||max==0) return 0;
-    struct QGramUD { uint32_t *out; size_t max,count; } ud = { out_hashes,max,0 };
-    size_t len=utf8_strlen(q);
 
-    void cb(const uint8_t *p, size_t l, void *u){ struct QGramUD *q=(struct QGramUD*)u; if(q->count<q->max) q->out[q->count++]=fnv1a(p,l); }
+    struct QGramUD ud = { out_hashes, max, 0 };
+    size_t len = utf8_strlen(q);
 
     if(mode==GRAM_GLOSS_AUTO)
     {
-        if(len==1) utf8_ngrams_cb(q,1,cb,&ud);
-        else if(len==2) utf8_ngrams_cb(q,2,cb,&ud);
-        else utf8_ngrams_cb(q,3,cb,&ud);
+        if(len==1) utf8_ngrams_cb(q,1,query_gram_hash_cb,&ud);
+        else if(len==2) utf8_ngrams_cb(q,2,query_gram_hash_cb,&ud);
+        else utf8_ngrams_cb(q,3,query_gram_hash_cb,&ud);
     }
     else if(mode==GRAM_JP_ALL)
     {
-        // uni + bi + tri
-        utf8_ngrams_cb(q,1,cb,&ud);
-        utf8_ngrams_cb(q,2,cb,&ud);
-        utf8_ngrams_cb(q,3,cb,&ud);
+        utf8_ngrams_cb(q,1,query_gram_hash_cb,&ud);
+        utf8_ngrams_cb(q,2,query_gram_hash_cb,&ud);
+        utf8_ngrams_cb(q,3,query_gram_hash_cb,&ud);
     }
     else
     {
-        utf8_ngrams_cb(q,mode,cb,&ud);
+        utf8_ngrams_cb(q,mode,query_gram_hash_cb,&ud);
     }
 
     return ud.count;

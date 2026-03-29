@@ -1,6 +1,22 @@
 #include "SrsHistoryLog.h"
-#include <cstdio>
+
+#include <QFile>
+#include <QFileInfo>
+#include <QDebug>
 #include <cstring>
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SrsHistoryLog — Android-compatible rewrite.
+//
+// The original used raw FILE* (fopen/fclose/fwrite). On Android, fopen()
+// works fine for paths in internal storage (AppDataLocation), but Qt's
+// QFile is safer because it handles path encoding, permissions, and Android
+// scoped storage transparently.
+//
+// All I/O is now done via QFile. The binary layout of the chunk files is
+// unchanged (HistoryChunkHeader + FsrsEvent records), so existing logs
+// remain readable.
+// ─────────────────────────────────────────────────────────────────────────────
 
 /* ── Path ─────────────────────────────────────────────────────────────────── */
 
@@ -22,7 +38,10 @@ SrsHistoryLog::SrsHistoryLog(const std::string &basePath, uint32_t maxEventsPerC
 
 SrsHistoryLog::~SrsHistoryLog()
 {
-    if (m_file) { fflush(m_file); fclose(m_file); }
+    if (m_file && m_file->isOpen()) {
+        m_file->flush();
+        m_file->close();
+    }
 }
 
 /* ── Chunk discovery ─────────────────────────────────────────────────────── */
@@ -31,9 +50,7 @@ uint32_t SrsHistoryLog::findLatestChunk() const
 {
     uint32_t latest = 0;
     for (uint32_t i = 1; i <= 9999; ++i) {
-        FILE *f = fopen(chunkPath(i).c_str(), "rb");
-        if (!f) break;
-        fclose(f);
+        if (!QFileInfo::exists(QString::fromStdString(chunkPath(i)))) break;
         latest = i;
     }
     return latest;
@@ -43,44 +60,63 @@ uint32_t SrsHistoryLog::findLatestChunk() const
 
 void SrsHistoryLog::openOrCreateChunk(uint32_t index)
 {
-    if (m_file) { fflush(m_file); fclose(m_file); m_file = nullptr; }
+    if (m_file && m_file->isOpen()) {
+        m_file->flush();
+        m_file->close();
+    }
+    m_file.reset();
 
     m_chunkIndex    = index;
     m_eventsInChunk = 0;
 
-    std::string path = chunkPath(index);
+    QString path = QString::fromStdString(chunkPath(index));
 
-    // Try existing file — count events already written
-    FILE *existing = fopen(path.c_str(), "rb");
-    if (existing) {
-        HistoryChunkHeader hdr{};
-        if (fread(&hdr, sizeof(hdr), 1, existing) == 1
-            && hdr.magic   == HIST_MAGIC
-            && hdr.version == HIST_VERSION)
-        {
-            fseek(existing, 0, SEEK_END);
-            long data = ftell(existing) - (long)sizeof(HistoryChunkHeader);
-            if (data > 0)
-                m_eventsInChunk = (uint32_t)(data / sizeof(FsrsEvent));
+    if (QFileInfo::exists(path)) {
+        // Count events already written in existing chunk
+        QFile reader(path);
+        if (reader.open(QIODevice::ReadOnly)) {
+            HistoryChunkHeader hdr{};
+            if (reader.read(reinterpret_cast<char*>(&hdr), sizeof(hdr)) == sizeof(hdr)
+                && hdr.magic   == HIST_MAGIC
+                && hdr.version == HIST_VERSION)
+            {
+                qint64 dataBytes = reader.size() - static_cast<qint64>(sizeof(HistoryChunkHeader));
+                if (dataBytes > 0)
+                    m_eventsInChunk = static_cast<uint32_t>(dataBytes / sizeof(FsrsEvent));
+            }
+            reader.close();
         }
-        fclose(existing);
-        m_file = fopen(path.c_str(), "ab");
+
+        // Open in append mode
+        m_file = std::make_unique<QFile>(path);
+        if (!m_file->open(QIODevice::Append)) {
+            qWarning() << "SrsHistoryLog: failed to open chunk for append:" << path;
+            m_file.reset();
+        }
         return;
     }
 
-    // New chunk — write header then reopen in append mode
-    FILE *f = fopen(path.c_str(), "wb");
-    if (!f) return;
+    // New chunk — write header then reopen for append
+    {
+        QFile writer(path);
+        if (!writer.open(QIODevice::WriteOnly)) {
+            qWarning() << "SrsHistoryLog: failed to create chunk:" << path;
+            return;
+        }
+        HistoryChunkHeader hdr{};
+        hdr.magic       = HIST_MAGIC;
+        hdr.version     = HIST_VERSION;
+        hdr.chunk_index = index;
+        hdr.reserved    = 0;
+        writer.write(reinterpret_cast<const char*>(&hdr), sizeof(hdr));
+        writer.close();
+    }
 
-    HistoryChunkHeader hdr{};
-    hdr.magic       = HIST_MAGIC;
-    hdr.version     = HIST_VERSION;
-    hdr.chunk_index = index;
-    hdr.reserved    = 0;
-    fwrite(&hdr, sizeof(hdr), 1, f);
-    fclose(f);
-
-    m_file = fopen(path.c_str(), "ab");
+    m_file = std::make_unique<QFile>(path);
+    if (!m_file->open(QIODevice::Append)) {
+        qWarning() << "SrsHistoryLog: failed to open new chunk for append:" << path;
+        m_file.reset();
+    }
 }
 
 /* ── Rotation ────────────────────────────────────────────────────────────── */
@@ -96,9 +132,9 @@ void SrsHistoryLog::rotateIfNeeded()
 void SrsHistoryLog::append(const FsrsEvent &ev)
 {
     rotateIfNeeded();
-    if (!m_file) return;
-    fwrite(&ev, sizeof(ev), 1, m_file);
-    fflush(m_file);
+    if (!m_file || !m_file->isOpen()) return;
+    m_file->write(reinterpret_cast<const char*>(&ev), sizeof(ev));
+    m_file->flush();
     ++m_eventsInChunk;
 }
 
@@ -111,8 +147,8 @@ FsrsEvent SrsHistoryLog::makeEvent(fsrs_ev_type     type,
                                    uint64_t         now) const
 {
     FsrsEvent ev{};
-    ev.device_id        = 0;          // history log doesn't need device identity
-    ev.seq              = 0;          // not a sync event — no sequence number
+    ev.device_id        = 0;
+    ev.seq              = 0;
     ev.timestamp        = now;
     ev.type             = static_cast<uint8_t>(type);
     ev.rating           = static_cast<uint8_t>(rating);
@@ -161,7 +197,6 @@ void SrsHistoryLog::recordSuspend(const fsrs_card *before, uint64_t now)
 void SrsHistoryLog::recordUnsuspend(const fsrs_card *after, uint64_t now)
 {
     if (!after) return;
-    // No dedicated unsuspend type — FSRS_EV_UPDATE carries full post-state
     append(makeEvent(FSRS_EV_UPDATE, after->id, after, static_cast<fsrs_rating>(0), now));
 }
 

@@ -1,8 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import Kotoba 1.0
-
+import "../theme"
 Page {
     id: page
     padding: 0
@@ -59,26 +58,26 @@ Page {
     // ── Action button ─────────────────────────────────────────────────────────
     component ActionButton: Rectangle {
         id: actionBtn
-        property string label:    ""
-        property string sublabel: ""
-        property color  accent:   accentColor
-        property bool   primary:  false
-        property bool   enabled:  true
+        property string label:       ""
+        property string sublabel:    ""
+        property color  accent:      accentColor
+        property bool   primary:     false
+        property bool   interactive: true   // renamed from 'enabled' to avoid QQuickItem override
         signal clicked()
 
         implicitHeight: 60
         radius: 8
-        opacity: actionBtn.enabled ? 1.0 : 0.35
+        opacity: actionBtn.interactive ? 1.0 : 0.35
 
         color: actionBtn.primary
-            ? (btnMa.pressed && actionBtn.enabled
+            ? (btnMa.pressed && actionBtn.interactive
                 ? Qt.darker(actionBtn.accent, 1.08)
-                : btnMa.containsMouse && actionBtn.enabled
+                : btnMa.containsMouse && actionBtn.interactive
                     ? Qt.lighter(actionBtn.accent, 1.12)
                     : actionBtn.accent)
-            : (btnMa.pressed && actionBtn.enabled
+            : (btnMa.pressed && actionBtn.interactive
                 ? Theme.surfacePress
-                : btnMa.containsMouse && actionBtn.enabled
+                : btnMa.containsMouse && actionBtn.interactive
                     ? Theme.surfaceHover
                     : Theme.surfaceSubtle)
 
@@ -111,8 +110,8 @@ Page {
             id: btnMa
             anchors.fill: parent
             hoverEnabled: true
-            cursorShape: actionBtn.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-            onClicked: if (actionBtn.enabled) actionBtn.clicked()
+            cursorShape: actionBtn.interactive ? Qt.PointingHandCursor : Qt.ArrowCursor
+            onClicked: if (actionBtn.interactive) actionBtn.clicked()
         }
     }
 
@@ -131,7 +130,7 @@ Page {
             spacing: 4
 
             Text {
-                text: "Study Session"
+                text: "Study Queue"
                 font.pixelSize: Theme.fontSizeTitle
                 font.weight: Font.Bold
                 color: textColor
@@ -186,8 +185,8 @@ Page {
                 sublabel: srsVM && srsVM.dueCount > 0
                     ? srsVM.dueCount + " card" + (srsVM.dueCount === 1 ? "" : "s") + " in queue"
                     : "Check back later"
-                accent:  accentColor
-                enabled: srsVM ? srsVM.dueCount > 0 : false
+                accent:      accentColor
+                interactive: srsVM ? srsVM.dueCount > 0 : false
                 onClicked: {
                     if (stack && srsVM && srsVM.dueCount > 0) {
                         srsVM.startSession()
@@ -199,8 +198,8 @@ Page {
             ActionButton {
                 Layout.fillWidth: true
                 label:    "Browse Cards"
-                sublabel: srsVM ? (String(parseInt(srsVM.totalCount) || 0) + " cards in deck") : ""
-                enabled:  true
+                sublabel:    srsVM ? (String(parseInt(srsVM.totalCount) || 0) + " cards in deck") : ""
+                interactive: true
                 onClicked: { if (stack) stack.push("qrc:/qml/pages/SrsLibrary.qml") }
             }
         }

@@ -1,6 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
-import Kotoba 1.0
+import "../theme"
 
 // ── StatCard ──────────────────────────────────────────────────────────────────
 // Shared card used by SrsCardDetailPage, SrsCardDetails, and SrsDashboard.
