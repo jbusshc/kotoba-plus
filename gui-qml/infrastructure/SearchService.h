@@ -34,6 +34,7 @@ public:
     // Debe llamarse DESPUÉS de query() o queryNonPagination(), nunca antes.
     // El parámetro raw se ignora — las variantes vienen de m_ctx directamente.
     QueryVariants lastVariants() const;
+    QString highlightField(const QString &field) const;
 
 private:
     SearchContext m_ctx;

@@ -1,6 +1,7 @@
 #include "SrsLibraryViewModel.h"
 #include "../infrastructure/SrsService.h"
 #include "../infrastructure/SearchService.h"
+#include "../app/Configuration.h"
 #include <QDebug>
 #include <QDateTime>
 
@@ -9,9 +10,32 @@ extern "C" {
 #include "../../core/include/index_search.h"
 }
 
+// Misma tabla que SearchViewModel::accentToHex — hex CSS para inline style de <b>
+static QString accentToHex(const QString &name)
+{
+    static const QHash<QString, QString> table = {
+        { "red",        "#F44336" }, { "pink",       "#E91E63" },
+        { "purple",     "#9C27B0" }, { "deeppurple", "#673AB7" },
+        { "indigo",     "#3F51B5" }, { "blue",       "#2196F3" },
+        { "lightblue",  "#03A9F4" }, { "cyan",       "#00BCD4" },
+        { "teal",       "#009688" }, { "green",      "#4CAF50" },
+        { "lightgreen", "#8BC34A" }, { "lime",       "#CDDC39" },
+        { "yellow",     "#FFEB3B" }, { "amber",      "#FFC107" },
+        { "orange",     "#FF9800" }, { "deeporange", "#FF5722" },
+        { "brown",      "#795548" }, { "bluegrey",   "#607D8B" },
+    };
+    return table.value(name, "#2196F3");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 SrsLibraryViewModel::SrsLibraryViewModel(SrsService* service, kotoba_dict* dict,
-                                         SearchService* searchService, QObject* parent)
-    : QAbstractListModel(parent), m_service(service), m_dict(dict), m_searchService(searchService)
+                                         SearchService* searchService,
+                                         Configuration* config,
+                                         QObject* parent)
+    : QAbstractListModel(parent)
+    , m_service(service), m_dict(dict)
+    , m_searchService(searchService), m_config(config)
 {
     m_debounceTimer.setSingleShot(true);
     connect(&m_debounceTimer, &QTimer::timeout,
@@ -32,18 +56,57 @@ void SrsLibraryViewModel::setSearch(const QString &text)
 
 void SrsLibraryViewModel::onDebounceTimeout()
 {
+    const QString prev = m_search;
     m_search = m_pendingSearch;
     loadAllCards();
-    rebuildFiltered();
+    rebuildFiltered();   // llama queryNonPagination → llena ctx buffers
     resetToInitialPage();
+    if (m_search != prev)
+        emit activeSearchChanged();
 }
 
-// ── Helpers privados ─────────────────────────────────────────────────────────
+// ── highlightField ────────────────────────────────────────────────────────────
+// Mismo algoritmo que SearchViewModel::highlightField.
+// Válido solo después de rebuildFiltered() (que llama queryNonPagination).
+
+QString SrsLibraryViewModel::highlightField(const QString &field) const
+{
+    if (m_search.isEmpty() || field.isEmpty())
+        return field;
+
+    const auto variants = m_searchService->lastVariants();
+    const QString fieldLower = field.toLower();
+    int matchIdx = -1;
+    int matchLen = 0;
+
+    for (const QString &v : { variants.normal, variants.romaji, variants.hiragana }) {
+        if (v.isEmpty()) continue;
+        const int idx = fieldLower.indexOf(v.toLower());
+        if (idx >= 0 && (matchIdx < 0 || idx < matchIdx)) {
+            matchIdx = idx;
+            matchLen = v.length();
+        }
+    }
+
+    if (matchIdx < 0) return field;
+
+    const QString colorHex = m_config ? accentToHex(m_config->accentColor)
+                                      : QStringLiteral("#2196F3");
+    QString result;
+    result.reserve(field.size() + 48);
+    result += field.left(matchIdx).toHtmlEscaped();
+    result += QStringLiteral("<b style=\"color:") + colorHex + QStringLiteral("\">");
+    result += field.mid(matchIdx, matchLen).toHtmlEscaped();
+    result += QStringLiteral("</b>");
+    result += field.mid(matchIdx + matchLen).toHtmlEscaped();
+    return result;
+}
+
+// ── loadAllCards ──────────────────────────────────────────────────────────────
 
 void SrsLibraryViewModel::loadAllCards()
 {
     m_allCards.clear();
-
     if (!m_service || !m_service->getDeck() || !m_dict) return;
 
     uint32_t count = fsrs_deck_count(m_service->getDeck());
@@ -72,7 +135,7 @@ void SrsLibraryViewModel::loadAllCards()
             default:                    item.state = QStringLiteral("Unknown");    break;
         }
 
-        // ── headword: primer kanji, o primer kana si no hay kanji ────────────
+        // headword
         if (entry->k_elements_count > 0) {
             const k_ele_bin* k = kotoba_k_ele(m_dict, entry, 0);
             kotoba_str s = kotoba_keb(m_dict, k);
@@ -85,49 +148,38 @@ void SrsLibraryViewModel::loadAllCards()
             item.word = QStringLiteral("[unknown]");
         }
 
-        // ── variants: formas kanji k_ele[1..N] (excluye el headword) ─────────
+        // variants UI: kanji alternativos k_ele[1..N]
         for (uint32_t k = 1; k < entry->k_elements_count; ++k) {
             const k_ele_bin* ke = kotoba_k_ele(m_dict, entry, k);
             kotoba_str s = kotoba_keb(m_dict, ke);
-            item.variants.append(QString::fromUtf8(s.ptr, s.len));
+            item.variants << QString::fromUtf8(s.ptr, s.len);
         }
 
-        // ── variants internas para variantMatch (kanji[0] + hiragana) ────────
-        // Se llenan aparte para que el match funcione aunque variants esté vacío.
+        // matchVariants: k_ele[0] + hiragana de cada r_ele (para variantMatch)
         char mixed_buf[MAX_QUERY_LEN];
         if (entry->k_elements_count > 0) {
             const k_ele_bin* ke0 = kotoba_k_ele(m_dict, entry, 0);
             kotoba_str s0 = kotoba_keb(m_dict, ke0);
-            item.matchVariants.append(QString::fromUtf8(s0.ptr, s0.len));
+            item.matchVariants << QString::fromUtf8(s0.ptr, s0.len);
         }
+
+        // readingsList UI + matchVariants hiragana
         for (uint32_t r = 0; r < entry->r_elements_count; ++r) {
             const r_ele_bin* re = kotoba_r_ele(m_dict, entry, r);
             kotoba_str s = kotoba_reb(m_dict, re);
-
-            // ── readingsList: lecturas originales para mostrar en UI ──────────
             item.readingsList << QString::fromUtf8(s.ptr, s.len);
 
-            // hiragana para matchVariants
             size_t copyLen = qMin<size_t>(s.len, MAX_QUERY_LEN - 1);
             memcpy(mixed_buf, s.ptr, copyLen);
             mixed_buf[copyLen] = '\0';
             mixed_to_hiragana(m_searchService->searchCtx()->trie_ctx,
                               mixed_buf, mixed_buf, MAX_QUERY_LEN);
-            item.matchVariants.append(QString::fromUtf8(mixed_buf));
+            item.matchVariants << QString::fromUtf8(mixed_buf);
         }
 
-        uint32_t firstSenseId = 0;
-        // ── meaning: primer sentido ───────────────────────────────────────────
+        // meaning
         if (entry->senses_count > 0) {
-            for (uint32_t s = 0; s < entry->senses_count; ++s) {
-                const sense_bin* sense = kotoba_sense(m_dict, entry, s);
-                if (sense->lang < 0 || sense->lang >= 32 || m_searchService->searchCtx()->is_gloss_active[sense->lang] == 0)
-                    continue;
-                firstSenseId = s;
-                break;
-            }
-            if (firstSenseId >= entry->senses_count) goto noGloss;
-            const sense_bin* sense = kotoba_sense(m_dict, entry, firstSenseId);
+            const sense_bin* sense = kotoba_sense(m_dict, entry, 0);
             QStringList glosses;
             for (uint32_t g = 0; g < sense->gloss_count; ++g) {
                 kotoba_str gs = kotoba_gloss(m_dict, sense, g);
@@ -135,12 +187,13 @@ void SrsLibraryViewModel::loadAllCards()
             }
             item.meaning = glosses.join(QStringLiteral("; "));
         }
-        noGloss:
 
         item.due = QString::fromStdString(m_service->dueDateText(card->id));
         m_allCards.append(item);
     }
 }
+
+// ── rebuildFiltered ───────────────────────────────────────────────────────────
 
 void SrsLibraryViewModel::rebuildFiltered()
 {
@@ -149,6 +202,7 @@ void SrsLibraryViewModel::rebuildFiltered()
     const QString s = m_search.trimmed();
     const bool hasSearch = !s.isEmpty();
 
+    // queryNonPagination llena ctx buffers → lastVariants() válido para highlightField()
     if (hasSearch)
         m_searchService->queryNonPagination(s);
 
@@ -211,125 +265,58 @@ void SrsLibraryViewModel::setFilter(const QString &filter)
 
 // ── Getters ───────────────────────────────────────────────────────────────────
 
-int SrsLibraryViewModel::getReps(int entryId) const
-{
-    for (const SrsCardItem &it : m_allCards)
-        if (static_cast<int>(it.id) == entryId) return it.reps;
-    return 0;
-}
+int SrsLibraryViewModel::getReps(int entryId) const {
+    for (const auto &it : m_allCards) if ((int)it.id == entryId) return it.reps; return 0; }
+int SrsLibraryViewModel::getLapses(int entryId) const {
+    for (const auto &it : m_allCards) if ((int)it.id == entryId) return it.lapses; return 0; }
+int SrsLibraryViewModel::getTotalReviews(int entryId) const {
+    for (const auto &it : m_allCards) if ((int)it.id == entryId) return (int)it.totalReviews; return 0; }
+float SrsLibraryViewModel::getStability(int entryId) const {
+    for (const auto &it : m_allCards) if ((int)it.id == entryId) return it.stability; return 0.f; }
+float SrsLibraryViewModel::getDifficulty(int entryId) const {
+    for (const auto &it : m_allCards) if ((int)it.id == entryId) return it.difficulty; return 0.f; }
 
-int SrsLibraryViewModel::getLapses(int entryId) const
-{
-    for (const SrsCardItem &it : m_allCards)
-        if (static_cast<int>(it.id) == entryId) return it.lapses;
-    return 0;
-}
-
-int SrsLibraryViewModel::getTotalReviews(int entryId) const
-{
-    for (const SrsCardItem &it : m_allCards)
-        if (static_cast<int>(it.id) == entryId) return static_cast<int>(it.totalReviews);
-    return 0;
-}
-
-float SrsLibraryViewModel::getStability(int entryId) const
-{
-    for (const SrsCardItem &it : m_allCards)
-        if (static_cast<int>(it.id) == entryId) return it.stability;
-    return 0.f;
-}
-
-float SrsLibraryViewModel::getDifficulty(int entryId) const
-{
-    for (const SrsCardItem &it : m_allCards)
-        if (static_cast<int>(it.id) == entryId) return it.difficulty;
-    return 0.f;
-}
-
-QString SrsLibraryViewModel::getLastReview(int entryId) const
-{
-    for (const SrsCardItem &it : m_allCards) {
-        if (static_cast<int>(it.id) != entryId) continue;
+QString SrsLibraryViewModel::getLastReview(int entryId) const {
+    for (const auto &it : m_allCards) {
+        if ((int)it.id != entryId) continue;
         if (it.lastReview == 0) return QStringLiteral("Never");
-        QDateTime dt = QDateTime::fromSecsSinceEpoch(static_cast<qint64>(it.lastReview));
-        return dt.toString(QStringLiteral("MMM d, yyyy"));
+        return QDateTime::fromSecsSinceEpoch((qint64)it.lastReview)
+                         .toString(QStringLiteral("MMM d, yyyy"));
     }
     return QStringLiteral("Never");
 }
-
-QString SrsLibraryViewModel::getDue(int entryId) const
-{
-    if (!m_service) return {};
-    return QString::fromStdString(m_service->dueDateText(static_cast<uint32_t>(entryId)));
-}
-
-QString SrsLibraryViewModel::getState(int entryId) const
-{
-    if (!m_service) return {};
-    return QString::fromStdString(m_service->stateText(static_cast<uint32_t>(entryId)));
-}
+QString SrsLibraryViewModel::getDue(int entryId) const {
+    return m_service ? QString::fromStdString(m_service->dueDateText((uint32_t)entryId)) : QString{}; }
+QString SrsLibraryViewModel::getState(int entryId) const {
+    return m_service ? QString::fromStdString(m_service->stateText((uint32_t)entryId)) : QString{}; }
 
 // ── Acciones ─────────────────────────────────────────────────────────────────
 
-void SrsLibraryViewModel::suspend(int entryId)
-{
-    if (!m_service || entryId < 0) return;
-    m_service->suspend(static_cast<uint32_t>(entryId));
-    refresh();
-}
-
-void SrsLibraryViewModel::unsuspend(int entryId)
-{
-    if (!m_service || entryId < 0) return;
-    m_service->unsuspend(static_cast<uint32_t>(entryId));
-    refresh();
-}
-
-void SrsLibraryViewModel::reset(int entryId)
-{
-    if (!m_service || entryId < 0) return;
-    if (!m_service->reset(static_cast<uint32_t>(entryId))) {
-        qWarning() << "SrsLibraryViewModel::reset failed for" << entryId;
-        return;
-    }
-    refresh();
-}
-
-void SrsLibraryViewModel::remove(int entryId)
-{
-    if (!m_service || entryId < 0) return;
-    if (!m_service->remove(static_cast<uint32_t>(entryId))) {
-        qWarning() << "SrsLibraryViewModel::remove failed for" << entryId;
-        return;
-    }
-    refresh();
-}
+void SrsLibraryViewModel::suspend(int entryId)   { if (m_service&&entryId>=0){m_service->suspend((uint32_t)entryId);refresh();} }
+void SrsLibraryViewModel::unsuspend(int entryId) { if (m_service&&entryId>=0){m_service->unsuspend((uint32_t)entryId);refresh();} }
+void SrsLibraryViewModel::reset(int entryId)     { if (m_service&&entryId>=0&&m_service->reset((uint32_t)entryId))refresh(); }
+void SrsLibraryViewModel::remove(int entryId)    { if (m_service&&entryId>=0&&m_service->remove((uint32_t)entryId))refresh(); }
 
 // ── Model interface ───────────────────────────────────────────────────────────
 
 int SrsLibraryViewModel::rowCount(const QModelIndex &parent) const
 {
-    Q_UNUSED(parent)
-    return m_visible.size();
+    Q_UNUSED(parent) return m_visible.size();
 }
 
 QVariant SrsLibraryViewModel::data(const QModelIndex &index, int role) const
 {
-    if (!index.isValid() || index.row() < 0 || index.row() >= m_visible.size())
-        return {};
-
+    if (!index.isValid() || index.row() < 0 || index.row() >= m_visible.size()) return {};
     const SrsCardItem &c = m_visible.at(index.row());
     switch (role) {
-        case EntryIdRole:  return static_cast<int>(c.id);
+        case EntryIdRole:  return (int)c.id;
         case WordRole:     return c.word;
         case MeaningRole:  return c.meaning;
         case StateRole:    return c.state;
         case DueRole:      return c.due;
-        case RepsRole:     return static_cast<int>(c.reps);
-        case LapsesRole:   return static_cast<int>(c.lapses);
-        // variants: kanji alternativos k_ele[1..N], para mostrar en UI
+        case RepsRole:     return (int)c.reps;
+        case LapsesRole:   return (int)c.lapses;
         case VariantsRole: return c.variants.join(QStringLiteral("・"));
-        // readings: lecturas r_ele originales, para mostrar en UI
         case ReadingsRole: return c.readingsList.join(QStringLiteral("・"));
         default:           return {};
     }
@@ -352,8 +339,7 @@ QHash<int, QByteArray> SrsLibraryViewModel::roleNames() const
 
 bool SrsLibraryViewModel::canFetchMore(const QModelIndex &parent) const
 {
-    Q_UNUSED(parent)
-    return m_visible.size() < m_filtered.size();
+    Q_UNUSED(parent) return m_visible.size() < m_filtered.size();
 }
 
 void SrsLibraryViewModel::fetchMore(const QModelIndex &parent)
@@ -361,23 +347,17 @@ void SrsLibraryViewModel::fetchMore(const QModelIndex &parent)
     Q_UNUSED(parent)
     int remaining = m_filtered.size() - m_visible.size();
     if (remaining <= 0) return;
-
-    int itemsToFetch = qMin(remaining, m_pageSize);
+    int n = qMin(remaining, m_pageSize);
     int begin = m_visible.size();
-
-    beginInsertRows(QModelIndex(), begin, begin + itemsToFetch - 1);
-    for (int i = 0; i < itemsToFetch; ++i)
-        m_visible.append(m_filtered.at(begin + i));
+    beginInsertRows(QModelIndex(), begin, begin + n - 1);
+    for (int i = 0; i < n; ++i) m_visible.append(m_filtered.at(begin + i));
     endInsertRows();
 }
 
-// variantMatch: usa matchVariants (kanji[0] + hiragana de cada reading)
-// para cubrir casos que el índice full-text no alcanza.
 bool SrsLibraryViewModel::variantMatch(const SrsCardItem &it, const QString &q) const
 {
-    const QString qLower = q.toLower();
+    const QString qL = q.toLower();
     for (const QString &v : it.matchVariants)
-        if (v.toLower().contains(qLower))
-            return true;
+        if (v.toLower().contains(qL)) return true;
     return false;
 }

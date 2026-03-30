@@ -14,10 +14,11 @@ extern "C" {
 
 class SrsService;
 class SearchService;
+class Configuration;
 
 struct SrsCardItem {
     uint32_t id      = 0;
-    QString  word;       // headword: k_ele[0] o r_ele[0]
+    QString  word;
     QString  meaning;
     QString  state;
     QString  due;
@@ -29,17 +30,17 @@ struct SrsCardItem {
     float    difficulty   = 0.f;
     uint64_t lastReview   = 0;
 
-    // Para mostrar en UI ──────────────────────────────────────────────────────
-    QStringList variants;      // k_ele[1..N]: formas kanji alternativas
-    QStringList readingsList;  // r_ele: todas las lecturas originales
-
-    // Para variantMatch() — incluye k_ele[0] + hiragana de cada r_ele ────────
-    QStringList matchVariants;
+    QStringList variants;      // k_ele[1..N]: kanji alternativos para UI
+    QStringList readingsList;  // r_ele: lecturas originales para UI
+    QStringList matchVariants; // k_ele[0] + hiragana de cada r_ele, para variantMatch()
 };
 
 class SrsLibraryViewModel : public QAbstractListModel
 {
     Q_OBJECT
+
+    // Query activa post-debounce — el delegate la lee para saber si highlight está activo
+    Q_PROPERTY(QString activeSearch READ activeSearch NOTIFY activeSearchChanged)
 
 public:
     enum Roles {
@@ -50,14 +51,15 @@ public:
         DueRole,
         RepsRole,
         LapsesRole,
-        VariantsRole,   // QString "v1・v2" — kanji alternativos k_ele[1..N]
-        ReadingsRole    // QString "r1・r2" — lecturas r_ele
+        VariantsRole,
+        ReadingsRole
     };
 
     explicit SrsLibraryViewModel(
         SrsService*    service,
         kotoba_dict*   dict,
         SearchService* searchService,
+        Configuration* config,
         QObject*       parent = nullptr
     );
 
@@ -73,17 +75,26 @@ public:
     Q_INVOKABLE QString getDue(int entryId)          const;
     Q_INVOKABLE QString getState(int entryId)        const;
 
-    Q_INVOKABLE void suspend(int entryId);
-    Q_INVOKABLE void unsuspend(int entryId);
-    Q_INVOKABLE void reset(int entryId);
-    Q_INVOKABLE void remove(int entryId);
-    Q_INVOKABLE void refresh();
+    Q_INVOKABLE void    suspend(int entryId);
+    Q_INVOKABLE void    unsuspend(int entryId);
+    Q_INVOKABLE void    reset(int entryId);
+    Q_INVOKABLE void    remove(int entryId);
+    Q_INVOKABLE void    refresh();
+
+    // Igual que SearchViewModel::highlightField — usa lastVariants() del SearchService
+    // tras la última llamada a queryNonPagination() en rebuildFiltered().
+    Q_INVOKABLE QString highlightField(const QString &field) const;
+
+    QString activeSearch() const { return m_search; }
 
     int      rowCount(const QModelIndex &parent = QModelIndex()) const override;
     QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
     QHash<int, QByteArray> roleNames() const override;
     bool     canFetchMore(const QModelIndex &parent) const override;
     void     fetchMore(const QModelIndex &parent) override;
+
+signals:
+    void activeSearchChanged();
 
 private slots:
     void onDebounceTimeout();
@@ -97,13 +108,14 @@ private:
     SrsService*    m_service       = nullptr;
     SearchService* m_searchService = nullptr;
     kotoba_dict*   m_dict          = nullptr;
+    Configuration* m_config        = nullptr;
 
     QVector<SrsCardItem> m_allCards;
     QVector<SrsCardItem> m_filtered;
     QVector<SrsCardItem> m_visible;
 
-    QString m_search;
-    QString m_pendingSearch;
+    QString m_search;        // query activa (post-debounce)
+    QString m_pendingSearch; // texto del campo, esperando debounce
     QString m_filter;
     QTimer  m_debounceTimer;
 

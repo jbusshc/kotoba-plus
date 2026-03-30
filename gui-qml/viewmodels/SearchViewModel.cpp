@@ -10,34 +10,6 @@
 
 
 
-// ── Color named → hex CSS ─────────────────────────────────────────────────────
-static QString accentToHex(const QString &name)
-{
-    static const QHash<QString, QString> table = {
-        { "red",         "#F44336" },
-        { "pink",        "#E91E63" },
-        { "purple",      "#9C27B0" },
-        { "deeppurple",  "#673AB7" },
-        { "indigo",      "#3F51B5" },
-        { "blue",        "#2196F3" },
-        { "lightblue",   "#03A9F4" },
-        { "cyan",        "#00BCD4" },
-        { "teal",        "#009688" },
-        { "green",       "#4CAF50" },
-        { "lightgreen",  "#8BC34A" },
-        { "lime",        "#CDDC39" },
-        { "yellow",      "#FFEB3B" },
-        { "amber",       "#FFC107" },
-        { "orange",      "#FF9800" },
-        { "deeporange",  "#FF5722" },
-        { "brown",       "#795548" },
-        { "bluegrey",    "#607D8B" },
-    };
-    return table.value(name, "#2196F3");
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-
 SearchViewModel::SearchViewModel(SearchService *service,
                                  SearchResultModel *model,
                                  kotoba_dict *dict,
@@ -173,62 +145,12 @@ void SearchViewModel::fillFromContext(bool append)
         m_model->resetWith(rows);
 }
 
-// ── Highlight ────────────────────────────────────────────────────────────────
-static bool kanaEqualQString(const QString &a, const QString &b)
-{
-    QByteArray aUtf8 = a.toUtf8();
-    QByteArray bUtf8 = b.toUtf8();
-    return kana_equal(aUtf8.constData(), bUtf8.constData());
-}
-
-static int kanaIndexOf(const QString &text, const QString &pattern)
-{
-    if (pattern.isEmpty()) return -1;
-
-    for (int i = 0; i <= text.size() - pattern.size(); ++i)
-    {
-        QStringView slice(text.constData() + i, pattern.size());
-
-        if (kanaEqualQString(slice.toString(), pattern))
-            return i;
-    }
-
-    return -1;
-}
-
 
 QString SearchViewModel::highlightField(const QString &field) const
 {
     if (m_activeQuery.isEmpty() || field.isEmpty())
         return field;
-
-    const auto variants = m_service->lastVariants();
-    const QString fieldLower = field.toLower();
-    int matchIdx = -1;
-    int matchLen = 0;
-
-    for (const QString &v : { variants.normal, variants.romaji, variants.hiragana }) {
-        if (v.isEmpty()) continue;
-        const QString vLower = v.toLower();
-        int idx = kanaIndexOf(fieldLower, vLower);
-        if (idx >= 0 && (matchIdx < 0 || idx < matchIdx)) {
-            matchIdx = idx;
-            matchLen = v.length();
-        }
-    }
-
-    if (matchIdx < 0) return field;
-
-    const QString colorHex = m_config ? accentToHex(m_config->accentColor) : QStringLiteral("#2196F3");
-
-    QString result;
-    result.reserve(field.size() + 48);
-    result += field.left(matchIdx).toHtmlEscaped();
-    result += QStringLiteral("<b style=\"color:") + colorHex + QStringLiteral("\">");
-    result += field.mid(matchIdx, matchLen).toHtmlEscaped();
-    result += QStringLiteral("</b>");
-    result += field.mid(matchIdx + matchLen).toHtmlEscaped();
-    return result;
+    return m_service->highlightField(field);
 }
 
 // ── openEntryAt ──────────────────────────────────────────────────────────────

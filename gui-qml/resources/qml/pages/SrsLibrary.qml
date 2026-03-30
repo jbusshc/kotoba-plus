@@ -39,7 +39,6 @@ Page {
         height: Theme.minTapTarget - 20
         width: pillLbl.implicitWidth + 20
         radius: height / 2
-
         color: active
             ? Qt.rgba(pillColor(label).r, pillColor(label).g, pillColor(label).b, 0.20)
             : Theme.surfaceSubtle
@@ -54,12 +53,9 @@ Page {
             anchors.centerIn: parent
             text: label
             font.pixelSize: Theme.fontSizeXSmall; font.weight: Font.Medium
-            color: active
-                ? pillColor(label)
-                : Qt.rgba(hintColor.r, hintColor.g, hintColor.b, 0.7)
+            color: active ? pillColor(label) : Qt.rgba(hintColor.r, hintColor.g, hintColor.b, 0.7)
             Behavior on color { ColorAnimation { duration: 130 } }
         }
-
         MouseArea {
             anchors.horizontalCenter: parent.horizontalCenter
             anchors.verticalCenter:   parent.verticalCenter
@@ -79,11 +75,7 @@ Page {
             color: Theme.cardBackground
             height: searchCol.implicitHeight + 20
 
-            Rectangle {
-                anchors.bottom: parent.bottom
-                width: parent.width; height: 1
-                color: dividerColor
-            }
+            Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: dividerColor }
 
             Column {
                 id: searchCol
@@ -92,11 +84,9 @@ Page {
 
                 RowLayout {
                     width: parent.width
-
                     Item {
                         width: Math.max(backLabel.implicitWidth + 24, Theme.minTapTarget)
                         height: Theme.minTapTarget
-
                         Rectangle {
                             anchors.fill: parent; radius: 6
                             color: backMouse.containsMouse ? Theme.surfaceHover : "transparent"
@@ -105,10 +95,7 @@ Page {
                         RowLayout {
                             anchors.centerIn: parent; spacing: 4
                             Text { text: "‹"; font.pixelSize: Theme.fontSizeMedium; color: hintColor }
-                            Text {
-                                id: backLabel; text: "Back"
-                                font.pixelSize: Theme.fontSizeSmall; font.weight: Font.Medium; color: hintColor
-                            }
+                            Text { id: backLabel; text: "Back"; font.pixelSize: Theme.fontSizeSmall; font.weight: Font.Medium; color: hintColor }
                         }
                         MouseArea {
                             id: backMouse; anchors.fill: parent
@@ -119,7 +106,6 @@ Page {
                     Item { Layout.fillWidth: true }
                 }
 
-                // Search row
                 Rectangle {
                     width: parent.width; height: 36; radius: 7
                     color: Theme.surfaceInput
@@ -133,11 +119,7 @@ Page {
                         anchors.fill: parent
                         anchors.leftMargin: 10; anchors.rightMargin: 10
                         spacing: 8
-
-                        Text {
-                            text: "⌕"; font.pixelSize: Theme.fontSizeIcon
-                            color: Qt.rgba(hintColor.r, hintColor.g, hintColor.b, 0.45)
-                        }
+                        Text { text: "⌕"; font.pixelSize: Theme.fontSizeIcon; color: Qt.rgba(hintColor.r, hintColor.g, hintColor.b, 0.45) }
                         TextField {
                             id: searchField
                             Layout.fillWidth: true
@@ -154,15 +136,11 @@ Page {
                             color: Theme.surfaceClear
                             visible: searchField.text.length > 0
                             Text { anchors.centerIn: parent; text: "×"; font.pixelSize: Theme.fontSizeXSmall; color: hintColor }
-                            MouseArea {
-                                anchors.fill: parent; cursorShape: Qt.PointingHandCursor
-                                onClicked: searchField.text = ""
-                            }
+                            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: searchField.text = "" }
                         }
                     }
                 }
 
-                // Filter pills
                 Row {
                     spacing: 6
                     Repeater {
@@ -180,19 +158,13 @@ Page {
             }
         }
 
-        QtObject {
-            id: filterBox
-            property string currentFilter: "All"
-        }
+        QtObject { id: filterBox; property string currentFilter: "All" }
 
-        // ── Count bar ─────────────────────────────────────────────────────────
         Rectangle {
             Layout.fillWidth: true
             height: 32; color: "transparent"
-
             RowLayout {
-                anchors.fill: parent
-                anchors.leftMargin: 16; anchors.rightMargin: 16
+                anchors.fill: parent; anchors.leftMargin: 16; anchors.rightMargin: 16
                 Text {
                     font.pixelSize: Theme.fontSizeXSmall; font.weight: Font.Medium
                     color: Qt.rgba(hintColor.r, hintColor.g, hintColor.b, 0.55)
@@ -201,14 +173,9 @@ Page {
                 }
                 Item { Layout.fillWidth: true }
             }
-            Rectangle {
-                anchors.bottom: parent.bottom
-                width: parent.width; height: 1
-                color: dividerColor; opacity: 0.4
-            }
+            Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: dividerColor; opacity: 0.4 }
         }
 
-        // ── Card list ─────────────────────────────────────────────────────────
         Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
@@ -222,16 +189,20 @@ Page {
 
                 delegate: SrsCardDelegate {
                     width: cardList.width
-                    word:        model.word
-                    meaning:     model.meaning
-                    cardState:   model.state
-                    due:         model.due
-                    entryId:     model.entryId
-                    variants:    model.variants
-                    readings:    model.readings
-                    // Pasamos el texto del campo directamente — el debounce
-                    // está en C++, aquí solo necesitamos el string para highlight.
-                    activeQuery: searchField.text
+                    word:      model.word
+                    meaning:   model.meaning
+                    cardState: model.state
+                    due:       model.due
+                    entryId:   model.entryId
+                    variants:  model.variants
+                    readings:  model.readings
+
+                    highlightEnabled: appConfig.highlightMatches
+                    activeQuery: srsLibraryVM.activeSearch
+                    highlightFunc: function(text) {
+                        return srsLibraryVM.highlightField(text)
+                    }
+
                     onOpenDetails: function(id) {
                         stack.push("qrc:/qml/pages/SrsCardDetailPage.qml", { entryId: id })
                     }
@@ -253,7 +224,6 @@ Page {
                 anchors.centerIn: parent
                 spacing: 10
                 visible: cardList.count === 0
-
                 Text {
                     anchors.horizontalCenter: parent.horizontalCenter
                     text: searchField.text.length > 0 ? "∅" : "○"
