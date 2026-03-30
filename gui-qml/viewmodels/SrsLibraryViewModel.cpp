@@ -9,15 +9,36 @@ extern "C" {
 #include "../../core/include/index_search.h"
 }
 
-SrsLibraryViewModel::SrsLibraryViewModel(SrsService* service, kotoba_dict* dict, SearchService* searchService, QObject* parent)
+SrsLibraryViewModel::SrsLibraryViewModel(SrsService* service, kotoba_dict* dict,
+                                         SearchService* searchService, QObject* parent)
     : QAbstractListModel(parent), m_service(service), m_dict(dict), m_searchService(searchService)
 {
+    m_debounceTimer.setSingleShot(true);
+    connect(&m_debounceTimer, &QTimer::timeout,
+            this, &SrsLibraryViewModel::onDebounceTimeout);
+
     loadAllCards();
     rebuildFiltered();
     resetToInitialPage();
 }
 
-/* ---- helpers privados ---- */
+// ── Debounce ─────────────────────────────────────────────────────────────────
+
+void SrsLibraryViewModel::setSearch(const QString &text)
+{
+    m_pendingSearch = text;
+    m_debounceTimer.start(120);
+}
+
+void SrsLibraryViewModel::onDebounceTimeout()
+{
+    m_search = m_pendingSearch;
+    loadAllCards();
+    rebuildFiltered();
+    resetToInitialPage();
+}
+
+// ── Helpers privados ─────────────────────────────────────────────────────────
 
 void SrsLibraryViewModel::loadAllCards()
 {
@@ -34,15 +55,12 @@ void SrsLibraryViewModel::loadAllCards()
         if (!entry) continue;
 
         SrsCardItem item;
-        item.id         = card->id;
-        item.reps       = card->reps;
-        item.lapses     = card->lapses;
-        item.stability  = card->stability;
-        item.difficulty = card->difficulty;
-        item.lastReview = card->last_review;
-
-        /* total_answers se incrementa en cada fsrs_answer() sin importar
-         * el estado ni el rating — es el contador canónico de interacciones. */
+        item.id           = card->id;
+        item.reps         = card->reps;
+        item.lapses       = card->lapses;
+        item.stability    = card->stability;
+        item.difficulty   = card->difficulty;
+        item.lastReview   = card->last_review;
         item.totalReviews = card->total_answers;
 
         switch (card->state) {
@@ -54,9 +72,7 @@ void SrsLibraryViewModel::loadAllCards()
             default:                    item.state = QStringLiteral("Unknown");    break;
         }
 
-        static char mixed_buf[MAX_QUERY_LEN];
-
-        /* word */
+        // ── headword: primer kanji, o primer kana si no hay kanji ────────────
         if (entry->k_elements_count > 0) {
             const k_ele_bin* k = kotoba_k_ele(m_dict, entry, 0);
             kotoba_str s = kotoba_keb(m_dict, k);
@@ -69,25 +85,49 @@ void SrsLibraryViewModel::loadAllCards()
             item.word = QStringLiteral("[unknown]");
         }
 
-        /* variants */
-        for (uint32_t k = 0; k < entry->k_elements_count; ++k) {
+        // ── variants: formas kanji k_ele[1..N] (excluye el headword) ─────────
+        for (uint32_t k = 1; k < entry->k_elements_count; ++k) {
             const k_ele_bin* ke = kotoba_k_ele(m_dict, entry, k);
             kotoba_str s = kotoba_keb(m_dict, ke);
             item.variants.append(QString::fromUtf8(s.ptr, s.len));
         }
+
+        // ── variants internas para variantMatch (kanji[0] + hiragana) ────────
+        // Se llenan aparte para que el match funcione aunque variants esté vacío.
+        char mixed_buf[MAX_QUERY_LEN];
+        if (entry->k_elements_count > 0) {
+            const k_ele_bin* ke0 = kotoba_k_ele(m_dict, entry, 0);
+            kotoba_str s0 = kotoba_keb(m_dict, ke0);
+            item.matchVariants.append(QString::fromUtf8(s0.ptr, s0.len));
+        }
         for (uint32_t r = 0; r < entry->r_elements_count; ++r) {
             const r_ele_bin* re = kotoba_r_ele(m_dict, entry, r);
             kotoba_str s = kotoba_reb(m_dict, re);
-            strncpy(mixed_buf, s.ptr, s.len);
-            mixed_buf[s.len] = '\0';
-            mixed_to_hiragana(m_searchService->searchCtx()->trie_ctx, mixed_buf, mixed_buf, MAX_QUERY_LEN);
-            item.variants.append(QString::fromUtf8(s.ptr, s.len));
-            item.variants.append(QString::fromUtf8(mixed_buf));
+
+            // ── readingsList: lecturas originales para mostrar en UI ──────────
+            item.readingsList << QString::fromUtf8(s.ptr, s.len);
+
+            // hiragana para matchVariants
+            size_t copyLen = qMin<size_t>(s.len, MAX_QUERY_LEN - 1);
+            memcpy(mixed_buf, s.ptr, copyLen);
+            mixed_buf[copyLen] = '\0';
+            mixed_to_hiragana(m_searchService->searchCtx()->trie_ctx,
+                              mixed_buf, mixed_buf, MAX_QUERY_LEN);
+            item.matchVariants.append(QString::fromUtf8(mixed_buf));
         }
 
-        /* meaning */
+        uint32_t firstSenseId = 0;
+        // ── meaning: primer sentido ───────────────────────────────────────────
         if (entry->senses_count > 0) {
-            const sense_bin* sense = kotoba_sense(m_dict, entry, 0);
+            for (uint32_t s = 0; s < entry->senses_count; ++s) {
+                const sense_bin* sense = kotoba_sense(m_dict, entry, s);
+                if (sense->lang < 0 || sense->lang >= 32 || m_searchService->searchCtx()->is_gloss_active[sense->lang] == 0)
+                    continue;
+                firstSenseId = s;
+                break;
+            }
+            if (firstSenseId >= entry->senses_count) goto noGloss;
+            const sense_bin* sense = kotoba_sense(m_dict, entry, firstSenseId);
             QStringList glosses;
             for (uint32_t g = 0; g < sense->gloss_count; ++g) {
                 kotoba_str gs = kotoba_gloss(m_dict, sense, g);
@@ -95,9 +135,9 @@ void SrsLibraryViewModel::loadAllCards()
             }
             item.meaning = glosses.join(QStringLiteral("; "));
         }
+        noGloss:
 
         item.due = QString::fromStdString(m_service->dueDateText(card->id));
-
         m_allCards.append(item);
     }
 }
@@ -109,19 +149,24 @@ void SrsLibraryViewModel::rebuildFiltered()
     const QString s = m_search.trimmed();
     const bool hasSearch = !s.isEmpty();
 
-    m_searchService->queryNonPagination(s);
-
-    const PostingRef* results      = m_searchService->searchCtx()->results_buffer;
-    const uint32_t   resultsCount  = m_searchService->searchCtx()->results_left;
+    if (hasSearch)
+        m_searchService->queryNonPagination(s);
 
     QSet<uint32_t> resultEntryIds;
-    for (uint32_t i = 0; i < resultsCount; ++i)
-        resultEntryIds.insert(results[i].p->doc_id);
+    if (hasSearch) {
+        const SearchContext* ctx = m_searchService->searchCtx();
+        const PostingRef* results     = ctx->results_buffer;
+        const uint32_t   resultsCount = ctx->results_left;
+        for (uint32_t i = 0; i < resultsCount; ++i)
+            resultEntryIds.insert(results[i].p->doc_id);
+    }
 
     for (const SrsCardItem &it : m_allCards) {
-        bool matchSearch = !hasSearch || resultEntryIds.contains(it.id);
-        bool matchFilter = true;
+        bool matchSearch = !hasSearch
+            || resultEntryIds.contains(it.id)
+            || variantMatch(it, s);
 
+        bool matchFilter = true;
         if      (m_filter == QLatin1String("New"))
             matchFilter = (it.state == QLatin1String("New"));
         else if (m_filter == QLatin1String("Learning"))
@@ -147,18 +192,10 @@ void SrsLibraryViewModel::resetToInitialPage()
     endResetModel();
 }
 
-/* ---- API pública ---- */
+// ── API pública ───────────────────────────────────────────────────────────────
 
 void SrsLibraryViewModel::refresh()
 {
-    loadAllCards();
-    rebuildFiltered();
-    resetToInitialPage();
-}
-
-void SrsLibraryViewModel::setSearch(const QString &text)
-{
-    m_search = text;
     loadAllCards();
     rebuildFiltered();
     resetToInitialPage();
@@ -172,7 +209,7 @@ void SrsLibraryViewModel::setFilter(const QString &filter)
     resetToInitialPage();
 }
 
-/* ---- getters ---- */
+// ── Getters ───────────────────────────────────────────────────────────────────
 
 int SrsLibraryViewModel::getReps(int entryId) const
 {
@@ -209,10 +246,6 @@ float SrsLibraryViewModel::getDifficulty(int entryId) const
     return 0.f;
 }
 
-/*
- * getLastReview: convierte last_review (unix seconds) a texto legible.
- * Si es 0 (nunca revisada) devuelve "Never".
- */
 QString SrsLibraryViewModel::getLastReview(int entryId) const
 {
     for (const SrsCardItem &it : m_allCards) {
@@ -236,7 +269,7 @@ QString SrsLibraryViewModel::getState(int entryId) const
     return QString::fromStdString(m_service->stateText(static_cast<uint32_t>(entryId)));
 }
 
-/* ---- acciones ---- */
+// ── Acciones ─────────────────────────────────────────────────────────────────
 
 void SrsLibraryViewModel::suspend(int entryId)
 {
@@ -272,7 +305,7 @@ void SrsLibraryViewModel::remove(int entryId)
     refresh();
 }
 
-/* ---- model interface ---- */
+// ── Model interface ───────────────────────────────────────────────────────────
 
 int SrsLibraryViewModel::rowCount(const QModelIndex &parent) const
 {
@@ -287,27 +320,33 @@ QVariant SrsLibraryViewModel::data(const QModelIndex &index, int role) const
 
     const SrsCardItem &c = m_visible.at(index.row());
     switch (role) {
-        case EntryIdRole: return static_cast<int>(c.id);
-        case WordRole:    return c.word;
-        case MeaningRole: return c.meaning;
-        case StateRole:   return c.state;
-        case DueRole:     return c.due;
-        case RepsRole:    return static_cast<int>(c.reps);
-        case LapsesRole:  return static_cast<int>(c.lapses);
-        default:          return {};
+        case EntryIdRole:  return static_cast<int>(c.id);
+        case WordRole:     return c.word;
+        case MeaningRole:  return c.meaning;
+        case StateRole:    return c.state;
+        case DueRole:      return c.due;
+        case RepsRole:     return static_cast<int>(c.reps);
+        case LapsesRole:   return static_cast<int>(c.lapses);
+        // variants: kanji alternativos k_ele[1..N], para mostrar en UI
+        case VariantsRole: return c.variants.join(QStringLiteral("・"));
+        // readings: lecturas r_ele originales, para mostrar en UI
+        case ReadingsRole: return c.readingsList.join(QStringLiteral("・"));
+        default:           return {};
     }
 }
 
 QHash<int, QByteArray> SrsLibraryViewModel::roleNames() const
 {
     QHash<int, QByteArray> roles;
-    roles[EntryIdRole] = "entryId";
-    roles[WordRole]    = "word";
-    roles[MeaningRole] = "meaning";
-    roles[StateRole]   = "state";
-    roles[DueRole]     = "due";
-    roles[RepsRole]    = "reps";
-    roles[LapsesRole]  = "lapses";
+    roles[EntryIdRole]  = "entryId";
+    roles[WordRole]     = "word";
+    roles[MeaningRole]  = "meaning";
+    roles[StateRole]    = "state";
+    roles[DueRole]      = "due";
+    roles[RepsRole]     = "reps";
+    roles[LapsesRole]   = "lapses";
+    roles[VariantsRole] = "variants";
+    roles[ReadingsRole] = "readings";
     return roles;
 }
 
@@ -332,10 +371,13 @@ void SrsLibraryViewModel::fetchMore(const QModelIndex &parent)
     endInsertRows();
 }
 
+// variantMatch: usa matchVariants (kanji[0] + hiragana de cada reading)
+// para cubrir casos que el índice full-text no alcanza.
 bool SrsLibraryViewModel::variantMatch(const SrsCardItem &it, const QString &q) const
 {
-    for (const QString &v : it.variants)
-        if (v.contains(q, Qt::CaseInsensitive))
+    const QString qLower = q.toLower();
+    for (const QString &v : it.matchVariants)
+        if (v.toLower().contains(qLower))
             return true;
     return false;
 }

@@ -33,7 +33,6 @@ Page {
             theme:             appConfig.theme,
             accentColor:       appConfig.accentColor,
             fontScale:         appConfig.fontScale,
-            showFurigana:      appConfig.showFurigana,
             glossLanguages:    appConfig.glossLanguages,
             fallbackLanguage:  appConfig.fallbackLanguage,
             interfaceLanguage: appConfig.interfaceLanguage,
@@ -56,7 +55,6 @@ Page {
         dirty = snapshot.theme             !== appConfig.theme
              || snapshot.accentColor       !== appConfig.accentColor
              || Math.abs(snapshot.fontScale      - appConfig.fontScale)      > 0.001
-             || snapshot.showFurigana      !== appConfig.showFurigana
              || snapshot.glossLanguages    !== appConfig.glossLanguages
              || snapshot.fallbackLanguage  !== appConfig.fallbackLanguage
              || snapshot.interfaceLanguage !== appConfig.interfaceLanguage
@@ -86,7 +84,6 @@ Page {
         appConfig.theme             = "dark"
         appConfig.accentColor       = "blue"
         appConfig.fontScale         = 1.0
-        appConfig.showFurigana      = true
         appConfig.glossLanguages    = "en"
         appConfig.fallbackLanguage  = "en"
         appConfig.interfaceLanguage = "en"
@@ -572,17 +569,6 @@ Page {
                             value: Math.round(appConfig.fontScale * 100)
                             min: 70; max: 200; unit: " %"
                             onValueChanged: { appConfig.fontScale = value / 100.0; page.markDirty() }
-                        }
-                    }
-                    RowDivider {}
-
-                    SettingRow {
-                        label: "Show Furigana"
-
-                        ToggleSwitch {
-                            anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
-                            checked: appConfig.showFurigana
-                            onToggled: (v) => { appConfig.showFurigana = v; page.markDirty() }
                         }
                     }
 

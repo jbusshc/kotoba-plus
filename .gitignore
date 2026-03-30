@@ -1,6 +1,5 @@
 *.exe
 *.db
-*.xml
 *.o
 bin\build
 *-shm

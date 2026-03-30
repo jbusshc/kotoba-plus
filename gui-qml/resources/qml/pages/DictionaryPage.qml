@@ -58,7 +58,6 @@ Page {
                     onTextChanged: if (searchVM) searchVM.query = text
                 }
 
-                // Clear button
                 Rectangle {
                     width: 20; height: 20; radius: 10
                     color: Theme.surfaceClear
@@ -92,10 +91,15 @@ Page {
             delegate: Item {
                 id: delegateRoot
                 width: listView.width
-                height: rowContent.implicitHeight + 20
+
+                readonly property bool hasSubline: variants.length > 0 || readings.length > 0
+                height: hasSubline ? 72 : 56
 
                 property bool hovered: false
                 property bool pressed: false
+
+                readonly property string aq: searchVM ? searchVM.activeQuery : ""
+                readonly property bool doHighlight: appConfig.highlightMatches && aq.length > 0
 
                 Rectangle {
                     anchors.fill: parent
@@ -108,7 +112,6 @@ Page {
                 }
 
                 RowLayout {
-                    id: rowContent
                     anchors.left: parent.left; anchors.right: parent.right
                     anchors.verticalCenter: parent.verticalCenter
                     anchors.leftMargin: 16; anchors.rightMargin: 16
@@ -116,7 +119,7 @@ Page {
 
                     Rectangle {
                         width: 3
-                        height: wordText.implicitHeight
+                        height: contentCol.implicitHeight
                         radius: 2
                         color: accentColor
                         opacity: delegateRoot.hovered ? 1 : 0
@@ -124,26 +127,70 @@ Page {
                     }
 
                     Column {
+                        id: contentCol
                         Layout.fillWidth: true
-                        spacing: 3
+                        spacing: 2
 
+                        // Fila 1: headword + variants kanji
                         Text {
                             id: wordText
-                            text: headword
+                            width: parent.width
+                            textFormat: Text.RichText
+                            text: {
+                                const hw = delegateRoot.doHighlight
+                                    ? searchVM.highlightField(headword)
+                                    : headword
+
+                                if (variants.length === 0) return hw
+
+                                const sep = "<span style=\"color:" + Qt.rgba(hintColor.r, hintColor.g, hintColor.b, 0.45) + "\"> ・ </span>"
+                                const vParts = variants.split("・").map(v => {
+                                    return delegateRoot.doHighlight
+                                        ? searchVM.highlightField(v)
+                                        : v.replace(/&/g,"&amp;").replace(/</g,"&lt;")
+                                })
+                                return hw + sep + vParts.join(sep)
+                            }
                             font.pixelSize: Theme.fontSizeItem
                             font.weight: Font.Medium
                             color: textColor
-                            wrapMode: Text.Wrap
-                            width: parent.width
+                            elide: Text.ElideRight
+                            maximumLineCount: 1
                         }
+
+                        // Fila 2: readings
                         Text {
-                            text: gloss
+                            id: readingsText
+                            visible: readings.length > 0
+                            width: parent.width
+                            textFormat: Text.RichText
+                            text: {
+                                if (!readings || readings.length === 0) return ""
+                                const parts = readings.split("・").map(r => {
+                                    return delegateRoot.doHighlight
+                                        ? searchVM.highlightField(r)
+                                        : r.replace(/&/g,"&amp;").replace(/</g,"&lt;")
+                                })
+                                return parts.join("<span style=\"color:" + Qt.rgba(hintColor.r, hintColor.g, hintColor.b, 0.35) + "\"> ・ </span>")
+                            }
+                            font.pixelSize: Theme.fontSizeSmall
+                            color: Qt.rgba(hintColor.r, hintColor.g, hintColor.b, 0.6)
+                            elide: Text.ElideRight
+                            maximumLineCount: 1
+                        }
+
+                        // Fila 3: gloss
+                        Text {
+                            id: glossText
+                            width: parent.width
+                            textFormat: Text.RichText
+                            text: delegateRoot.doHighlight
+                                ? searchVM.highlightField(gloss)
+                                : gloss
                             font.pixelSize: Theme.fontSizeSmall
                             color: Qt.rgba(hintColor.r, hintColor.g, hintColor.b, 0.8)
-                            wrapMode: Text.Wrap
-                            width: parent.width
-                            maximumLineCount: 2
                             elide: Text.ElideRight
+                            maximumLineCount: 1
                         }
                     }
 
@@ -190,7 +237,6 @@ Page {
                 Column {
                     anchors.centerIn: parent
                     spacing: 8
-
                     Text {
                         anchors.horizontalCenter: parent.horizontalCenter
                         text: "∅"
@@ -215,7 +261,6 @@ Page {
                 Column {
                     anchors.centerIn: parent
                     spacing: 8
-
                     Text {
                         anchors.horizontalCenter: parent.horizontalCenter
                         text: "日"

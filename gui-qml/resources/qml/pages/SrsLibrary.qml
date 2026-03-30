@@ -249,6 +249,8 @@ Page {
                     cardState: model.state
                     due:       model.due
                     entryId:   model.entryId
+                    variants:  model.variants   
+                    readings:  model.readings  
                     onOpenDetails: function(id) {
                         stack.push("qrc:/qml/pages/SrsCardDetailPage.qml", { entryId: id })
                     }

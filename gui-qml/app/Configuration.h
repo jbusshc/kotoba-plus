@@ -87,7 +87,6 @@ struct Configuration {
     QString theme        = "dark";
     QString fontFamily   = "default";
     double  fontScale    = 1.0;
-    bool    showFurigana = true;
 
     // ── parsed caches ────────────────────────────────────────────────────────
     QVector<uint32_t> learningStepsParsed;
@@ -109,12 +108,15 @@ class ConfigWrapper : public QObject
     Q_PROPERTY(QString primaryColor      READ primaryColor      WRITE setPrimaryColor      NOTIFY primaryColorChanged)
     Q_PROPERTY(double  fontScale         READ fontScale         WRITE setFontScale         NOTIFY fontScaleChanged)
     Q_PROPERTY(QString fontFamily        READ fontFamily        WRITE setFontFamily        NOTIFY fontFamilyChanged)
-    Q_PROPERTY(bool    showFurigana      READ showFurigana      WRITE setShowFurigana      NOTIFY showFuriganaChanged)
 
     // ── Dictionary ──────────────────────────────────────────────────────────
     Q_PROPERTY(int     searchDelayMs     READ searchDelayMs     WRITE setSearchDelayMs     NOTIFY searchDelayMsChanged)
     Q_PROPERTY(bool    searchOnTyping    READ searchOnTyping    WRITE setSearchOnTyping    NOTIFY searchOnTypingChanged)
     Q_PROPERTY(bool    showRomaji        READ showRomaji        WRITE setShowRomaji        NOTIFY showRomajiChanged)
+    Q_PROPERTY(int     maxResults        READ maxResults        WRITE setMaxResults        NOTIFY maxResultsChanged)
+    Q_PROPERTY(int     pageSize          READ pageSize          WRITE setPageSize          NOTIFY pageSizeChanged)
+    Q_PROPERTY(bool    highlightMatches  READ highlightMatches  WRITE setHighlightMatches  NOTIFY highlightMatchesChanged)
+
 
     // ── Language ────────────────────────────────────────────────────────────
     Q_PROPERTY(QString glossLanguages    READ glossLanguages    WRITE setGlossLanguages    NOTIFY glossLanguagesChanged)
@@ -156,7 +158,6 @@ public:
     QString primaryColor()       const { return m_config.primaryColor; }
     double  fontScale()          const { return m_config.fontScale; }
     QString fontFamily()         const { return m_config.fontFamily; }
-    bool    showFurigana()       const { return m_config.showFurigana; }
     int     searchDelayMs()      const { return m_config.searchDelayMs; }
     bool    searchOnTyping()     const { return m_config.searchOnTyping; }
     QString glossLanguages()     const { return m_config.glossLanguages; }
@@ -174,6 +175,9 @@ public:
     bool    firstRun()           const { return m_config.firstRun; }
     bool    showRomaji()         const { return m_config.showRomaji; }
     int     orderMode()          const { return m_config.orderMode; }
+    int     maxResults()         const { return m_config.maxResults; }
+    int     pageSize()           const { return m_config.pageSize; }
+    bool    highlightMatches()   const { return m_config.highlightMatches; }
 
     // ── Setters ──────────────────────────────────────────────────────────────
     void setTheme(const QString &v)             { if (v != m_config.theme)            { m_config.theme            = v; emit themeChanged(); } }
@@ -181,7 +185,6 @@ public:
     void setPrimaryColor(const QString &v)      { if (v != m_config.primaryColor)     { m_config.primaryColor     = v; emit primaryColorChanged(); } }
     void setFontScale(double v)                 { if (v != m_config.fontScale)        { m_config.fontScale        = v; emit fontScaleChanged(); } }
     void setFontFamily(const QString &v)        { if (v != m_config.fontFamily)       { m_config.fontFamily       = v; emit fontFamilyChanged(); } }
-    void setShowFurigana(bool v)                { if (v != m_config.showFurigana)     { m_config.showFurigana     = v; emit showFuriganaChanged(); } }
     void setSearchDelayMs(int v)                { if (v != m_config.searchDelayMs)    { m_config.searchDelayMs    = v; emit searchDelayMsChanged(); } }
     void setSearchOnTyping(bool v)              { if (v != m_config.searchOnTyping)   { m_config.searchOnTyping   = v; emit searchOnTypingChanged(); } }
     void setGlossLanguages(const QString &v)    { if (v != m_config.glossLanguages)   { m_config.glossLanguages   = v; emit glossLanguagesChanged(); } }
@@ -197,6 +200,9 @@ public:
     void setFirstRun(bool v)                    { if (v != m_config.firstRun)         { m_config.firstRun         = v; emit firstRunChanged(); } }
     void setShowRomaji(bool v)                  { if (v != m_config.showRomaji)       { m_config.showRomaji       = v; emit showRomajiChanged(); } }
     void setOrderMode(int v)                    { if (v != m_config.orderMode)        { m_config.orderMode        = v; emit orderModeChanged(); } }
+    void setMaxResults(int v)                   { if (v != m_config.maxResults)       { m_config.maxResults       = v; emit maxResultsChanged(); } }
+    void setPageSize(int v)                     { if (v != m_config.pageSize)         { m_config.pageSize         = v; emit pageSizeChanged(); } }
+    void setHighlightMatches(bool v)                { if (v != m_config.highlightMatches) { m_config.highlightMatches     = v; emit highlightMatchesChanged(); } }
 
     void setServices(SearchService *searchSvc, SrsService *srsSvc)
     {
@@ -210,7 +216,6 @@ signals:
     void primaryColorChanged();
     void fontScaleChanged();
     void fontFamilyChanged();
-    void showFuriganaChanged();
     void searchDelayMsChanged();
     void searchOnTypingChanged();
     void glossLanguagesChanged();
@@ -226,6 +231,9 @@ signals:
     void firstRunChanged();
     void showRomajiChanged();
     void orderModeChanged();
+    void maxResultsChanged();
+    void pageSizeChanged();
+    void highlightMatchesChanged();
 
 private:
     SearchService *m_searchService = nullptr;
@@ -243,3 +251,5 @@ uint64_t generateDeviceId();
 QVector<uint32_t> parseSteps(const QString &steps);
 
 #endif // CONFIGURATION_H
+
+

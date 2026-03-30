@@ -83,7 +83,7 @@ int main(int argc, char **argv)
 
     // ── ViewModels ────────────────────────────────────────────────────────────
     SearchResultModel     *searchModel = new SearchResultModel();
-    SearchViewModel       *searchVM   = new SearchViewModel(searchSvc, searchModel, dict);
+    SearchViewModel       *searchVM   = new SearchViewModel(searchSvc, searchModel, dict, &configWrapper.m_config);
     EntryDetailsViewModel *detailsVM  = new EntryDetailsViewModel(dict, &configWrapper.m_config);
     SrsViewModel          *srsVM      = new SrsViewModel(srsSvc, dict, detailsVM);
     SrsLibraryViewModel   *libVM      = new SrsLibraryViewModel(srsSvc, dict, searchSvc);

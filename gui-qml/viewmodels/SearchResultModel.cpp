@@ -20,9 +20,13 @@ QVariant SearchResultModel::data(const QModelIndex &index, int role) const
     const ResultRow &row = m_rows.at(r);
 
     switch (role) {
-    case DocIdRole: return (int)row.doc_id;
+    case DocIdRole:    return (int)row.doc_id;
     case HeadwordRole: return row.headword;
-    case GlossRole: return row.gloss;
+    case GlossRole:    return row.gloss;
+    // Expuestos como strings unidos por ・ para que QML los use directamente en Text.
+    // Si el delegate necesita iterar, puede hacer split("・") en JS.
+    case VariantsRole: return row.variants.join(QStringLiteral("・"));
+    case ReadingsRole: return row.readings.join(QStringLiteral("・"));
     case Qt::DisplayRole:
         if (!row.gloss.isEmpty()) return row.headword + " — " + row.gloss;
         return row.headword;
@@ -34,9 +38,11 @@ QVariant SearchResultModel::data(const QModelIndex &index, int role) const
 QHash<int, QByteArray> SearchResultModel::roleNames() const
 {
     QHash<int, QByteArray> roles;
-    roles[DocIdRole] = "docId";
+    roles[DocIdRole]    = "docId";
     roles[HeadwordRole] = "headword";
-    roles[GlossRole] = "gloss";
+    roles[GlossRole]    = "gloss";
+    roles[VariantsRole] = "variants";
+    roles[ReadingsRole] = "readings";
     return roles;
 }
 

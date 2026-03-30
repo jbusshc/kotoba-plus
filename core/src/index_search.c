@@ -93,9 +93,9 @@ void init_search_context(struct SearchContext *ctx,
         exit(1);
     }
 
-    ctx->mixed_query   = ctx->queries_buffer;
-    ctx->variant_query = ctx->queries_buffer + MAX_QUERY_LEN;
-    ctx->word_filter_buffer = ctx->queries_buffer + MAX_QUERY_LEN * 2;
+    ctx->mixed_query   = ctx->queries_buffer + MAX_QUERY_LEN;
+    ctx->variant_query = ctx->queries_buffer + MAX_QUERY_LEN * 2;
+    ctx->word_filter_buffer = ctx->queries_buffer + MAX_QUERY_LEN * 3;
     memset(ctx->is_gloss_active, 0, sizeof(ctx->is_gloss_active));
     // ---- Gloss flags ----
     if (glosses_active)
@@ -368,18 +368,61 @@ static int search_jp_query(
     return write;
 }
 
+void query_process(struct SearchContext *ctx,
+                   const char *query,
+                   char* out_query,
+                   char* out_mixed_query,
+                   char* out_variant_query,
+                   uint8_t *out_prolongation_mark_flag)
+{
+    if (!query || !out_query || !out_mixed_query || !out_variant_query || !out_prolongation_mark_flag) {
+        fprintf(stderr, "Invalid arguments to query_process\n");
+        return;
+    }
+
+    // Trim leading spaces
+    const char *start = query;
+    while (*start && isspace((unsigned char)*start))
+        start++;
+
+    // Trim trailing spaces
+    const char *end = start + strlen(start) - 1;
+    while (end > start && isspace((unsigned char)*end))
+        end--;
+
+    // Copy trimmed query and convert ASCII letters to lowercase
+    size_t len = end - start + 1;
+    if (len >= MAX_QUERY_LEN)
+        len = MAX_QUERY_LEN - 1;
+
+    for (size_t i = 0; i < len; i++) {
+        unsigned char c = (unsigned char)start[i];
+        out_query[i] = isalpha(c) ? tolower(c) : c;
+    }
+    out_query[len] = '\0';
+
+    // Convert mixed input to Hiragana (assume already lowercase for ASCII)
+    mixed_to_hiragana(ctx->trie_ctx, out_query, out_mixed_query, MAX_QUERY_LEN);
+
+    // Handle vowel prolongation marks
+    vowel_prolongation_mark(out_mixed_query, out_variant_query, MAX_QUERY_LEN, out_prolongation_mark_flag);
+}
+
 void query_results(struct SearchContext *ctx, const char *query)
 {
     reset_search_context(ctx);
 
+    query_process(ctx, query, ctx->queries_buffer, ctx->mixed_query, ctx->variant_query, &ctx->prolongation_mark_flag);
+
     query_t q;
-    q.s = query;
-    q.len = (uint8_t)utf8_strlen(query);
-    q.first = query[0];
+    q.s = ctx->queries_buffer;
+    q.len = (uint8_t)utf8_strlen(ctx->queries_buffer);
+    q.first = ctx->queries_buffer[0];
+
     LOG_DEBUG("[CORE][INDEX_SEARCH][QUERY_RESULTS] New query: %s, length: %d\n", query, q.len);
     uint32_t gloss_hashes[SEARCH_MAX_QUERY_HASHES];
     int gloss_hcount = query_gram_hashes_mode(
-        query,
+        ctx->queries_buffer,
         GRAM_GLOSS_AUTO,
         gloss_hashes,
         SEARCH_MAX_QUERY_HASHES);
@@ -391,14 +434,13 @@ void query_results(struct SearchContext *ctx, const char *query)
 
     int input_type = get_input_type(query);
 
+
     // SEARCH ORDER DEPENDS ON QUERY LENGTH
     if (q.len >= 3)
     {
         // JP SEARCH FIRST
         if (ctx->jp_invx)
         {
-            mixed_to_hiragana(ctx->trie_ctx, query, ctx->mixed_query, MAX_QUERY_LEN);
-
             total_results = search_jp_query(
                 ctx,
                 ctx->mixed_query,
@@ -409,11 +451,9 @@ void query_results(struct SearchContext *ctx, const char *query)
 
             if (total_results < SEARCH_MAX_RESULTS)
             {
-                uint8_t prolongation_mark_flag = 0;
-                vowel_prolongation_mark(ctx->mixed_query, ctx->variant_query, MAX_QUERY_LEN, &prolongation_mark_flag);
-                if (prolongation_mark_flag)
+                vowel_prolongation_mark(ctx->mixed_query, ctx->variant_query, MAX_QUERY_LEN, &ctx->prolongation_mark_flag);
+                if (ctx->prolongation_mark_flag)
                 {
-                    ctx->prolongation_mark_flag = 1;
                     total_results = search_jp_query(
                         ctx,
                         ctx->variant_query,
@@ -536,8 +576,6 @@ void query_results(struct SearchContext *ctx, const char *query)
         // JP SEARCH SECOND
         if (ctx->jp_invx && total_results < SEARCH_MAX_RESULTS)
         {
-            mixed_to_hiragana(ctx->trie_ctx, query, ctx->mixed_query, MAX_QUERY_LEN);
-
             total_results = search_jp_query(
                 ctx,
                 ctx->mixed_query,
@@ -548,11 +586,8 @@ void query_results(struct SearchContext *ctx, const char *query)
 
             if (total_results < SEARCH_MAX_RESULTS)
             {
-                uint8_t prolongation_mark_flag = 0;
-                vowel_prolongation_mark(ctx->mixed_query, ctx->variant_query, MAX_QUERY_LEN, &prolongation_mark_flag);
-                if (prolongation_mark_flag)
+                if (ctx->prolongation_mark_flag)
                 {
-                    ctx->prolongation_mark_flag = 1;
                     total_results = search_jp_query(
                         ctx,
                         ctx->variant_query,

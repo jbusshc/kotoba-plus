@@ -1,5 +1,4 @@
 #include "kana.h"
-
 void mixed_to_hiragana(const TrieContext *ctx, const char *input, char *output, size_t out_size)
 {
     const char *s = input;
@@ -14,13 +13,13 @@ void mixed_to_hiragana(const TrieContext *ctx, const char *input, char *output, 
         if (isalpha(c))
         {
             /* --- standalone 'n' handling --- */
-            if (tolower(c) == 'n')
+            if (c == 'n')
             {
                 unsigned char n1 = (unsigned char)s[1];
                 unsigned char n2 = (unsigned char)s[2];
 
                 /* nn → ん */
-                if (tolower(n1) == 'n')
+                if (n1 == 'n')
                 {
                     emit_utf8(0x3093, &out, &left); // ん
                     s += 2;
@@ -36,8 +35,7 @@ void mixed_to_hiragana(const TrieContext *ctx, const char *input, char *output, 
                 }
 
                 /* n + consonant OR end */
-                if (n1 == '\0' ||
-                    (!is_vowel(n1) && tolower(n1) != 'y'))
+                if (n1 == '\0' || (!is_vowel(n1) && n1 != 'y'))
                 {
                     emit_utf8(0x3093, &out, &left);
                     s++;
@@ -47,9 +45,9 @@ void mixed_to_hiragana(const TrieContext *ctx, const char *input, char *output, 
 
             /* --- SOKUON (double consonant except n) --- */
             if (isalpha((unsigned char)s[1]) &&
-                tolower(s[0]) == tolower(s[1]) &&
-                is_consonant(tolower(s[0])) &&
-                tolower(s[0]) != 'n')
+                s[0] == s[1] &&
+                is_consonant(s[0]) &&
+                s[0] != 'n')
             {
                 emit_utf8(0x3063, &out, &left); /* っ */
                 s++;
@@ -65,7 +63,7 @@ void mixed_to_hiragana(const TrieContext *ctx, const char *input, char *output, 
 
             while (*p && isalpha((unsigned char)*p))
             {
-                int k = tolower(*p) - 'a';
+                int k = *p - 'a';
                 if (k < 0 || k >= 26)
                     break;
 

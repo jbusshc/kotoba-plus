@@ -5,6 +5,7 @@
 #include <QStringList>
 #include <QRegularExpression>
 #include <random>
+#include <cmath>
 
 #include "../infrastructure/SearchService.h"
 #include "../infrastructure/SrsService.h"
@@ -48,6 +49,10 @@ QVector<uint32_t> parseSteps(const QString &steps)
     }
     return result;
 }
+
+// ─────────────────────────────────────────
+// parse gloss languages
+// ─────────────────────────────────────────
 
 static void parseGlossLanguages(const QString &glossLangs, bool *langArray)
 {
@@ -95,14 +100,31 @@ static void validateConfig(Configuration &c)
 }
 
 // ─────────────────────────────────────────
+// migration helper
+// ─────────────────────────────────────────
+
+static void migrateConfig(Configuration &c, int storedVersion)
+{
+    // Versión 1: defaults actuales
+    if (storedVersion < 1) {
+        if (c.fontScale <= 0) c.fontScale = 1.0;
+        if (c.accentColor.isEmpty()) c.accentColor = "blue";
+    }
+
+    // futuras migraciones se agregan aquí...
+}
+
+// ─────────────────────────────────────────
 // save
-// Note: data file paths (dict, gloss, srs) are NOT persisted in config —
-// they are always resolved at startup by AppPaths::resolve().
 // ─────────────────────────────────────────
 
 void saveConfiguration(const Configuration &c, const QString &filePath)
 {
     QSettings s(filePath, QSettings::IniFormat);
+
+    s.beginGroup("Meta");
+    s.setValue("config_version", 1); // migración futura
+    s.endGroup();
 
     s.beginGroup("App");
     s.setValue("app_version",  c.appVersion);
@@ -116,9 +138,6 @@ void saveConfiguration(const Configuration &c, const QString &filePath)
     s.setValue("backup_enabled",      c.backupEnabled);
     s.setValue("backup_interval_days",c.backupIntervalDays);
     s.endGroup();
-
-    // [Data] section intentionally omitted — paths are platform-resolved,
-    // storing them would cause stale absolute paths on Android after reinstall.
 
     s.beginGroup("Dictionary");
     s.setValue("highlight_matches", c.highlightMatches);
@@ -141,7 +160,7 @@ void saveConfiguration(const Configuration &c, const QString &filePath)
     s.endGroup();
 
     s.beginGroup("FSRS");
-    s.setValue("desiredRetention",  c.desiredRetention);
+    s.setValue("desiredRetention",  std::round(c.desiredRetention * 10000.0)/10000.0);
     s.setValue("maximumInterval",   c.maximumInterval);
     s.setValue("newCardsPerDay",    c.newCardsPerDay);
     s.setValue("reviewsPerDay",     c.reviewsPerDay);
@@ -158,8 +177,7 @@ void saveConfiguration(const Configuration &c, const QString &filePath)
     s.setValue("primary_color", c.primaryColor);
     s.setValue("theme",         c.theme);
     s.setValue("font_family",   c.fontFamily);
-    s.setValue("fontScale",     c.fontScale);
-    s.setValue("show_furigana", c.showFurigana);
+    s.setValue("fontScale",     std::round(c.fontScale*100.0)/100.0);
     s.endGroup();
 
     s.sync();
@@ -171,6 +189,8 @@ void saveConfiguration(const Configuration &c, const QString &filePath)
 
 bool loadConfiguration(Configuration &c, const QString &filePath)
 {
+    int storedVersion = 0;
+
     if (!QFile::exists(filePath)) {
         c.deviceId = generateDeviceId();
         saveConfiguration(c, filePath);
@@ -178,6 +198,9 @@ bool loadConfiguration(Configuration &c, const QString &filePath)
     }
 
     QSettings s(filePath, QSettings::IniFormat);
+
+    storedVersion = s.value("Meta/config_version", 0).toInt();
+    migrateConfig(c, storedVersion);
 
     s.beginGroup("App");
     c.appVersion   = s.value("app_version",   c.appVersion).toString();
@@ -187,14 +210,12 @@ bool loadConfiguration(Configuration &c, const QString &filePath)
     s.endGroup();
 
     s.beginGroup("Sync");
-    c.deviceId          = s.value("device_id",            (qulonglong)c.deviceId).toULongLong();
+    c.deviceId          = s.value("device_id", (qulonglong)c.deviceId).toULongLong();
     c.backupEnabled     = s.value("backup_enabled",        c.backupEnabled).toBool();
     c.backupIntervalDays= s.value("backup_interval_days",  c.backupIntervalDays).toInt();
     s.endGroup();
 
-    // [Data] paths intentionally NOT loaded — AppPaths::resolve() sets them
-    // before loadConfiguration() is called in main.cpp.
-
+    // Data paths NOT loaded
     s.beginGroup("Dictionary");
     c.highlightMatches = s.value("highlight_matches", c.highlightMatches).toBool();
     c.maxResults       = s.value("max_results",       c.maxResults).toInt();
@@ -216,7 +237,7 @@ bool loadConfiguration(Configuration &c, const QString &filePath)
     s.endGroup();
 
     s.beginGroup("FSRS");
-    c.desiredRetention = s.value("desiredRetention",  c.desiredRetention).toDouble();
+    c.desiredRetention = std::round(s.value("desiredRetention",  c.desiredRetention).toDouble()*10000.0)/10000.0;
     c.maximumInterval  = s.value("maximumInterval",   c.maximumInterval).toInt();
     c.newCardsPerDay   = s.value("newCardsPerDay",    c.newCardsPerDay).toInt();
     c.reviewsPerDay    = s.value("reviewsPerDay",     c.reviewsPerDay).toInt();
@@ -233,8 +254,7 @@ bool loadConfiguration(Configuration &c, const QString &filePath)
     c.primaryColor = s.value("primary_color", c.primaryColor).toString();
     c.theme        = s.value("theme",         c.theme).toString();
     c.fontFamily   = s.value("font_family",   c.fontFamily).toString();
-    c.fontScale    = s.value("fontScale",     c.fontScale).toDouble();
-    c.showFurigana = s.value("show_furigana", c.showFurigana).toBool();
+    c.fontScale    = std::round(s.value("fontScale",  c.fontScale).toDouble()*100.0)/100.0;
     s.endGroup();
 
     validateConfig(c);
@@ -261,8 +281,7 @@ void ConfigWrapper::reloadFromDisk()
 {
     if (m_configPath.isEmpty()) return;
 
-    // Preserve the platform-resolved data paths — they must not be overwritten
-    // by loadConfiguration() since [Data] is not stored in the ini.
+    // Preserve platform-resolved paths
     QString savedDict      = m_config.dictPath;
     QString savedDictIdx   = m_config.dictIndexPath;
     QString savedSrs       = m_config.srsPath;
@@ -294,13 +313,12 @@ void ConfigWrapper::reloadFromDisk()
     m_config.glossSvPath   = savedGlossSv;
     m_config.jpPath        = savedJp;
 
-    // Notify QML of all changed properties so bindings update
+    // Notify QML
     emit themeChanged();
     emit accentColorChanged();
     emit primaryColorChanged();
     emit fontScaleChanged();
     emit fontFamilyChanged();
-    emit showFuriganaChanged();
     emit searchDelayMsChanged();
     emit searchOnTypingChanged();
     emit glossLanguagesChanged();
