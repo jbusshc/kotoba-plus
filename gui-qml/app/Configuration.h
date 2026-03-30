@@ -7,6 +7,7 @@
 #include <stdint.h>
 
 #include <types.h>
+#include <index_search.h>
 
 class SearchService;
 class SrsService;
@@ -54,7 +55,7 @@ struct Configuration {
 
     // ---------------- Dictionary ----------------
     bool highlightMatches = true;
-    int  maxResults       = 0;
+    int  maxResults       = SEARCH_MAX_RESULTS_DEFAULT;
     int  pageSize         = 20;
     int  searchDelayMs    = 150;
     bool searchOnTyping   = true;

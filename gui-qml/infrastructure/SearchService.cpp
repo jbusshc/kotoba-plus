@@ -7,7 +7,7 @@
 SearchService::SearchService(kotoba_dict *dict, Configuration* config)
     : m_dict(dict), m_config(config)
 {
-    init_search_context(&m_ctx, config->languages, m_dict, config->pageSize);
+    init_search_context(&m_ctx, config->languages, m_dict, config->pageSize, config->maxResults);
     qDebug() << "SearchService initialized with languages:";
     for (int i = 0; i < KOTOBA_LANG_COUNT; ++i) {
         if (config->languages[i] == 0) continue;
@@ -71,7 +71,7 @@ void SearchService::updateConfig(const Configuration* config)
         if (config->languages[i] == 0) continue;
         qDebug() << i << " -" << config->languages[i];
     }
-    update_search_config(&m_ctx, config->languages, config->pageSize);
+    update_search_config(&m_ctx, config->languages, config->pageSize, config->maxResults);
 }
 
 // Debe llamarse DESPUÉS de query() / queryNonPagination().

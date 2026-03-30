@@ -22,6 +22,9 @@
 
 #include <stdlib.h>
 
+#include "AndroidBridge.h"
+
+
 int main(int argc, char **argv)
 {
     srand(static_cast<unsigned int>(time(nullptr)));
@@ -97,9 +100,21 @@ int main(int argc, char **argv)
     engine.rootContext()->setContextProperty("appConfig",   &configWrapper);
     engine.rootContext()->setContextProperty("srsLibraryVM", libVM);
 
+
+    AndroidBridge bridge;
+    engine.rootContext()->setContextProperty("QtAndroid", &bridge);
     // QML is always loaded from the Qt resource system (qrc:/) — identical
     // on desktop and Android. No platform-specific URL needed.
     engine.load(QUrl(QStringLiteral("qrc:/qml/Main.qml")));
+    #ifdef Q_OS_ANDROID
+    #include <QJniObject>
+        #include <QNativeInterface>
+
+        QJniObject activity = QNativeInterface::QAndroidApplication::context();
+        if (activity.isValid()) {
+            activity.callMethod<void>("releaseSplash");
+        }
+    #endif
     if (engine.rootObjects().isEmpty()) return -1;
 
     // ── Load SRS profile ──────────────────────────────────────────────────────

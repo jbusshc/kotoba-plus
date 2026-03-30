@@ -60,7 +60,8 @@ sort_scores(SearchResultMeta *a, int n);
 
 #define MAX_QUERY_LEN 256
 #define QUERY_BUFFER_SIZE (MAX_QUERY_LEN * 4) // para normalizaciones (hiragana, vowel prolongation mark, etc)
-#define SEARCH_MAX_RESULTS 32768 // 2^15
+#define SEARCH_MAX_RESULTS 90000
+#define SEARCH_MAX_RESULTS_DEFAULT 20000
 #define SEARCH_MAX_QUERY_HASHES 128
 #define DEFAULT_PAGE_SIZE 16
 #define PAGE_SIZE_MAX 128
@@ -79,6 +80,7 @@ struct SearchContext
 {
     bool is_gloss_active[KOTOBA_LANG_COUNT];
     uint8_t _pad0[4];
+    SearchResultMeta results;
 
     query_t query;
     TrieContext *trie_ctx;
@@ -97,11 +99,9 @@ struct SearchContext
 
     PostingRef *results_buffer;
     uint32_t *results_doc_ids;
-
-    SearchResultMeta results;
-
     uint32_t results_left;
     uint32_t page_size;
+    uint32_t max_results;
     uint8_t page_result_count;
     uint8_t prolongation_mark_flag;
 };
@@ -110,7 +110,9 @@ struct SearchContext
 KOTOBA_API void init_search_context(struct SearchContext *ctx,
                                     bool *glosses_active,
                                     kotoba_dict *dict,
-                                    uint32_t page_size);
+                                    uint32_t page_size,
+                                    uint32_t max_results
+                                );
 
 KOTOBA_API void free_search_context(struct SearchContext *ctx);
 
@@ -125,7 +127,7 @@ KOTOBA_API void query_next_page(struct SearchContext *ctx);
 KOTOBA_API
 void warm_up(struct SearchContext *ctx);
 
-KOTOBA_API void update_search_config(struct SearchContext *ctx, const bool *glosses_active, uint32_t page_size);
+KOTOBA_API void update_search_config(struct SearchContext *ctx, const bool *glosses_active, uint32_t page_size, uint32_t max_results);
 
 
 

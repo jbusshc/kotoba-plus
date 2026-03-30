@@ -5,10 +5,10 @@
         android:label="Kotoba+"
         android:icon="@mipmap/ic_launcher">
 
-        <activity
-            android:name="org.qtproject.qt.android.bindings.QtActivity"
-            android:exported="true"
-            android:configChanges="orientation|screenSize|keyboardHidden">
+    <activity
+        android:name="com.kotobaplus.app.MainActivity"
+        android:exported="true"
+        android:configChanges="orientation|screenSize|keyboardHidden">
 
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>

@@ -58,7 +58,8 @@ static inline int word_contains_q(const char *word, int wlen,
 void init_search_context(struct SearchContext *ctx,
                          bool *glosses_active,
                          kotoba_dict *dict,
-                         uint32_t page_size)
+                         uint32_t page_size,
+                         uint32_t max_results)
 {
     memset(ctx, 0, sizeof(struct SearchContext));
 
@@ -67,6 +68,9 @@ void init_search_context(struct SearchContext *ctx,
                          ? page_size
                          : DEFAULT_PAGE_SIZE;
 
+    ctx->max_results = (max_results > 0 && max_results <= SEARCH_MAX_RESULTS)
+                           ? max_results
+                           : SEARCH_MAX_RESULTS_DEFAULT;
     ctx->results_left = 0;
     ctx->page_result_count = 0;
     ctx->prolongation_mark_flag = 0;
@@ -434,6 +438,7 @@ void query_results(struct SearchContext *ctx, const char *query)
     kotoba_dict *dict = ctx->dict;
 
     int total_results = 0;
+    uint32_t max_results = ctx->max_results;
 
     int input_type = get_input_type(query);
 
@@ -450,9 +455,9 @@ void query_results(struct SearchContext *ctx, const char *query)
                 results_buffer,
                 &ctx->results,
                 total_results,
-                SEARCH_MAX_RESULTS);
+                max_results);
 
-            if (total_results < SEARCH_MAX_RESULTS)
+            if (total_results < max_results)
             {
                 vowel_prolongation_mark(ctx->mixed_query, ctx->variant_query, MAX_QUERY_LEN, &ctx->prolongation_mark_flag);
                 if (ctx->prolongation_mark_flag)
@@ -463,13 +468,13 @@ void query_results(struct SearchContext *ctx, const char *query)
                         results_buffer,
                         &ctx->results,
                         total_results,
-                        SEARCH_MAX_RESULTS);
+                        max_results);
                 }
             }
         }
 
         // GLOSS SEARCH SECOND
-        if (gloss_hcount > 0 && (input_type & INPUT_TYPE_ROMAJI) && total_results < SEARCH_MAX_RESULTS)
+        if (gloss_hcount > 0 && (input_type & INPUT_TYPE_ROMAJI) && total_results < max_results)
         {
             for (int lang = 0; lang < KOTOBA_LANG_COUNT; ++lang)
             {
@@ -481,7 +486,7 @@ void query_results(struct SearchContext *ctx, const char *query)
                     continue;
 
                 int base = total_results;
-                int out_cap = SEARCH_MAX_RESULTS - base;
+                int out_cap = max_results - base;
 
                 if (out_cap <= 0)
                     break;
@@ -516,7 +521,7 @@ void query_results(struct SearchContext *ctx, const char *query)
 
                 total_results = write;
 
-                if (total_results >= SEARCH_MAX_RESULTS)
+                if (total_results >= max_results)
                     break;
             }
         }
@@ -536,7 +541,7 @@ void query_results(struct SearchContext *ctx, const char *query)
                     continue;
 
                 int base = total_results;
-                int out_cap = SEARCH_MAX_RESULTS - base;
+                int out_cap = max_results - base;
 
                 if (out_cap <= 0)
                     break;
@@ -571,13 +576,13 @@ void query_results(struct SearchContext *ctx, const char *query)
 
                 total_results = write;
 
-                if (total_results >= SEARCH_MAX_RESULTS)
+                if (total_results >= max_results)
                     break;
             }
         }
 
         // JP SEARCH SECOND
-        if (ctx->jp_invx && total_results < SEARCH_MAX_RESULTS)
+        if (ctx->jp_invx && total_results < max_results)
         {
             total_results = search_jp_query(
                 ctx,
@@ -585,9 +590,9 @@ void query_results(struct SearchContext *ctx, const char *query)
                 results_buffer,
                 &ctx->results,
                 total_results,
-                SEARCH_MAX_RESULTS);
+                max_results);
 
-            if (total_results < SEARCH_MAX_RESULTS)
+            if (total_results < max_results)
             {
                 if (ctx->prolongation_mark_flag)
                 {
@@ -597,7 +602,7 @@ void query_results(struct SearchContext *ctx, const char *query)
                         results_buffer,
                         &ctx->results,
                         total_results,
-                        SEARCH_MAX_RESULTS);
+                        max_results);
                 }
             }
         }
@@ -869,11 +874,13 @@ void warm_up(struct SearchContext *ctx)
     }
 }
 
-void update_search_config(struct SearchContext *ctx, const bool *glosses_active, uint32_t page_size)
+void update_search_config(struct SearchContext *ctx, const bool *glosses_active, uint32_t page_size, uint32_t max_results)
 {
     if (page_size > 0 && page_size <= PAGE_SIZE_MAX)
         ctx->page_size = page_size;
-    
+
+    if (max_results > 0 && max_results <= SEARCH_MAX_RESULTS)
+        ctx->max_results = max_results;
 
     if (glosses_active) {
         memset(ctx->is_gloss_active, 0, sizeof(ctx->is_gloss_active)); // limpiar array
