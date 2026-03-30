@@ -3,6 +3,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import "../components"
 import "../theme"
+
 Page {
     id: page
     title: "SRS Library"
@@ -35,7 +36,7 @@ Page {
             }
         }
 
-        height: Theme.minTapTarget - 20   // 28 px — pill stays compact, tap area below
+        height: Theme.minTapTarget - 20
         width: pillLbl.implicitWidth + 20
         radius: height / 2
 
@@ -60,11 +61,9 @@ Page {
         }
 
         MouseArea {
-            // Expand tap target to minTapTarget height without changing visual size
             anchors.horizontalCenter: parent.horizontalCenter
             anchors.verticalCenter:   parent.verticalCenter
-            width:  parent.width
-            height: Theme.minTapTarget
+            width: parent.width; height: Theme.minTapTarget
             cursorShape: Qt.PointingHandCursor
             onClicked: parent.clicked()
         }
@@ -91,7 +90,6 @@ Page {
                 anchors.fill: parent; anchors.margins: 14
                 spacing: 10
 
-                // Back button
                 RowLayout {
                     width: parent.width
 
@@ -106,32 +104,24 @@ Page {
                         }
                         RowLayout {
                             anchors.centerIn: parent; spacing: 4
+                            Text { text: "‹"; font.pixelSize: Theme.fontSizeMedium; color: hintColor }
                             Text {
-                                text: "‹"
-                                font.pixelSize: Theme.fontSizeMedium; color: hintColor
-                            }
-                            Text {
-                                id: backLabel
-                                text: "Back"
-                                font.pixelSize: Theme.fontSizeSmall
-                                font.weight: Font.Medium; color: hintColor
+                                id: backLabel; text: "Back"
+                                font.pixelSize: Theme.fontSizeSmall; font.weight: Font.Medium; color: hintColor
                             }
                         }
                         MouseArea {
-                            id: backMouse
-                            anchors.fill: parent
+                            id: backMouse; anchors.fill: parent
                             hoverEnabled: true; cursorShape: Qt.PointingHandCursor
                             onClicked: stack.pop()
                         }
                     }
-
                     Item { Layout.fillWidth: true }
                 }
 
                 // Search row
                 Rectangle {
-                    width: parent.width; height: 36
-                    radius: 7
+                    width: parent.width; height: 36; radius: 7
                     color: Theme.surfaceInput
                     border.width: 1
                     border.color: searchField.activeFocus
@@ -145,11 +135,9 @@ Page {
                         spacing: 8
 
                         Text {
-                            text: "⌕"
-                            font.pixelSize: Theme.fontSizeIcon
+                            text: "⌕"; font.pixelSize: Theme.fontSizeIcon
                             color: Qt.rgba(hintColor.r, hintColor.g, hintColor.b, 0.45)
                         }
-
                         TextField {
                             id: searchField
                             Layout.fillWidth: true
@@ -161,20 +149,13 @@ Page {
                             leftPadding: 0
                             onTextChanged: if (srsLibraryVM) srsLibraryVM.setSearch(text)
                         }
-
                         Rectangle {
                             width: 18; height: 18; radius: 9
                             color: Theme.surfaceClear
                             visible: searchField.text.length > 0
-
-                            Text {
-                                anchors.centerIn: parent
-                                text: "×"
-                                font.pixelSize: Theme.fontSizeXSmall; color: hintColor
-                            }
+                            Text { anchors.centerIn: parent; text: "×"; font.pixelSize: Theme.fontSizeXSmall; color: hintColor }
                             MouseArea {
-                                anchors.fill: parent
-                                cursorShape: Qt.PointingHandCursor
+                                anchors.fill: parent; cursorShape: Qt.PointingHandCursor
                                 onClicked: searchField.text = ""
                             }
                         }
@@ -199,7 +180,6 @@ Page {
             }
         }
 
-        // Filter state tracker
         QtObject {
             id: filterBox
             property string currentFilter: "All"
@@ -213,7 +193,6 @@ Page {
             RowLayout {
                 anchors.fill: parent
                 anchors.leftMargin: 16; anchors.rightMargin: 16
-
                 Text {
                     font.pixelSize: Theme.fontSizeXSmall; font.weight: Font.Medium
                     color: Qt.rgba(hintColor.r, hintColor.g, hintColor.b, 0.55)
@@ -222,7 +201,6 @@ Page {
                 }
                 Item { Layout.fillWidth: true }
             }
-
             Rectangle {
                 anchors.bottom: parent.bottom
                 width: parent.width; height: 1
@@ -244,13 +222,16 @@ Page {
 
                 delegate: SrsCardDelegate {
                     width: cardList.width
-                    word:      model.word
-                    meaning:   model.meaning
-                    cardState: model.state
-                    due:       model.due
-                    entryId:   model.entryId
-                    variants:  model.variants   
-                    readings:  model.readings  
+                    word:        model.word
+                    meaning:     model.meaning
+                    cardState:   model.state
+                    due:         model.due
+                    entryId:     model.entryId
+                    variants:    model.variants
+                    readings:    model.readings
+                    // Pasamos el texto del campo directamente — el debounce
+                    // está en C++, aquí solo necesitamos el string para highlight.
+                    activeQuery: searchField.text
                     onOpenDetails: function(id) {
                         stack.push("qrc:/qml/pages/SrsCardDetailPage.qml", { entryId: id })
                     }

@@ -128,6 +128,7 @@ void mixed_to_hiragana(const TrieContext *ctx, const char *input, char *output, 
     *out = '\0';
 }
 
+
 static inline uint32_t hiragana_vowel_(uint32_t cp)
 {
     switch (cp)
@@ -231,11 +232,22 @@ static inline uint32_t hiragana_vowel_(uint32_t cp)
     }
 }
 
+
+static inline int is_hiragana_vowel_char(uint32_t cp)
+{
+    return (cp == 0x3042 || // あ
+            cp == 0x3044 || // い
+            cp == 0x3046 || // う
+            cp == 0x3048 || // え
+            cp == 0x304A);  // お
+}
+
 void vowel_prolongation_mark(const char *input, char *output, size_t out_size, uint8_t* prolongation_mark_flag)
 {
     const char *s = input;
     char *out = output;
     size_t left = out_size - 1;
+
     if (prolongation_mark_flag) {
         *prolongation_mark_flag = 0;
     }
@@ -246,16 +258,17 @@ void vowel_prolongation_mark(const char *input, char *output, size_t out_size, u
         const char *next = utf8_decode(s, &cp);
 
         uint32_t v1 = hiragana_vowel_(cp);
+
         if (v1)
         {
             uint32_t next_cp;
             const char *peek = utf8_decode(next, &next_cp);
             uint32_t v2 = hiragana_vowel_(next_cp);
 
-            if (v2 && v1 == v2)
+            if (v2 && v1 == v2 && is_hiragana_vowel_char(next_cp))
             {
-                emit_utf8(cp, &out, &left);     // mantener primera sílaba
-                emit_utf8(0x30FC, &out, &left); // añadir ー
+                emit_utf8(cp, &out, &left);
+                emit_utf8(0x30FC, &out, &left); // ー
                 *prolongation_mark_flag = 1;
                 s = peek;
                 continue;

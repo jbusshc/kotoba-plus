@@ -414,6 +414,9 @@ void query_results(struct SearchContext *ctx, const char *query)
 
     query_process(ctx, query, ctx->queries_buffer, ctx->mixed_query, ctx->variant_query, &ctx->prolongation_mark_flag);
 
+    LOG_DEBUG("[CORE][INDEX_SEARCH][QUERY_RESULTS] Processed query: %s, Mixed query: %s, Variant query: %s, Prolongation mark flag: %d\n",
+              ctx->queries_buffer, ctx->mixed_query, ctx->variant_query, ctx->prolongation_mark_flag);
+
     query_t q;
     q.s = ctx->queries_buffer;
     q.len = (uint8_t)utf8_strlen(ctx->queries_buffer);
