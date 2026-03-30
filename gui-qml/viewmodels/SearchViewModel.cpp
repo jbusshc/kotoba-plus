@@ -1,10 +1,14 @@
 #include "SearchViewModel.h"
 #include "../infrastructure/SearchService.h"
 #include "SearchResultModel.h"
-#include "../../core/include/viewer.h"
-#include "../../core/include/types.h"
 #include <QStringList>
 #include "../app/Configuration.h"
+
+#include "../../core/include/viewer.h"
+#include "../../core/include/types.h"
+#include "../../core/include/kana.h"
+
+
 
 // ── Color named → hex CSS ─────────────────────────────────────────────────────
 static QString accentToHex(const QString &name)
@@ -170,6 +174,28 @@ void SearchViewModel::fillFromContext(bool append)
 }
 
 // ── Highlight ────────────────────────────────────────────────────────────────
+static bool kanaEqualQString(const QString &a, const QString &b)
+{
+    QByteArray aUtf8 = a.toUtf8();
+    QByteArray bUtf8 = b.toUtf8();
+    return kana_equal(aUtf8.constData(), bUtf8.constData());
+}
+
+static int kanaIndexOf(const QString &text, const QString &pattern)
+{
+    if (pattern.isEmpty()) return -1;
+
+    for (int i = 0; i <= text.size() - pattern.size(); ++i)
+    {
+        QStringView slice(text.constData() + i, pattern.size());
+
+        if (kanaEqualQString(slice.toString(), pattern))
+            return i;
+    }
+
+    return -1;
+}
+
 
 QString SearchViewModel::highlightField(const QString &field) const
 {
@@ -184,7 +210,7 @@ QString SearchViewModel::highlightField(const QString &field) const
     for (const QString &v : { variants.normal, variants.romaji, variants.hiragana }) {
         if (v.isEmpty()) continue;
         const QString vLower = v.toLower();
-        int idx = fieldLower.indexOf(vLower);
+        int idx = kanaIndexOf(fieldLower, vLower);
         if (idx >= 0 && (matchIdx < 0 || idx < matchIdx)) {
             matchIdx = idx;
             matchLen = v.length();

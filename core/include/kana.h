@@ -438,6 +438,37 @@ extern "C"
 
     KOTOBA_API void vowel_prolongation_mark(const char *input, char *output, size_t out_size, uint8_t* prolongation_mark_flag);
 
+static inline uint32_t to_hiragana(uint32_t cp)
+{
+    // Katakana básico → Hiragana
+    if (cp >= 0x30A1 && cp <= 0x30F6)
+        return cp - 0x60;
+
+    return cp;
+}
+
+static inline int kana_equal(const char *a, const char *b)
+{
+    const char *pa = a;
+    const char *pb = b;
+
+    while (*pa && *pb)
+    {
+        uint32_t cpa, cpb;
+
+        pa = utf8_decode(pa, &cpa);
+        pb = utf8_decode(pb, &cpb);
+
+        cpa = to_hiragana(cpa);
+        cpb = to_hiragana(cpb);
+
+        if (cpa != cpb)
+            return 0;
+    }
+
+    // ambos deben terminar al mismo tiempo
+    return (*pa == '\0' && *pb == '\0');
+}
 
 #ifdef __cplusplus
 }
