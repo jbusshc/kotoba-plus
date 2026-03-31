@@ -97,6 +97,19 @@ static void validateConfig(Configuration &c)
 
     if (c.fontScale < 0.7 || c.fontScale > 2.0)
         c.fontScale = 1.0;
+
+    if (c.maxResults < 1)
+        c.maxResults = SEARCH_MAX_RESULTS_DEFAULT;
+    else if (c.maxResults > SEARCH_MAX_RESULTS)
+        c.maxResults = SEARCH_MAX_RESULTS_DEFAULT;
+
+    if (c.pageSize < 1)
+        c.pageSize = 20;
+    else if (c.pageSize > 100)
+        c.pageSize = 100;
+    
+    if (c.orderMode < 0 || c.orderMode > 2)
+        c.orderMode = 0;
 }
 
 // ─────────────────────────────────────────

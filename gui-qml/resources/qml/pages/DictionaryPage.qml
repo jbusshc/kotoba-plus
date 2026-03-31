@@ -95,28 +95,53 @@ Page {
                 readonly property bool hasSubline: variants.length > 0 || readings.length > 0
                 height: hasSubline ? 72 : 56
 
-                property bool hovered: false
-                property bool pressed: false
+                // Detectar plataforma (hover solo desktop)
+                readonly property bool isDesktop: Qt.platform.os === "windows"
+                                                || Qt.platform.os === "linux"
+                                                || Qt.platform.os === "osx"
 
+                property bool hovered: false
+
+                // Highlight logic
                 readonly property string aq: searchVM ? searchVM.activeQuery : ""
                 readonly property bool doHighlight: appConfig.highlightMatches && aq.length > 0
 
+                // ── Input handling ─────────────────────────────────────
+                TapHandler {
+                    id: tapHandler
+                    onTapped: {
+                        stack.push("qrc:/qml/pages/DetailsPage.qml", { docId: docId })
+                    }
+                }
+
+                HoverHandler {
+                    id: hoverHandler
+                    enabled: delegateRoot.isDesktop
+                    onHoveredChanged: delegateRoot.hovered = hovered
+                }
+
+                // ── Background feedback ────────────────────────────────
                 Rectangle {
                     anchors.fill: parent
-                    color: delegateRoot.pressed
+                    color: tapHandler.pressed
                         ? Qt.rgba(accentColor.r, accentColor.g, accentColor.b, 0.10)
                         : delegateRoot.hovered
                             ? Theme.surfaceHover
                             : "transparent"
+
                     Behavior on color { ColorAnimation { duration: 100 } }
                 }
 
+                // ── Content ────────────────────────────────────────────
                 RowLayout {
-                    anchors.left: parent.left; anchors.right: parent.right
+                    anchors.left: parent.left
+                    anchors.right: parent.right
                     anchors.verticalCenter: parent.verticalCenter
-                    anchors.leftMargin: 16; anchors.rightMargin: 16
+                    anchors.leftMargin: 16
+                    anchors.rightMargin: 16
                     spacing: 12
 
+                    // Accent bar (solo hover en desktop)
                     Rectangle {
                         width: 3
                         height: contentCol.implicitHeight
@@ -131,11 +156,11 @@ Page {
                         Layout.fillWidth: true
                         spacing: 2
 
-                        // Fila 1: headword + variants kanji
+                        // ── Fila 1: headword + variants ───────────────
                         Text {
-                            id: wordText
                             width: parent.width
                             textFormat: Text.RichText
+
                             text: {
                                 const hw = delegateRoot.doHighlight
                                     ? searchVM.highlightField(headword)
@@ -143,14 +168,19 @@ Page {
 
                                 if (variants.length === 0) return hw
 
-                                const sep = "<span style=\"color:" + Qt.rgba(hintColor.r, hintColor.g, hintColor.b, 0.45) + "\"> ・ </span>"
+                                const sep = "<span style=\"color:" +
+                                            Qt.rgba(hintColor.r, hintColor.g, hintColor.b, 0.45) +
+                                            "\"> ・ </span>"
+
                                 const vParts = variants.split("・").map(v => {
                                     return delegateRoot.doHighlight
                                         ? searchVM.highlightField(v)
                                         : v.replace(/&/g,"&amp;").replace(/</g,"&lt;")
                                 })
+
                                 return hw + sep + vParts.join(sep)
                             }
+
                             font.pixelSize: Theme.fontSizeItem
                             font.weight: Font.Medium
                             color: textColor
@@ -158,35 +188,43 @@ Page {
                             maximumLineCount: 1
                         }
 
-                        // Fila 2: readings
+                        // ── Fila 2: readings ──────────────────────────
                         Text {
-                            id: readingsText
                             visible: readings.length > 0
                             width: parent.width
                             textFormat: Text.RichText
+
                             text: {
                                 if (!readings || readings.length === 0) return ""
+
                                 const parts = readings.split("・").map(r => {
                                     return delegateRoot.doHighlight
                                         ? searchVM.highlightField(r)
                                         : r.replace(/&/g,"&amp;").replace(/</g,"&lt;")
                                 })
-                                return parts.join("<span style=\"color:" + Qt.rgba(hintColor.r, hintColor.g, hintColor.b, 0.35) + "\"> ・ </span>")
+
+                                return parts.join(
+                                    "<span style=\"color:" +
+                                    Qt.rgba(hintColor.r, hintColor.g, hintColor.b, 0.35) +
+                                    "\"> ・ </span>"
+                                )
                             }
+
                             font.pixelSize: Theme.fontSizeSmall
                             color: Qt.rgba(hintColor.r, hintColor.g, hintColor.b, 0.6)
                             elide: Text.ElideRight
                             maximumLineCount: 1
                         }
 
-                        // Fila 3: gloss
+                        // ── Fila 3: gloss ─────────────────────────────
                         Text {
-                            id: glossText
                             width: parent.width
                             textFormat: Text.RichText
+
                             text: delegateRoot.doHighlight
                                 ? searchVM.highlightField(gloss)
                                 : gloss
+
                             font.pixelSize: Theme.fontSizeSmall
                             color: Qt.rgba(hintColor.r, hintColor.g, hintColor.b, 0.8)
                             elide: Text.ElideRight
@@ -194,6 +232,7 @@ Page {
                         }
                     }
 
+                    // Flecha (solo visible en hover desktop)
                     Text {
                         text: "›"
                         font.pixelSize: Theme.fontSizeMedium
@@ -203,23 +242,15 @@ Page {
                     }
                 }
 
+                // ── Divider ────────────────────────────────────────────
                 Rectangle {
                     anchors.bottom: parent.bottom
-                    anchors.left: parent.left; anchors.right: parent.right
+                    anchors.left: parent.left
+                    anchors.right: parent.right
                     anchors.leftMargin: 16
                     height: 1
-                    color: dividerColor; opacity: 0.5
-                }
-
-                MouseArea {
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onEntered:  delegateRoot.hovered = true
-                    onExited:   delegateRoot.hovered = false
-                    onPressed:  delegateRoot.pressed = true
-                    onReleased: delegateRoot.pressed = false
-                    onClicked:  stack.push("qrc:/qml/pages/DetailsPage.qml", { docId: docId })
+                    color: dividerColor
+                    opacity: 0.5
                 }
             }
 

@@ -47,6 +47,8 @@ Page {
             enableFuzz:        appConfig.enableFuzz,
             orderMode:         appConfig.orderMode,
             showRomaji:        appConfig.showRomaji,
+            maxResults:        appConfig.maxResults,
+            pageSize:          appConfig.pageSize,
         }
     }
 
@@ -69,6 +71,8 @@ Page {
              || snapshot.enableFuzz        !== appConfig.enableFuzz
              || snapshot.orderMode         !== appConfig.orderMode
              || snapshot.showRomaji        !== appConfig.showRomaji
+             || snapshot.maxResults        !== appConfig.maxResults
+             || snapshot.pageSize          !== appConfig.pageSize
     }
 
     function markDirty() { if (ready) checkDirty() }
@@ -98,6 +102,8 @@ Page {
         appConfig.enableFuzz        = true
         appConfig.orderMode         = 0
         appConfig.showRomaji        = false
+        appConfig.maxResults        = SEARCH_MAX_RESULTS_DEFAULT
+        appConfig.pageSize          = 20
         checkDirty()
         applySettings()
     }
@@ -743,6 +749,29 @@ Page {
                             anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
                             checked: appConfig.showRomaji
                             onToggled: (v) => { appConfig.showRomaji = v; page.markDirty() }
+                        }
+                    }
+
+                    RowDivider {}
+
+                    SettingRow {
+                        label: "Max Search Results"
+                        tip:   "Maximum dictionary entries shown in search results.\n\nDefault: 20000"
+                        StepperField {
+                            anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter
+                            value: appConfig.maxResults; min: 1; max: 100000; unit: " results"
+                            onValueChanged: { appConfig.maxResults = value; page.markDirty() }
+                        }
+                    }
+
+                    RowDivider {}
+                    SettingRow {
+                        label: "Results Per Page"
+                        tip:   "Number of results shown per page in the dictionary view.\n\nDefault: 20"
+                        StepperField {
+                            anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter
+                            value: appConfig.pageSize; min: 1; max: 100; unit: " per page"
+                            onValueChanged: { appConfig.pageSize = value; page.markDirty() }
                         }
                     }
 
