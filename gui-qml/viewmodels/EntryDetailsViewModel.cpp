@@ -8,11 +8,15 @@ extern "C" {
 #include <QStringList>
 
 EntryDetailsViewModel::EntryDetailsViewModel(
-    kotoba_dict *dict,
-    Configuration *config,
     QObject *parent
-) : QObject(parent), m_dict(dict), m_config(config)
+) : QObject(parent)
 {
+}
+
+void EntryDetailsViewModel::initialize(kotoba_dict *dict, Configuration *config)
+{
+    m_dict = dict;
+    m_config = config;
 }
 
 /* -------------------------

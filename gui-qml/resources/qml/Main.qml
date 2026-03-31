@@ -214,11 +214,4 @@ ApplicationWindow {
             root.switchTab(target)
         }
     }
-    Component.onCompleted: {
-        Qt.callLater(function() {
-            if (typeof QtAndroid !== "undefined" && QtAndroid) {
-                QtAndroid.releaseSplash()
-            }
-        })
-    }
 }

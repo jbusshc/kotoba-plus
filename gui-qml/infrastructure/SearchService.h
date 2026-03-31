@@ -18,9 +18,10 @@ struct Configuration; // forward declaration
 class SearchService
 {
 public:
-    explicit SearchService(kotoba_dict *dict, Configuration* config);
+    explicit SearchService();
     ~SearchService();
 
+    void initialize(kotoba_dict *dict, Configuration* config);
     void query(const QString &q);
     void queryNonPagination(const QString &q);
     void queryNextPage();

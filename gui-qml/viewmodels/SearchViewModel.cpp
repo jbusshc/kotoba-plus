@@ -8,14 +8,20 @@
 #include "../../core/include/types.h"
 #include "../../core/include/kana.h"
 
-
-
-SearchViewModel::SearchViewModel(SearchService *service,
+void SearchViewModel::initialize(SearchService *service,
                                  SearchResultModel *model,
                                  kotoba_dict *dict,
-                                 Configuration* config,
-                                 QObject *parent)
-    : QObject(parent), m_service(service), m_model(model), m_dict(dict), m_config(config)
+                                 Configuration* config)
+{
+    m_service = service;
+    m_model = model;
+    m_dict = dict;
+    m_config = config;
+
+}
+
+SearchViewModel::SearchViewModel(QObject *parent)
+    : QObject(parent), m_service(nullptr), m_model(nullptr), m_dict(nullptr), m_config(nullptr)
 {
     m_debounceTimer.setSingleShot(true);
     connect(&m_debounceTimer, &QTimer::timeout,

@@ -10,10 +10,16 @@ extern "C" {
 
 // ── Constructor ───────────────────────────────────────────────────────────────
 
-SrsViewModel::SrsViewModel(SrsService *service, kotoba_dict *dict,
-                           EntryDetailsViewModel *detailsVM, QObject *parent)
-    : QObject(parent), m_service(service), m_dict(dict), m_detailsVM(detailsVM)
+SrsViewModel::SrsViewModel(QObject *parent)
+    : QObject(parent), m_service(nullptr), m_dict(nullptr), m_detailsVM(nullptr)
 {}
+
+void SrsViewModel::initialize(SrsService *service, kotoba_dict *dict, EntryDetailsViewModel *detailsVM)
+{
+    m_service = service;
+    m_dict = dict;
+    m_detailsVM = detailsVM;
+}
 
 // ── Properties ────────────────────────────────────────────────────────────────
 

@@ -4,9 +4,15 @@
 
 #include "../app/Configuration.h"
 
-SearchService::SearchService(kotoba_dict *dict, Configuration* config)
-    : m_dict(dict), m_config(config)
+SearchService::SearchService()
+    : m_dict(nullptr), m_config(nullptr)
 {
+}
+
+void SearchService::initialize(kotoba_dict *dict, Configuration* config)
+{
+    m_dict = dict;
+    m_config = config;
     init_search_context(&m_ctx, config->languages, m_dict, config->pageSize, config->maxResults);
     qDebug() << "SearchService initialized with languages:";
     for (int i = 0; i < KOTOBA_LANG_COUNT; ++i) {

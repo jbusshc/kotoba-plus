@@ -55,12 +55,12 @@ public:
         ReadingsRole
     };
 
-    explicit SrsLibraryViewModel(
+    explicit SrsLibraryViewModel(QObject* parent = nullptr);
+    void initialize(
         SrsService*    service,
         kotoba_dict*   dict,
         SearchService* searchService,
-        Configuration* config,
-        QObject*       parent = nullptr
+        Configuration* config
     );
 
     Q_INVOKABLE void    setSearch(const QString &text);

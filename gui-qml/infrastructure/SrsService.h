@@ -28,8 +28,10 @@ class Configuration;
 class SrsService
 {
 public:
-    explicit SrsService(uint32_t dictSize, Configuration *config);
+    explicit SrsService();
     ~SrsService();
+
+    void initialize(uint32_t dictSize, Configuration *config);
 
     bool load(const char *path);
     bool save(const char *path = nullptr);   // nullptr → usa effectivePath()

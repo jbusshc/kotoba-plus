@@ -34,11 +34,12 @@ class SearchViewModel : public QObject
                NOTIFY activeQueryChanged)
 
 public:
-    SearchViewModel(SearchService *service,
+    SearchViewModel(QObject *parent = nullptr);
+
+    void initialize(SearchService *service,
                     SearchResultModel *model,
                     kotoba_dict *dict,
-                    Configuration* config,
-                    QObject *parent = nullptr);
+                    Configuration* config);
 
     Q_INVOKABLE void search(const QString &text);
     Q_INVOKABLE void needMore();

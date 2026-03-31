@@ -3,6 +3,7 @@
 #include <QQmlContext>
 #include <QStandardPaths>
 #include <QDir>
+#include <QFile>
 #include <QDebug>
 #include <QQuickStyle>
 
@@ -20,18 +21,47 @@
 #include "AppPaths.h"
 
 #include <stdlib.h>
-#include <time.h>
 
 int main(int argc, char **argv)
 {
-    srand(static_cast<unsigned int>(time(nullptr)));
 
     // ── QGuiApplication must be created before QStandardPaths on Android ─────
     QGuiApplication app(argc, argv);
     app.setApplicationName("KotobaPlus");
-    app.setOrganizationName("KotobaPlus"); // required for correct AppDataLocation on Android
+    app.setOrganizationName("KotobaPlus");   // required for correct AppDataLocation on Android
 
     QQuickStyle::setStyle("Material");
+
+    // ── ViewModels ────────────────────────────────────────────────────────────
+    SearchResultModel     *searchModel = new SearchResultModel();
+    SearchViewModel       *searchVM   = new SearchViewModel();
+    EntryDetailsViewModel *detailsVM  = new EntryDetailsViewModel();
+    SrsViewModel          *srsVM      = new SrsViewModel();
+    SrsLibraryViewModel   *libVM      = new SrsLibraryViewModel();
+
+    // ── QML engine ────────────────────────────────────────────────────────────
+    QQmlApplicationEngine engine;
+
+    ConfigWrapper configWrapper;
+
+    engine.rootContext()->setContextProperty("searchVM",    searchVM);
+    engine.rootContext()->setContextProperty("searchModel", searchModel);
+    engine.rootContext()->setContextProperty("detailsVM",   detailsVM);
+    engine.rootContext()->setContextProperty("srsVM",       srsVM);
+    engine.rootContext()->setContextProperty("appConfig",   &configWrapper);
+    engine.rootContext()->setContextProperty("srsLibraryVM", libVM);
+
+    // QML is always loaded from the Qt resource system (qrc:/) — identical
+    // on desktop and Android. No platform-specific URL needed.
+    engine.load(QUrl(QStringLiteral("qrc:/qml/Main.qml")));
+    if (engine.rootObjects().isEmpty()) return -1;
+
+        // ── Services ──────────────────────────────────────────────────────────────
+    SearchService *searchSvc = new SearchService();
+    SrsService    *srsSvc    = new SrsService();
+    srand(static_cast<unsigned int>(time(nullptr)));
+
+
 
     // ── Resolve all platform-specific paths ───────────────────────────────────
     AppPaths paths = AppPaths::resolve();
@@ -40,16 +70,19 @@ int main(int argc, char **argv)
     qDebug() << "Data dir:"      << paths.dataDir;
     qDebug() << "SRS profile:"   << paths.srsPath;
 
+    // ── On Android: extract bundled assets to writable storage on first run ───
+    // Assets in Qt Android are inside the APK and cannot be opened with
+    // fopen(). They must be copied to a writable location first.
 #ifdef Q_OS_ANDROID
     AppPaths::extractAssetsIfNeeded(paths.dataDir);
 #endif
 
     // ── Configuration ─────────────────────────────────────────────────────────
-    ConfigWrapper configWrapper;
     loadConfiguration(configWrapper.m_config, paths.configPath);
     configWrapper.m_configPath = paths.configPath;
 
-    // Override data paths from resolved AppPaths
+    // Override data paths from resolved AppPaths so the config struct always
+    // points to writable, correct locations regardless of platform.
     configWrapper.m_config.dictPath      = paths.dictPath;
     configWrapper.m_config.dictIndexPath = paths.dictIndexPath;
     configWrapper.m_config.srsPath       = paths.srsPath;
@@ -73,29 +106,16 @@ int main(int argc, char **argv)
     }
     kotoba_dict *dict = repo->dict();
 
-    // ── Services ──────────────────────────────────────────────────────────────
-    SearchService *searchSvc = new SearchService(dict, &configWrapper.m_config);
-    SrsService    *srsSvc    = new SrsService(dict->entry_count, &configWrapper.m_config);
+    // ── Initialize svc 
+    searchSvc->initialize(dict, &configWrapper.m_config);
+    srsSvc->initialize(static_cast<uint32_t>(dict->entry_count), &configWrapper.m_config);
 
-    // ── ViewModels ────────────────────────────────────────────────────────────
-    SearchResultModel     *searchModel = new SearchResultModel();
-    SearchViewModel       *searchVM    = new SearchViewModel(searchSvc, searchModel, dict, &configWrapper.m_config);
-    EntryDetailsViewModel *detailsVM   = new EntryDetailsViewModel(dict, &configWrapper.m_config);
-    SrsViewModel          *srsVM       = new SrsViewModel(srsSvc, dict, detailsVM);
-    SrsLibraryViewModel   *libVM       = new SrsLibraryViewModel(srsSvc, dict, searchSvc, &configWrapper.m_config);
-
-    // ── QML engine ────────────────────────────────────────────────────────────
-    QQmlApplicationEngine engine;
-
-    engine.rootContext()->setContextProperty("searchVM",    searchVM);
-    engine.rootContext()->setContextProperty("searchModel", searchModel);
-    engine.rootContext()->setContextProperty("detailsVM",   detailsVM);
-    engine.rootContext()->setContextProperty("srsVM",       srsVM);
-    engine.rootContext()->setContextProperty("appConfig",   &configWrapper);
-    engine.rootContext()->setContextProperty("srsLibraryVM", libVM);
-
-    engine.load(QUrl(QStringLiteral("qrc:/qml/Main.qml")));
-    if (engine.rootObjects().isEmpty()) return -1;
+    // ─ Inject services y dict en los VMs ─────────────────────────────────────────
+    searchVM->initialize(searchSvc, searchModel, dict, &configWrapper.m_config);
+    detailsVM->initialize(dict, &configWrapper.m_config);
+    srsVM->initialize(srsSvc, dict, detailsVM);
+    libVM->initialize(srsSvc, dict, searchSvc, &configWrapper.m_config);
+    
 
     // ── Load SRS profile ──────────────────────────────────────────────────────
     configWrapper.setServices(searchSvc, srsSvc);
@@ -110,7 +130,6 @@ int main(int argc, char **argv)
 
     int result = app.exec();
 
-    // ── Clean up ─────────────────────────────────────────────────────────────
     delete searchVM;
     delete searchModel;
     delete detailsVM;

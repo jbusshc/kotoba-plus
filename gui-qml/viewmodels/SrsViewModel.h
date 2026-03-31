@@ -35,9 +35,9 @@ class SrsViewModel : public QObject
     Q_PROPERTY(QVariantMap currentEntryData READ currentEntryData NOTIFY currentChanged)
 
 public:
-    explicit SrsViewModel(SrsService *service, kotoba_dict *dict,
-                          EntryDetailsViewModel *detailsVM,
-                          QObject *parent = nullptr);
+    explicit SrsViewModel(QObject *parent = nullptr);
+
+    void initialize(SrsService *service, kotoba_dict *dict, EntryDetailsViewModel *detailsVM);
 
     Q_INVOKABLE void startSession();
     Q_INVOKABLE void revealAnswer();

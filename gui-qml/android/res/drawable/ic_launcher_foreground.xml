@@ -1,53 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
-    android:viewportWidth="200"
-    android:viewportHeight="200">
+    android:viewportWidth="108"
+    android:viewportHeight="108">
 
-    <!-- Fondo radial (se usa como parte de foreground, aunque normalmente va en background) -->
-    <group>
-        <path
-            android:fillColor="#0F2A4A"
-            android:pathData="M0,0 H200 V200 H0 Z"/>
-        <!-- Android Vector no soporta gradiente radial directamente en XML vector, solo lineal; se recomienda usar drawable separado como ic_launcher_background.xml -->
-    </group>
-
-    <!-- Grupo principal centrado (K + +) -->
     <group
-        android:translateX="52"
-        android:translateY="58"
-        android:scaleX="0.68"
-        android:scaleY="0.68">
+        android:pivotX="54"
+        android:pivotY="54"
+        android:scaleX="0.65"
+        android:scaleY="0.65">
 
-        <!-- Subgrupo K -->
         <group
-            android:translateX="18"
-            android:translateY="22"
-            android:scaleX="4.25"
-            android:scaleY="4.25">
+            android:translateX="52"
+            android:translateY="58">
+            <group
+                android:scaleX="0.68"
+                android:scaleY="0.68">
+                <group
+                    android:translateX="-100"
+                    android:translateY="-100">
 
-            <path
-                android:fillColor="#E2E8F0"
-                android:pathData="M9.925 9.032c0-1.271.93-2.294 2.325-2.294c1.333 0 2.325.868 2.325 2.294v6.697l7.627-8.124c.342-.372.93-.868 1.799-.868c1.178 0 2.295.899 2.295 2.232c0 .806-.496 1.457-1.52 2.48l-5.861 5.767l7.162 7.473c.744.744 1.303 1.426 1.303 2.357c0 1.457-1.146 2.139-2.418 2.139c-.898 0-1.488-.526-2.357-1.457l-8.031-8.682v7.906c0 1.21-.93 2.232-2.325 2.232c-1.333 0-2.325-.867-2.325-2.232V9.032z"/>
+                    <group
+                        android:translateX="18"
+                        android:translateY="22">
+                        <group
+                            android:scaleX="4.25"
+                            android:scaleY="4.25">
+                            <path
+                                android:fillColor="#FFE2E8F0"
+                                android:pathData="M9.925 9.032c0-1.271.93-2.294 2.325-2.294c1.333 0 2.325.868 2.325 2.294v6.697l7.627-8.124c.342-.372.93-.868 1.799-.868c1.178 0 2.295.899 2.295 2.232c0 .806-.496 1.457-1.52 2.48l-5.861 5.767l7.162 7.473c.744.744 1.303 1.426 1.303 2.357c0 1.457-1.146 2.139-2.418 2.139c-.898 0-1.488-.526-2.357-1.457l-8.031-8.682v7.906c0 1.21-.93 2.232-2.325 2.232c-1.333 0-2.325-.867-2.325-2.232V9.032z" />
+                        </group>
+                    </group>
+
+                    <group android:translateX="-10">
+                        <path
+                            android:pathData="M138 99 H170"
+                            android:strokeColor="#FF38BDF8"
+                            android:strokeLineCap="round"
+                            android:strokeWidth="14" />
+                        <path
+                            android:pathData="M154 83 V115"
+                            android:strokeColor="#FF38BDF8"
+                            android:strokeLineCap="round"
+                            android:strokeWidth="14" />
+                    </group>
+                </group>
+            </group>
         </group>
-
-        <!-- Subgrupo + -->
-        <group
-            android:translateX="-10"
-            android:translateY="0">
-
-            <path
-                android:strokeColor="#38BDF8"
-                android:strokeWidth="14"
-                android:strokeLineCap="round"
-                android:pathData="M138 99 H170"/>
-
-            <path
-                android:strokeColor="#38BDF8"
-                android:strokeWidth="14"
-                android:strokeLineCap="round"
-                android:pathData="M154 83 V115"/>
-        </group>
-
     </group>
 </vector>

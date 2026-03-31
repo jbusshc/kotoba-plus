@@ -19,9 +19,15 @@ static inline std::string log_path_for(const std::string &base)
 
 /* ---- ctor / dtor ---- */
 
-SrsService::SrsService(uint32_t dictSize, Configuration *config)
-    : m_dictSize(dictSize), m_config(config)
+SrsService::SrsService()
+    : m_deck(nullptr), m_config(nullptr)
 {
+}
+
+void SrsService::initialize(uint32_t dictSize, Configuration *config)
+{
+    m_config = config;
+    m_dictSize = dictSize;
     fsrs_params params = fsrs_default_params();
     m_deck = fsrs_deck_create(dictSize, &params);
 

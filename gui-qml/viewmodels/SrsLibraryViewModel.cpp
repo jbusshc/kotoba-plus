@@ -29,21 +29,32 @@ static QString accentToHex(const QString &name)
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-SrsLibraryViewModel::SrsLibraryViewModel(SrsService* service, kotoba_dict* dict,
-                                         SearchService* searchService,
-                                         Configuration* config,
-                                         QObject* parent)
-    : QAbstractListModel(parent)
-    , m_service(service), m_dict(dict)
-    , m_searchService(searchService), m_config(config)
+void SrsLibraryViewModel::initialize(
+        SrsService*    service,
+        kotoba_dict*   dict,
+        SearchService* searchService,
+        Configuration* config
+    )
 {
-    m_debounceTimer.setSingleShot(true);
-    connect(&m_debounceTimer, &QTimer::timeout,
-            this, &SrsLibraryViewModel::onDebounceTimeout);
+    m_service = service;
+    m_dict = dict;
+    m_searchService = searchService;
+    m_config = config;
+
 
     loadAllCards();
     rebuildFiltered();
     resetToInitialPage();
+}
+
+SrsLibraryViewModel::SrsLibraryViewModel(QObject* parent)
+    : QAbstractListModel(parent)
+    , m_service(nullptr), m_dict(nullptr)
+    , m_searchService(nullptr), m_config(nullptr)
+{
+    m_debounceTimer.setSingleShot(true);
+    connect(&m_debounceTimer, &QTimer::timeout,
+            this, &SrsLibraryViewModel::onDebounceTimeout);
 }
 
 // ── Debounce ─────────────────────────────────────────────────────────────────
