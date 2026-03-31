@@ -3,7 +3,6 @@
 #include <QQmlContext>
 #include <QStandardPaths>
 #include <QDir>
-#include <QFile>
 #include <QDebug>
 #include <QQuickStyle>
 
@@ -21,9 +20,7 @@
 #include "AppPaths.h"
 
 #include <stdlib.h>
-
-#include "AndroidBridge.h"
-
+#include <time.h>
 
 int main(int argc, char **argv)
 {
@@ -32,7 +29,7 @@ int main(int argc, char **argv)
     // ── QGuiApplication must be created before QStandardPaths on Android ─────
     QGuiApplication app(argc, argv);
     app.setApplicationName("KotobaPlus");
-    app.setOrganizationName("KotobaPlus");   // required for correct AppDataLocation on Android
+    app.setOrganizationName("KotobaPlus"); // required for correct AppDataLocation on Android
 
     QQuickStyle::setStyle("Material");
 
@@ -43,9 +40,6 @@ int main(int argc, char **argv)
     qDebug() << "Data dir:"      << paths.dataDir;
     qDebug() << "SRS profile:"   << paths.srsPath;
 
-    // ── On Android: extract bundled assets to writable storage on first run ───
-    // Assets in Qt Android are inside the APK and cannot be opened with
-    // fopen(). They must be copied to a writable location first.
 #ifdef Q_OS_ANDROID
     AppPaths::extractAssetsIfNeeded(paths.dataDir);
 #endif
@@ -55,8 +49,7 @@ int main(int argc, char **argv)
     loadConfiguration(configWrapper.m_config, paths.configPath);
     configWrapper.m_configPath = paths.configPath;
 
-    // Override data paths from resolved AppPaths so the config struct always
-    // points to writable, correct locations regardless of platform.
+    // Override data paths from resolved AppPaths
     configWrapper.m_config.dictPath      = paths.dictPath;
     configWrapper.m_config.dictIndexPath = paths.dictIndexPath;
     configWrapper.m_config.srsPath       = paths.srsPath;
@@ -86,10 +79,11 @@ int main(int argc, char **argv)
 
     // ── ViewModels ────────────────────────────────────────────────────────────
     SearchResultModel     *searchModel = new SearchResultModel();
-    SearchViewModel       *searchVM   = new SearchViewModel(searchSvc, searchModel, dict, &configWrapper.m_config);
-    EntryDetailsViewModel *detailsVM  = new EntryDetailsViewModel(dict, &configWrapper.m_config);
-    SrsViewModel          *srsVM      = new SrsViewModel(srsSvc, dict, detailsVM);
-    SrsLibraryViewModel   *libVM      = new SrsLibraryViewModel(srsSvc, dict, searchSvc, &configWrapper.m_config);
+    SearchViewModel       *searchVM    = new SearchViewModel(searchSvc, searchModel, dict, &configWrapper.m_config);
+    EntryDetailsViewModel *detailsVM   = new EntryDetailsViewModel(dict, &configWrapper.m_config);
+    SrsViewModel          *srsVM       = new SrsViewModel(srsSvc, dict, detailsVM);
+    SrsLibraryViewModel   *libVM       = new SrsLibraryViewModel(srsSvc, dict, searchSvc, &configWrapper.m_config);
+
     // ── QML engine ────────────────────────────────────────────────────────────
     QQmlApplicationEngine engine;
 
@@ -100,21 +94,7 @@ int main(int argc, char **argv)
     engine.rootContext()->setContextProperty("appConfig",   &configWrapper);
     engine.rootContext()->setContextProperty("srsLibraryVM", libVM);
 
-
-    AndroidBridge bridge;
-    engine.rootContext()->setContextProperty("QtAndroid", &bridge);
-    // QML is always loaded from the Qt resource system (qrc:/) — identical
-    // on desktop and Android. No platform-specific URL needed.
     engine.load(QUrl(QStringLiteral("qrc:/qml/Main.qml")));
-    #ifdef Q_OS_ANDROID
-    #include <QJniObject>
-        #include <QNativeInterface>
-
-        QJniObject activity = QNativeInterface::QAndroidApplication::context();
-        if (activity.isValid()) {
-            activity.callMethod<void>("releaseSplash");
-        }
-    #endif
     if (engine.rootObjects().isEmpty()) return -1;
 
     // ── Load SRS profile ──────────────────────────────────────────────────────
@@ -130,6 +110,7 @@ int main(int argc, char **argv)
 
     int result = app.exec();
 
+    // ── Clean up ─────────────────────────────────────────────────────────────
     delete searchVM;
     delete searchModel;
     delete detailsVM;
