@@ -3,11 +3,7 @@ import QtQuick
 import QtQuick.Controls.Material
 
 QtObject {
-    // ── Safe config ───────────────────────────────────────────────────────────
-    readonly property var cfg: appConfig ? appConfig : null
-
-    // ── Theme mode ────────────────────────────────────────────────────────────
-    property bool darkTheme: cfg && cfg.theme === "dark"
+    property bool darkTheme: appConfig?.theme === "dark" ?? false
 
     // ── Base palette ──────────────────────────────────────────────────────────
     property color background:    darkTheme ? "#121212" : "#f0f2f5"
@@ -16,10 +12,8 @@ QtObject {
     property color dividerColor:  darkTheme ? "#424242" : "#d0d4da"
     property color cardBackground:darkTheme ? "#222222" : "#ffffff"
 
-    // ── Accent ────────────────────────────────────────────────────────────────
     property color accentColor: {
-        var accent = (cfg && cfg.accentColor) ? cfg.accentColor : "blue"
-        switch (accent.toLowerCase()) {
+        switch ((appConfig?.accentColor ?? "blue").toLowerCase()) {
         case "red":        return Material.color(Material.Red)
         case "pink":       return Material.color(Material.Pink)
         case "purple":     return Material.color(Material.Purple)
@@ -42,12 +36,14 @@ QtObject {
         }
     }
 
-    // ── Status colors ─────────────────────────────────────────────────────────
     property color errorColor:   Material.color(Material.Red)
     property color successColor: Material.color(Material.Green)
     property color warningColor: Material.color(Material.Orange)
+    property color againColor:   Material.color(Material.Red)
+    property color hardColor:    Material.color(Material.BlueGrey)
+    property color goodColor:    Material.color(Material.Green)
+    property color easyColor:    Material.color(Material.Blue)
 
-    // ── Surface tokens ────────────────────────────────────────────────────────
     property color surfaceHover:    darkTheme ? Qt.rgba(1,1,1,0.07) : Qt.rgba(0,0,0,0.05)
     property color surfacePress:    darkTheme ? Qt.rgba(1,1,1,0.12) : Qt.rgba(0,0,0,0.08)
     property color surfaceSubtle:   darkTheme ? Qt.rgba(1,1,1,0.06) : Qt.rgba(0,0,0,0.05)
@@ -56,13 +52,30 @@ QtObject {
     property color surfaceClear:    darkTheme ? Qt.rgba(1,1,1,0.10) : Qt.rgba(0,0,0,0.08)
     property color surfaceInput:    darkTheme ? Qt.rgba(1,1,1,0.05) : Qt.rgba(0,0,0,0.04)
 
-    // ── Typography ────────────────────────────────────────────────────────────
-    property real fontScale: cfg ? cfg.fontScale : 1.0
-
-    property string fontFamily: {
-        if (!cfg) return ""
-        return cfg.fontFamily === "default" ? "" : cfg.fontFamily
+    function srsStateColor(state, fallback) {
+        switch (state ?? "") {
+            case "New":        return "#4A9EFF"
+            case "Learning":   return "#FFB83F"
+            case "Relearning": return "#FF7043"
+            case "Review":     return "#4CAF7D"
+            case "Suspended":  return "#9E9E9E"
+            default:           return fallback !== undefined ? fallback : hintColor
+        }
     }
+
+    function srsStateIcon(state) {
+        switch (state ?? "") {
+            case "New":        return "✦"
+            case "Learning":   return "◎"
+            case "Relearning": return "↺"
+            case "Review":     return "✓"
+            case "Suspended":  return "⏸"
+            default:           return ""
+        }
+    }
+
+    property real   fontScale:  appConfig?.fontScale ?? 1.0
+    property string fontFamily: (appConfig?.fontFamily ?? "default") === "default" ? "" : appConfig?.fontFamily ?? ""
 
     property real fontSizeTiny:    Math.round(10 * fontScale)
     property real fontSizeXSmall:  Math.round(11 * fontScale)
@@ -79,6 +92,6 @@ QtObject {
     property real fontSizeDisplay: Math.round(36 * fontScale)
     property real fontSizeCard:    Math.round(42 * fontScale)
     property real fontSizeGlyph:   Math.round(48 * fontScale)
-    // ── Layout ────────────────────────────────────────────────────────────────
+
     readonly property int minTapTarget: 48
 }
