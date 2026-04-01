@@ -6,6 +6,8 @@
 #include <QFile>
 #include <QDebug>
 #include <QQuickStyle>
+#include <QtConcurrent/QtConcurrent>
+#include <QFuture>
 
 #include "../infrastructure/DictionaryRepository.h"
 #include "../infrastructure/SearchService.h"
@@ -19,117 +21,127 @@
 
 #include "Configuration.h"
 #include "AppPaths.h"
+#include "AppController.h"
 
 #include <stdlib.h>
 
 int main(int argc, char **argv)
 {
-
-    // ── QGuiApplication must be created before QStandardPaths on Android ─────
     QGuiApplication app(argc, argv);
     app.setApplicationName("KotobaPlus");
-    app.setOrganizationName("KotobaPlus");   // required for correct AppDataLocation on Android
+    app.setOrganizationName("KotobaPlus");
 
     QQuickStyle::setStyle("Material");
 
     // ── ViewModels ────────────────────────────────────────────────────────────
     SearchResultModel     *searchModel = new SearchResultModel();
-    SearchViewModel       *searchVM   = new SearchViewModel();
-    EntryDetailsViewModel *detailsVM  = new EntryDetailsViewModel();
-    SrsViewModel          *srsVM      = new SrsViewModel();
-    SrsLibraryViewModel   *libVM      = new SrsLibraryViewModel();
+    SearchViewModel       *searchVM    = new SearchViewModel();
+    EntryDetailsViewModel *detailsVM   = new EntryDetailsViewModel();
+    SrsViewModel          *srsVM       = new SrsViewModel();
+    SrsLibraryViewModel   *libVM       = new SrsLibraryViewModel();
+
+    // ── AppController ─────────────────────────────────────────────────────────
+    AppController *controller = new AppController();
 
     // ── QML engine ────────────────────────────────────────────────────────────
     QQmlApplicationEngine engine;
-
     ConfigWrapper configWrapper;
 
-    engine.rootContext()->setContextProperty("searchVM",    searchVM);
-    engine.rootContext()->setContextProperty("searchModel", searchModel);
-    engine.rootContext()->setContextProperty("detailsVM",   detailsVM);
-    engine.rootContext()->setContextProperty("srsVM",       srsVM);
-    engine.rootContext()->setContextProperty("appConfig",   &configWrapper);
-    engine.rootContext()->setContextProperty("srsLibraryVM", libVM);
+    engine.rootContext()->setContextProperty("searchVM",      searchVM);
+    engine.rootContext()->setContextProperty("searchModel",   searchModel);
+    engine.rootContext()->setContextProperty("detailsVM",     detailsVM);
+    engine.rootContext()->setContextProperty("srsVM",         srsVM);
+    engine.rootContext()->setContextProperty("appConfig",     &configWrapper);
+    engine.rootContext()->setContextProperty("srsLibraryVM",  libVM);
+    engine.rootContext()->setContextProperty("appController", controller);
 
-    // QML is always loaded from the Qt resource system (qrc:/) — identical
-    // on desktop and Android. No platform-specific URL needed.
     engine.load(QUrl(QStringLiteral("qrc:/qml/Main.qml")));
     if (engine.rootObjects().isEmpty()) return -1;
 
-        // ── Services ──────────────────────────────────────────────────────────────
+    // ── Servicios pesados (Search/SRS) ────────────────────────────────────────
     SearchService *searchSvc = new SearchService();
     SrsService    *srsSvc    = new SrsService();
     srand(static_cast<unsigned int>(time(nullptr)));
 
+    std::string srsProfilePath;
 
+    // ── Hilo concurrente para carga pesada ─────────────────────────────────────
+    QFuture<void> future = QtConcurrent::run([=, &configWrapper, &srsProfilePath]() {
 
-    // ── Resolve all platform-specific paths ───────────────────────────────────
-    AppPaths paths = AppPaths::resolve();
+        // ── 1) Paths y configuración ─────────────────────────────────────────
+        AppPaths paths = AppPaths::resolve();
 
-    qDebug() << "Config path:"   << paths.configPath;
-    qDebug() << "Data dir:"      << paths.dataDir;
-    qDebug() << "SRS profile:"   << paths.srsPath;
-
-    // ── On Android: extract bundled assets to writable storage on first run ───
-    // Assets in Qt Android are inside the APK and cannot be opened with
-    // fopen(). They must be copied to a writable location first.
 #ifdef Q_OS_ANDROID
-    AppPaths::extractAssetsIfNeeded(paths.dataDir);
+        AppPaths::extractAssetsIfNeeded(paths.dataDir);
 #endif
 
-    // ── Configuration ─────────────────────────────────────────────────────────
-    loadConfiguration(configWrapper.m_config, paths.configPath);
-    configWrapper.m_configPath = paths.configPath;
+        loadConfiguration(configWrapper.m_config, paths.configPath);
+        configWrapper.m_configPath = paths.configPath;
 
-    // Override data paths from resolved AppPaths so the config struct always
-    // points to writable, correct locations regardless of platform.
-    configWrapper.m_config.dictPath      = paths.dictPath;
-    configWrapper.m_config.dictIndexPath = paths.dictIndexPath;
-    configWrapper.m_config.srsPath       = paths.srsPath;
-    configWrapper.m_config.glossEnPath   = paths.glossPath("en");
-    configWrapper.m_config.glossEsPath   = paths.glossPath("es");
-    configWrapper.m_config.glossDePath   = paths.glossPath("de");
-    configWrapper.m_config.glossFrPath   = paths.glossPath("fr");
-    configWrapper.m_config.glossHuPath   = paths.glossPath("hu");
-    configWrapper.m_config.glossNlPath   = paths.glossPath("nl");
-    configWrapper.m_config.glossRuPath   = paths.glossPath("ru");
-    configWrapper.m_config.glossSlvPath  = paths.glossPath("slv");
-    configWrapper.m_config.glossSvPath   = paths.glossPath("sv");
-    configWrapper.m_config.jpPath        = paths.glossPath("jp");
+        configWrapper.m_config.dictPath      = paths.dictPath;
+        configWrapper.m_config.dictIndexPath = paths.dictIndexPath;
+        configWrapper.m_config.srsPath       = paths.srsPath;
+        configWrapper.m_config.glossEnPath   = paths.glossPath("en");
+        configWrapper.m_config.glossEsPath   = paths.glossPath("es");
+        configWrapper.m_config.glossDePath   = paths.glossPath("de");
+        configWrapper.m_config.glossFrPath   = paths.glossPath("fr");
+        configWrapper.m_config.glossHuPath   = paths.glossPath("hu");
+        configWrapper.m_config.glossNlPath   = paths.glossPath("nl");
+        configWrapper.m_config.glossRuPath   = paths.glossPath("ru");
+        configWrapper.m_config.glossSlvPath  = paths.glossPath("slv");
+        configWrapper.m_config.glossSvPath   = paths.glossPath("sv");
+        configWrapper.m_config.jpPath        = paths.glossPath("jp");
 
-    // ── Dictionary ────────────────────────────────────────────────────────────
-    DictionaryRepository *repo = new DictionaryRepository();
-    if (!repo->open(configWrapper.m_config.dictPath,
-                    configWrapper.m_config.dictIndexPath)) {
-        qWarning("Failed to open dictionary. Ensure data files are present.");
-        return -1;
-    }
-    kotoba_dict *dict = repo->dict();
+        srsProfilePath = configWrapper.m_config.srsPath.toStdString();
 
-    // ── Initialize svc 
-    searchSvc->initialize(dict, &configWrapper.m_config);
-    srsSvc->initialize(static_cast<uint32_t>(dict->entry_count), &configWrapper.m_config);
+        // ── 2) Abrir diccionario ─────────────────────────────────────────────
+        QMetaObject::invokeMethod(controller, [=]() {
+            controller->setStatus("Opening dictionary…");
+        }, Qt::QueuedConnection);
 
-    // ─ Inject services y dict en los VMs ─────────────────────────────────────────
-    searchVM->initialize(searchSvc, searchModel, dict, &configWrapper.m_config);
-    detailsVM->initialize(dict, &configWrapper.m_config);
-    srsVM->initialize(srsSvc, dict, detailsVM);
-    libVM->initialize(srsSvc, dict, searchSvc, &configWrapper.m_config);
-    
+        DictionaryRepository *repo = new DictionaryRepository();
+        if (!repo->open(configWrapper.m_config.dictPath,
+                        configWrapper.m_config.dictIndexPath)) {
+            qWarning("Failed to open dictionary.");
+            return;
+        }
+        kotoba_dict *dict = repo->dict();
 
-    // ── Load SRS profile ──────────────────────────────────────────────────────
-    configWrapper.setServices(searchSvc, srsSvc);
-    std::string srsProfilePath = configWrapper.m_config.srsPath.toStdString();
-    srsSvc->load(srsProfilePath.c_str());
+        // ── 3) Inicializar servicios ───────────────────────────────────────
+        QMetaObject::invokeMethod(controller, [=]() {
+            controller->setStatus("Initializing search…");
+        }, Qt::QueuedConnection);
+        searchSvc->initialize(dict, &configWrapper.m_config);
 
-    // ── Persist on exit ───────────────────────────────────────────────────────
-    QObject::connect(&app, &QCoreApplication::aboutToQuit, [&]() {
-        srsSvc->save(srsProfilePath.c_str());
-        saveConfiguration(configWrapper.m_config, paths.configPath);
+        QMetaObject::invokeMethod(controller, [=]() {
+            controller->setStatus("Loading SRS profile…");
+        }, Qt::QueuedConnection);
+        srsSvc->initialize(static_cast<uint32_t>(dict->entry_count),
+                           &configWrapper.m_config);
+        srsSvc->load(srsProfilePath.c_str());
+
+        // ── 4) Inicializar ViewModels en hilo principal ────────────────
+        QMetaObject::invokeMethod(qApp, [=, &configWrapper]() {
+            searchVM->initialize(searchSvc, searchModel, dict, &configWrapper.m_config);
+            detailsVM->initialize(dict, &configWrapper.m_config);
+            srsVM->initialize(srsSvc, dict, detailsVM);
+            libVM->initialize(srsSvc, dict, searchSvc, &configWrapper.m_config);
+
+            configWrapper.setServices(searchSvc, srsSvc);
+            controller->notifyReady();  // dispara transición QML
+        }, Qt::QueuedConnection);
     });
 
+    // ── Persistir cambios al cerrar ─────────────────────────────────────────
+    QObject::connect(&app, &QCoreApplication::aboutToQuit, [&]() {
+        srsSvc->save(srsProfilePath.c_str());
+        saveConfiguration(configWrapper.m_config, configWrapper.m_configPath);
+    });
+
+    // ── Ejecutar app ───────────────────────────────────────────────────────
     int result = app.exec();
 
+    // ── Limpiar memoria ───────────────────────────────────────────────────
     delete searchVM;
     delete searchModel;
     delete detailsVM;
@@ -137,7 +149,7 @@ int main(int argc, char **argv)
     delete libVM;
     delete searchSvc;
     delete srsSvc;
-    delete repo;
+    delete controller;
 
     return result;
 }

@@ -3,7 +3,11 @@ import QtQuick
 import QtQuick.Controls.Material
 
 QtObject {
-    property bool darkTheme: appConfig.theme === "dark"
+    // ── Safe config ───────────────────────────────────────────────────────────
+    readonly property var cfg: appConfig ? appConfig : null
+
+    // ── Theme mode ────────────────────────────────────────────────────────────
+    property bool darkTheme: cfg && cfg.theme === "dark"
 
     // ── Base palette ──────────────────────────────────────────────────────────
     property color background:    darkTheme ? "#121212" : "#f0f2f5"
@@ -12,8 +16,10 @@ QtObject {
     property color dividerColor:  darkTheme ? "#424242" : "#d0d4da"
     property color cardBackground:darkTheme ? "#222222" : "#ffffff"
 
+    // ── Accent ────────────────────────────────────────────────────────────────
     property color accentColor: {
-        switch (appConfig.accentColor.toLowerCase()) {
+        var accent = (cfg && cfg.accentColor) ? cfg.accentColor : "blue"
+        switch (accent.toLowerCase()) {
         case "red":        return Material.color(Material.Red)
         case "pink":       return Material.color(Material.Pink)
         case "purple":     return Material.color(Material.Purple)
@@ -36,17 +42,12 @@ QtObject {
         }
     }
 
+    // ── Status colors ─────────────────────────────────────────────────────────
     property color errorColor:   Material.color(Material.Red)
     property color successColor: Material.color(Material.Green)
     property color warningColor: Material.color(Material.Orange)
-    property color againColor:   Material.color(Material.Red)
-    property color hardColor:    Material.color(Material.BlueGrey)
-    property color goodColor:    Material.color(Material.Green)
-    property color easyColor:    Material.color(Material.Blue)
 
-    // ── Surface tokens — replace all Qt.rgba(1,1,1,...) hardcodes ────────────
-    // Use these instead of hardcoded white/black translucent values so that
-    // light and dark modes both render correctly.
+    // ── Surface tokens ────────────────────────────────────────────────────────
     property color surfaceHover:    darkTheme ? Qt.rgba(1,1,1,0.07) : Qt.rgba(0,0,0,0.05)
     property color surfacePress:    darkTheme ? Qt.rgba(1,1,1,0.12) : Qt.rgba(0,0,0,0.08)
     property color surfaceSubtle:   darkTheme ? Qt.rgba(1,1,1,0.06) : Qt.rgba(0,0,0,0.05)
@@ -55,32 +56,13 @@ QtObject {
     property color surfaceClear:    darkTheme ? Qt.rgba(1,1,1,0.10) : Qt.rgba(0,0,0,0.08)
     property color surfaceInput:    darkTheme ? Qt.rgba(1,1,1,0.05) : Qt.rgba(0,0,0,0.04)
 
-    // ── SRS state colours (shared — avoids duplication across pages) ─────────
-    function srsStateColor(state, fallback) {
-        switch (state) {
-            case "New":        return "#4A9EFF"
-            case "Learning":   return "#FFB83F"
-            case "Relearning": return "#FF7043"
-            case "Review":     return "#4CAF7D"
-            case "Suspended":  return "#9E9E9E"
-            default:           return fallback !== undefined ? fallback : hintColor
-        }
-    }
+    // ── Typography ────────────────────────────────────────────────────────────
+    property real fontScale: cfg ? cfg.fontScale : 1.0
 
-    function srsStateIcon(state) {
-        switch (state) {
-            case "New":        return "✦"
-            case "Learning":   return "◎"
-            case "Relearning": return "↺"
-            case "Review":     return "✓"
-            case "Suspended":  return "⏸"
-            default:           return ""
-        }
+    property string fontFamily: {
+        if (!cfg) return ""
+        return cfg.fontFamily === "default" ? "" : cfg.fontFamily
     }
-
-    // ── Font scale ────────────────────────────────────────────────────────────
-    property real   fontScale:  appConfig.fontScale
-    property string fontFamily: appConfig.fontFamily === "default" ? "" : appConfig.fontFamily
 
     property real fontSizeTiny:    Math.round(10 * fontScale)
     property real fontSizeXSmall:  Math.round(11 * fontScale)
@@ -97,8 +79,6 @@ QtObject {
     property real fontSizeDisplay: Math.round(36 * fontScale)
     property real fontSizeCard:    Math.round(42 * fontScale)
     property real fontSizeGlyph:   Math.round(48 * fontScale)
-
-    // ── Layout helpers ────────────────────────────────────────────────────────
-    // Minimum touch/tap target size per Material/Android guidelines (48dp)
+    // ── Layout ────────────────────────────────────────────────────────────────
     readonly property int minTapTarget: 48
 }

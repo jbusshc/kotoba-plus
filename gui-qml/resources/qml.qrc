@@ -16,5 +16,7 @@
         <file>qml/components/StatCard.qml</file>
         <file>qml/pages/SrsCardDetailPage.qml</file>
         <file>qml/theme/qmldir</file>
+        <file>qml/images/icon.svg</file>
+        <file>qml/pages/SplashPage.qml</file>
     </qresource>
 </RCC>

@@ -6,6 +6,7 @@ find_package(Qt6 REQUIRED COMPONENTS
     Quick
     Qml
     QuickControls2
+    Svg
 )
 
 qt_policy(SET QTP0001 NEW)
@@ -39,6 +40,7 @@ target_link_libraries(kotoba-qml
         Qt6::Quick
         Qt6::Qml
         Qt6::QuickControls2
+        Qt6::Svg
         core
 )
 
