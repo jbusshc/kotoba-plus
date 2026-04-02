@@ -15,9 +15,10 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
 
+            <!-- ✔ FIX: sin guiones -->
             <meta-data
                 android:name="android.app.lib_name"
-                android:value="kotoba-qml"/>
+                android:value="kotoba_qml"/>
         </activity>
 
     </application>

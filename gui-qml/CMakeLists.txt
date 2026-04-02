@@ -29,13 +29,13 @@ qt_add_resources(GUIQML_RES
     resources/qml.qrc
 )
 
-# ── Ejecutable
-qt_add_executable(kotoba-qml
+# ── Ejecutable (✔ FIX)
+qt_add_executable(kotoba_qml
     ${GUIQML_SOURCES}
     ${GUIQML_RES}
 )
 
-target_link_libraries(kotoba-qml
+target_link_libraries(kotoba_qml
     PRIVATE
         Qt6::Quick
         Qt6::Qml
@@ -49,22 +49,21 @@ set_source_files_properties(
     resources/qml/theme/Theme.qml
     PROPERTIES QT_QML_SINGLETON_TYPE TRUE
 )
+
 set(QT_QUICK_CONTROLS_STYLE "Material")
 
-# ── DESKTOP: copiar assets al lado del ejecutable
+# ── DESKTOP: copiar assets
 if(NOT ANDROID)
-    add_custom_command(TARGET kotoba-qml POST_BUILD
+    add_custom_command(TARGET kotoba_qml POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory
             ${KOTOBAPOS_ASSETS_DIR}
-            $<TARGET_FILE_DIR:kotoba-qml>
+            $<TARGET_FILE_DIR:kotoba_qml>
     )
-    # Icono opcional
-    target_sources(kotoba-qml PRIVATE app/app.rc)
 endif()
 
-# ── ANDROID: empaquetar assets dentro del APK
+# ── ANDROID
 if(ANDROID)
-    set_target_properties(kotoba-qml PROPERTIES
+    set_target_properties(kotoba_qml PROPERTIES
         QT_ANDROID_EXTRA_FILES "${KOTOBAPOS_ASSETS_DIR}"
         QT_ANDROID_PACKAGE_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/android
     )
