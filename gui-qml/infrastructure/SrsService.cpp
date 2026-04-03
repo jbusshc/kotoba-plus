@@ -4,6 +4,8 @@
 #include "../../core/include/fsrs.h"
 #include <string>
 #include <cstring>
+#include <QThreadPool>
+
 
 /* ---- path helpers ---- */
 
@@ -125,6 +127,7 @@ bool SrsService::save(const char *path)
 
 bool SrsService::add(uint32_t entryId)
 {
+    std::lock_guard<std::mutex> lock(m_deckMutex);
     if (!m_deck) return false;
 
     uint64_t now = fsrs_now();
@@ -493,4 +496,20 @@ void SrsService::updateConfig(const Configuration* config)
         static_cast<fsrs_order_mode>(config->orderMode)
     );
 
+}
+void SrsService::saveAsync(const char *path)
+{
+    std::string target = path ? std::string(path) : effectivePath();
+    if (target.empty()) return;
+
+    QThreadPool::globalInstance()->start([this, target]() {
+        std::lock_guard<std::mutex> lock(m_deckMutex);
+        if (!m_deck) return;
+
+        (void)fsrs_save(m_deck, target.c_str());
+
+        std::string snap = snapshot_path_for(target);
+        std::string log  = log_path_for(target);
+        (void)fsrs_sync_compact(&m_sync, m_deck, snap.c_str(), log.c_str(), fsrs_now());
+    });
 }

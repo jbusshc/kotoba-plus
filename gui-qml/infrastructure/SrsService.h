@@ -6,6 +6,9 @@
 #include "SrsHistoryLog.h"
 #include <memory>
 
+#include <mutex>
+#include <QFuture>
+
 extern "C" {
 #include <fsrs.h>
 #include <fsrs_sync.h>
@@ -75,6 +78,8 @@ public:
 
     void updateConfig(const Configuration* config);
 
+    void saveAsync(const char *path = nullptr);
+
 private:
 
     struct UndoEntry {
@@ -101,4 +106,6 @@ private:
     std::string  m_profilePath;
 
     std::unique_ptr<SrsHistoryLog> m_history;
+
+    mutable std::mutex m_deckMutex; // protege m_deck y m_sync
 };
