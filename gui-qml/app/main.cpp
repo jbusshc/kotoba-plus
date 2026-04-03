@@ -137,7 +137,6 @@ int main(int argc, char **argv)
         srsSvc->save(srsProfilePath.c_str());
         saveConfiguration(configWrapper.m_config, configWrapper.m_configPath);
     });
-
     // ── Ejecutar app ───────────────────────────────────────────────────────
     int result = app.exec();
 

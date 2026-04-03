@@ -1,139 +1,32 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import "../components"
 import "../theme"
+
 Page {
     id: page
     padding: 0
 
-    property color textColor:    Theme.textColor
-    property color hintColor:    Theme.hintColor
-    property color accentColor:  Theme.accentColor
-    property color dividerColor: Theme.dividerColor
-
     background: Rectangle { color: Theme.background }
 
-    // ── Stat card ─────────────────────────────────────────────────────────────
-    component StatCard: Rectangle {
-        property string label:  ""
-        property string value:  "0"
-        property color  accent: Theme.accentColor
-
-        Layout.fillWidth: true
-        implicitHeight: 96
-        radius: 10
-        color: Theme.cardBackground
-        border.width: 1
-        border.color: Qt.rgba(accent.r, accent.g, accent.b, 0.22)
-
-        Rectangle {
-            anchors.top: parent.top
-            anchors.left: parent.left; anchors.right: parent.right
-            height: 2; radius: 1
-            color: parent.accent; opacity: 0.75
-        }
-
-        Column {
-            anchors.fill: parent
-            anchors.margins: 14
-            spacing: 5
-
-            Text {
-                text: value
-                font.pixelSize: Theme.fontSizeHero
-                font.weight: Font.Bold
-                font.letterSpacing: -1
-                color: accent
-            }
-            Text {
-                text: label.toUpperCase()
-                font.pixelSize: Theme.fontSizeXSmall
-                font.weight: Font.Medium
-                font.letterSpacing: 0.8
-                color: Qt.rgba(hintColor.r, hintColor.g, hintColor.b, 0.65)
-            }
-        }
-    }
-
-    // ── Action button ─────────────────────────────────────────────────────────
-    component ActionButton: Rectangle {
-        id: actionBtn
-        property string label:       ""
-        property string sublabel:    ""
-        property color  accent:      accentColor
-        property bool   primary:     false
-        property bool   interactive: true   // renamed from 'enabled' to avoid QQuickItem override
-        signal clicked()
-
-        implicitHeight: 60
-        radius: 8
-        opacity: actionBtn.interactive ? 1.0 : 0.35
-
-        color: actionBtn.primary
-            ? (btnMa.pressed && actionBtn.interactive
-                ? Qt.darker(actionBtn.accent, 1.08)
-                : btnMa.containsMouse && actionBtn.interactive
-                    ? Qt.lighter(actionBtn.accent, 1.12)
-                    : actionBtn.accent)
-            : (btnMa.pressed && actionBtn.interactive
-                ? Theme.surfacePress
-                : btnMa.containsMouse && actionBtn.interactive
-                    ? Theme.surfaceHover
-                    : Theme.surfaceSubtle)
-
-        border.width: actionBtn.primary ? 0 : 1
-        border.color: Theme.surfaceBorder
-
-        Behavior on color { ColorAnimation { duration: 120 } }
-
-        Column {
-            anchors.centerIn: parent
-            spacing: 3
-
-            Text {
-                anchors.horizontalCenter: parent.horizontalCenter
-                text: actionBtn.label
-                font.pixelSize: Theme.fontSizeBody
-                font.weight: Font.DemiBold
-                color: actionBtn.primary ? "white" : textColor
-            }
-            Text {
-                anchors.horizontalCenter: parent.horizontalCenter
-                text: actionBtn.sublabel
-                font.pixelSize: Theme.fontSizeTiny
-                color: actionBtn.primary ? Qt.rgba(1, 1, 1, 0.65) : hintColor
-                visible: actionBtn.sublabel.length > 0
-            }
-        }
-
-        MouseArea {
-            id: btnMa
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: actionBtn.interactive ? Qt.PointingHandCursor : Qt.ArrowCursor
-            onClicked: if (actionBtn.interactive) actionBtn.clicked()
-        }
-    }
-
-    // ── Layout ────────────────────────────────────────────────────────────────
     ColumnLayout {
-        anchors.fill: parent
-        anchors.margins: 24
+        anchors { fill: parent; margins: 24 }
         spacing: 0
 
         Item { Layout.fillHeight: true }
 
-        // Header
+        // ── Header ────────────────────────────────────────────────────────────
         Column {
-            Layout.fillWidth: true
+            Layout.fillWidth:    true
             Layout.bottomMargin: 24
             spacing: 4
 
             Text {
-                text: "Study Queue"
+                text:           "Study Queue"
                 font.pixelSize: Theme.fontSizeTitle
-                font.weight: Font.Bold
-                color: textColor
+                font.weight:    Font.Bold
+                color:          Theme.textColor
             }
             Text {
                 text: {
@@ -143,52 +36,61 @@ Page {
                     return due + " card" + (due === 1 ? "" : "s") + " ready to review."
                 }
                 font.pixelSize: Theme.fontSizeBody
-                color: hintColor
+                color:          Theme.hintColor
             }
         }
 
-        // Stats row: Due | New | Reviewed today
-        GridLayout {
-            Layout.fillWidth: true
+        // ── Stats: Due + New on top row, Reviewed full-width below ────────────
+        Column {
+            Layout.fillWidth:    true
             Layout.bottomMargin: 20
-            columns: 3
-            columnSpacing: 10
-            rowSpacing: 10
+            spacing: 10
+
+            Row {
+                width:   parent.width
+                spacing: 10
+
+                StatCard {
+                    heroStyle: true
+                    width:  (parent.width - 10) / 2
+                    label:  "Due"
+                    value:  srsVM ? String(srsVM.dueCount ?? 0) : "0"
+                    accent: "#F87171"
+                }
+                StatCard {
+                    heroStyle: true
+                    width:  (parent.width - 10) / 2
+                    label:  "New"
+                    value:  srsVM ? String(srsVM.newCount ?? 0) : "0"
+                    accent: "#60A5FA"
+                }
+            }
 
             StatCard {
-                label:  "Due"
-                value:  srsVM ? String(srsVM.dueCount        ?? 0) : "0"
-                accent: "#F87171"
-            }
-            StatCard {
-                // Rename srsVM.newCount to match your VM property if needed
-                label:  "New"
-                value:  srsVM ? String(srsVM.newCount        ?? 0) : "0"
-                accent: "#60A5FA"
-            }
-            StatCard {
-                label:  "Reviewed"
+                heroStyle: true
+                width:  parent.width
+                label:  "Reviewed Today"
                 value:  srsVM ? String(srsVM.reviewTodayCount ?? 0) : "0"
                 accent: "#34D399"
             }
         }
 
-        // Buttons
+        // ── Buttons ───────────────────────────────────────────────────────────
         ColumnLayout {
             Layout.fillWidth: true
             spacing: 10
 
             ActionButton {
                 Layout.fillWidth: true
-                primary:  true
-                label:    srsVM && srsVM.dueCount > 0 ? "Start Study Session" : "Nothing Due"
-                sublabel: srsVM && srsVM.dueCount > 0
+                primary:     true
+                accent:      Theme.accentColor
+                label:       srsVM && srsVM.dueCount > 0 ? "Start Study Session" : "Nothing Due"
+                sublabel:    srsVM && srsVM.dueCount > 0
                     ? srsVM.dueCount + " card" + (srsVM.dueCount === 1 ? "" : "s") + " in queue"
                     : "Check back later"
-                accent:      accentColor
                 interactive: srsVM ? srsVM.dueCount > 0 : false
                 onClicked: {
-                    if (stack && srsVM && srsVM.dueCount > 0) {
+                    if (srsVM && srsVM.dueCount > 0) {
                         srsVM.startSession()
                         stack.push("qrc:/qml/pages/SrsStudy.qml")
                     }
@@ -197,10 +99,10 @@ Page {
 
             ActionButton {
                 Layout.fillWidth: true
-                label:    "Browse Cards"
+                label:       "Browse Cards"
                 sublabel:    srsVM ? (String(parseInt(srsVM.totalCount) || 0) + " cards in deck") : ""
                 interactive: true
-                onClicked: { if (stack) stack.push("qrc:/qml/pages/SrsLibrary.qml") }
+                onClicked:   stack.push("qrc:/qml/pages/SrsLibrary.qml")
             }
         }
 

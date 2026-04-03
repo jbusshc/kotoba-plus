@@ -1,34 +1,33 @@
+// ActionButton.qml
+// primary=true  → filled accent background
+// primary=false → ghost / subtle background
 import QtQuick
 import QtQuick.Layouts
 import "../theme"
-// ── ActionButton ──────────────────────────────────────────────────────────────
-// Used in SrsDashboard for "Start Study Session" / "Browse Cards".
-// primary=true  → filled accent background
-// primary=false → subtle ghost style
 
 Rectangle {
     id: root
 
-    property string label:    ""
-    property string sublabel: ""
-    property color  accent:   Theme.accentColor
-    property bool   primary:  false
-    property bool   interactive: true  // renamed: avoids QQuickItem::enabled override
+    property string label:       ""
+    property string sublabel:    ""
+    property color  accent:      Theme.accentColor
+    property bool   primary:     false
+    property bool   interactive: true
 
     signal clicked()
 
-    height: Theme.minTapTarget + 12   // 60px at scale 1
+    implicitHeight: Theme.minTapTarget + 12   // 60 px at scale 1
     radius: 8
 
     color: root.primary
-        ? (btnMouse.pressed && root.interactive
+        ? (ma.pressed && root.interactive
             ? Qt.darker(root.accent, 1.10)
-            : btnMouse.containsMouse && root.interactive
+            : ma.containsMouse && root.interactive
                 ? Qt.lighter(root.accent, 1.15)
                 : root.accent)
-        : (btnMouse.pressed && root.interactive
+        : (ma.pressed && root.interactive
             ? Theme.surfacePress
-            : btnMouse.containsMouse && root.interactive
+            : ma.containsMouse && root.interactive
                 ? Theme.surfaceHover
                 : Theme.surfaceSubtle)
 
@@ -45,28 +44,26 @@ Rectangle {
 
         Text {
             Layout.alignment: Qt.AlignHCenter
-            text: root.label
+            text:           root.label
             font.pixelSize: Theme.fontSizeBody
-            font.weight: Font.DemiBold
+            font.weight:    Font.DemiBold
             color: root.primary ? "white" : Theme.textColor
         }
 
         Text {
             Layout.alignment: Qt.AlignHCenter
-            text: root.sublabel
+            text:           root.sublabel
             font.pixelSize: Theme.fontSizeTiny
-            color: root.primary
-                ? Qt.rgba(1,1,1,0.65)
-                : Theme.hintColor
+            color: root.primary ? Qt.rgba(1,1,1,0.65) : Theme.hintColor
             visible: root.sublabel.length > 0
         }
     }
 
     MouseArea {
-        id: btnMouse
+        id: ma
         anchors.fill: parent
         hoverEnabled: true
-        cursorShape: root.interactive ? Qt.PointingHandCursor : Qt.ArrowCursor
-        onClicked: if (root.interactive) root.clicked()
+        cursorShape:  root.interactive ? Qt.PointingHandCursor : Qt.ArrowCursor
+        onClicked:    if (root.interactive) root.clicked()
     }
 }

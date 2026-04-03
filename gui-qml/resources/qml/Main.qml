@@ -1,66 +1,32 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import QtQuick.Controls.Material
-import "pages"
 import "theme"
+import "pages"
 
 ApplicationWindow {
+    readonly property bool isDesktop: Qt.platform.os === "windows"
+                                || Qt.platform.os === "linux"
+                                || Qt.platform.os === "osx"
+
     id: root
-    width: 900
-    height: 650
     visible: true
-    title: "Kotoba Plus"
-    color: Theme.background
+    width:   isDesktop ? 900 : Screen.width
+    height:  isDesktop ? 600 : Screen.height
+    title:   "Kotoba+"
 
-    // ── Safe config access ────────────────────────────────────────────────────
-    readonly property var cfg: appConfig ? appConfig : null
+    property int currentTab:  0
+    property int pendingTab:  -1
 
-    Material.theme: (cfg && cfg.theme === "dark")
-                    ? Material.Dark
-                    : Material.Light
-
-    Material.primary: {
-        var accent = (cfg && cfg.accentColor) ? cfg.accentColor : "blue"
-        switch (accent.toLowerCase()) {
-        case "red":        return Material.Red
-        case "pink":       return Material.Pink
-        case "purple":     return Material.Purple
-        case "deeppurple": return Material.DeepPurple
-        case "indigo":     return Material.Indigo
-        case "blue":       return Material.Blue
-        case "lightblue":  return Material.LightBlue
-        case "cyan":       return Material.Cyan
-        case "teal":       return Material.Teal
-        case "green":      return Material.Green
-        case "lightgreen": return Material.LightGreen
-        case "lime":       return Material.Lime
-        case "yellow":     return Material.Yellow
-        case "amber":      return Material.Amber
-        case "orange":     return Material.Orange
-        case "deeporange": return Material.DeepOrange
-        case "brown":      return Material.Brown
-        case "bluegrey":   return Material.BlueGrey
-        default:           return Material.Blue
-        }
-    }
-
-    Material.accent: Material.primary
-
-    // ── Tab state ─────────────────────────────────────────────────────────────
-    property int currentTab: 0
-    property int pendingTab: -1
-
-    readonly property bool settingsDirty: {
-        if (stack.currentItem && typeof stack.currentItem.dirty !== "undefined")
-            return stack.currentItem.dirty
-        return false
+    // ── Helper: push a page onto the shared StackView ─────────────────────────
+    function navigate(url, props) {
+        stack.push(url, props ?? {})
     }
 
     function requestTabSwitch(index) {
-        if (root.currentTab === index) return
-        if (root.settingsDirty) {
-            root.pendingTab = index
+        if (index === currentTab) return
+        if (currentTab === 2 && typeof cfg !== "undefined" && cfg && cfg.dirty) {
+            pendingTab = index
             unsavedDialog.open()
             return
         }
@@ -68,7 +34,7 @@ ApplicationWindow {
     }
 
     function switchTab(index) {
-        root.currentTab = index
+        currentTab = index
         switch (index) {
         case 0: stack.replace(dictionaryPageComponent); break
         case 1: stack.replace(srsDashboardComponent);   break
@@ -78,12 +44,12 @@ ApplicationWindow {
 
     // ── Header ────────────────────────────────────────────────────────────────
     header: Item {
-        width: parent.width
+        width:  parent.width
         height: tabBar.implicitHeight
 
         TabBar {
             id: tabBar
-            width: parent.width - gearBtn.width
+            width:        parent.width - gearBtn.width
             currentIndex: root.currentTab === 2 ? -1 : root.currentTab
 
             TabButton { text: "Dictionary"; onClicked: root.requestTabSwitch(0) }
@@ -92,9 +58,7 @@ ApplicationWindow {
 
         Item {
             id: gearBtn
-            anchors.right: parent.right
-            anchors.top: parent.top
-            anchors.bottom: parent.bottom
+            anchors { right: parent.right; top: parent.top; bottom: parent.bottom }
             width: Theme.minTapTarget
 
             Rectangle {
@@ -105,26 +69,25 @@ ApplicationWindow {
 
             Text {
                 anchors.centerIn: parent
-                text: "⚙"
+                text:           "⚙"
                 font.pixelSize: 17
                 color: root.currentTab === 2 ? Theme.textColor : Theme.hintColor
             }
 
             Rectangle {
-                anchors.bottom: parent.bottom
-                anchors.horizontalCenter: parent.horizontalCenter
-                width: root.currentTab === 2 ? 24 : 0
+                anchors { bottom: parent.bottom; horizontalCenter: parent.horizontalCenter }
+                width:  root.currentTab === 2 ? 24 : 0
                 height: 2; radius: 1
-                color: Theme.accentColor
+                color:  Theme.accentColor
                 Behavior on width { NumberAnimation { duration: 150 } }
             }
 
             MouseArea {
-                id: gearMouse
+                id:           gearMouse
                 anchors.fill: parent
                 hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                onClicked: root.requestTabSwitch(2)
+                cursorShape:  Qt.PointingHandCursor
+                onClicked:    root.requestTabSwitch(2)
             }
         }
     }
@@ -133,15 +96,15 @@ ApplicationWindow {
     StackView {
         id: stack
         anchors.fill: parent
-        initialItem: Qt.platform.os === "android"
-                    ? splashPageComponent
-                    : dictionaryPageComponent
+        initialItem:  Qt.platform.os === "android"
+                      ? splashPageComponent
+                      : dictionaryPageComponent
     }
 
-    Component { id: splashPageComponent;     SplashPage {} }
+    Component { id: splashPageComponent;     SplashPage     {} }
     Component { id: dictionaryPageComponent; DictionaryPage {} }
-    Component { id: srsDashboardComponent;   SrsDashboard {} }
-    Component { id: settingsPageComponent;   SettingsPage {} }
+    Component { id: srsDashboardComponent;   SrsDashboard   {} }
+    Component { id: settingsPageComponent;   SettingsPage   {} }
 
     Connections {
         target: appController
@@ -151,19 +114,19 @@ ApplicationWindow {
         }
     }
 
-    // ── Dialog ────────────────────────────────────────────────────────────────
+    // ── Unsaved-settings dialog ───────────────────────────────────────────────
     Dialog {
         id: unsavedDialog
-        title: "Unsaved changes"
-        width: 340
+        title:  "Unsaved changes"
+        width:  340
         anchors.centerIn: Overlay.overlay
-        modal: true
+        modal:  true
 
         Text {
-            text: "You have unsaved settings changes.\nDiscard them and leave?"
+            text:     "You have unsaved settings changes.\nDiscard them and leave?"
             wrapMode: Text.Wrap
-            width: 296
-            color: Theme.textColor
+            width:    296
+            color:    Theme.textColor
         }
 
         footer: DialogButtonBox {
@@ -174,7 +137,6 @@ ApplicationWindow {
                 flat: true
                 DialogButtonBox.buttonRole: DialogButtonBox.RejectRole
             }
-
             Button {
                 text: "Discard & Leave"
                 DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole
@@ -183,8 +145,8 @@ ApplicationWindow {
 
         onRejected: { root.pendingTab = -1; root.currentTab = 2 }
         onAccepted: {
-            if (cfg) cfg.reloadFromDisk()
-            var target = root.pendingTab
+            if (appConfig) appConfig.reloadFromDisk()
+            const target  = root.pendingTab
             root.pendingTab = -1
             root.switchTab(target)
         }

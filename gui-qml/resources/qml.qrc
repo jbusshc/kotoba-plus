@@ -1,22 +1,33 @@
 <RCC>
     <qresource prefix="/">
         <file>qml/Main.qml</file>
+
+        <!-- Pages -->
         <file>qml/pages/DictionaryPage.qml</file>
         <file>qml/pages/DetailsPage.qml</file>
         <file>qml/pages/SrsDashboard.qml</file>
         <file>qml/pages/SrsStudy.qml</file>
         <file>qml/pages/SrsLibrary.qml</file>
-        <file>qml/components/SrsCardDelegate.qml</file>
-        <file>qml/theme/Theme.qml</file>
+        <file>qml/pages/SrsCardDetailPage.qml</file>
+        <file>qml/pages/SettingsPage.qml</file>
+        <file>qml/pages/SplashPage.qml</file>
+
+        <!-- Components -->
+        <file>qml/components/ActionButton.qml</file>
+        <file>qml/components/BackButton.qml</file>
         <file>qml/components/EntryView.qml</file>
         <file>qml/components/SenseItem.qml</file>
-        <file>qml/components/Tag.qml</file>
-        <file>qml/pages/SettingsPage.qml</file>
-        <file>qml/components/ActionButton.qml</file>
+        <file>qml/components/SrsCardDelegate.qml</file>
         <file>qml/components/StatCard.qml</file>
-        <file>qml/pages/SrsCardDetailPage.qml</file>
+        <file>qml/components/StepperField.qml</file>
+        <file>qml/components/Tag.qml</file>
+        <file>qml/components/ToggleSwitch.qml</file>
+
+        <!-- Theme -->
+        <file>qml/theme/Theme.qml</file>
         <file>qml/theme/qmldir</file>
+
+        <!-- Assets -->
         <file>qml/images/icon.svg</file>
-        <file>qml/pages/SplashPage.qml</file>
     </qresource>
 </RCC>

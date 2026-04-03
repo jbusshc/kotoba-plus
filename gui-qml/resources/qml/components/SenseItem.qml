@@ -9,14 +9,12 @@ Column {
     property var    sense
     property int    senseIndex: 0
     property string mode:       "dictionary"
-    property bool   revealed:   true          // ← nuevo
+    property bool   revealed:   true
 
-    property color textColor:    Theme.textColor
-    property color hintColor:    Theme.hintColor
-    property color accentColor:  Theme.accentColor
-    property color dividerColor: Theme.dividerColor
+    // Navigation signal — parent page connects this to StackView.push
+    signal navigateTo(string page, var props)
 
-    width: parent ? parent.width : 400
+    width:   parent ? parent.width : 400
     spacing: 6
 
     /* HEADER */
@@ -24,9 +22,10 @@ Column {
         spacing: 8
 
         Text {
-            text: (root.senseIndex + 1) + "."
-            font.bold: true; font.pixelSize: 14
-            color: root.textColor
+            text:           (root.senseIndex + 1) + "."
+            font.bold:      true
+            font.pixelSize: 14
+            color:          Theme.textColor
         }
 
         Flow {
@@ -34,7 +33,7 @@ Column {
             spacing: 4
             Repeater {
                 model: root.sense.pos || []
-                delegate: Tag { label: modelData; tagColor: root.hintColor }
+                delegate: Tag { label: modelData }
             }
         }
 
@@ -43,7 +42,7 @@ Column {
             spacing: 4
             Repeater {
                 model: root.sense.field || []
-                delegate: Tag { label: modelData; tagColor: root.hintColor }
+                delegate: Tag { label: modelData }
             }
         }
     }
@@ -54,7 +53,7 @@ Column {
         spacing: 4
         Repeater {
             model: root.sense.stagk || []
-            delegate: Tag { label: modelData; tagColor: root.hintColor }
+            delegate: Tag { label: modelData }
         }
     }
 
@@ -63,7 +62,7 @@ Column {
         spacing: 4
         Repeater {
             model: root.sense.stagr || []
-            delegate: Tag { label: modelData; tagColor: root.hintColor }
+            delegate: Tag { label: modelData }
         }
     }
 
@@ -71,12 +70,12 @@ Column {
     Repeater {
         model: root.sense.gloss || []
         delegate: Text {
-            width: parent.width
+            width:    parent.width
             wrapMode: Text.WordWrap
-            text: "• " + modelData
+            text:     "• " + modelData
             font.pixelSize: 15
-            color: root.textColor
-            opacity: root.revealed ? 1.0 : 0.0     // ← nuevo
+            color:   Theme.textColor
+            opacity: root.revealed ? 1.0 : 0.0
             Behavior on opacity { NumberAnimation { duration: 180 } }
         }
     }
@@ -91,7 +90,7 @@ Column {
             spacing: 4
             Repeater {
                 model: root.sense.misc || []
-                delegate: Tag { label: modelData; tagColor: root.hintColor }
+                delegate: Tag { label: modelData }
             }
         }
 
@@ -100,22 +99,22 @@ Column {
             spacing: 4
             Repeater {
                 model: root.sense.dial || []
-                delegate: Tag { label: modelData; tagColor: root.hintColor }
+                delegate: Tag { label: modelData }
             }
         }
 
         Text {
-            visible: (root.sense.s_inf || []).length > 0
-            text: (root.sense.s_inf || []).join("; ")
+            visible:        (root.sense.s_inf || []).length > 0
+            text:           (root.sense.s_inf || []).join("; ")
             font.pixelSize: 12; font.italic: true
-            color: root.hintColor
+            color:          Theme.hintColor
         }
 
         Text {
-            visible: (root.sense.lsource || []).length > 0
-            text: "From: " + (root.sense.lsource || []).join(", ")
+            visible:        (root.sense.lsource || []).length > 0
+            text:           "From: " + (root.sense.lsource || []).join(", ")
             font.pixelSize: 12; font.italic: true
-            color: root.hintColor
+            color:          Theme.hintColor
         }
     }
 
@@ -124,19 +123,21 @@ Column {
         visible: (root.sense.xref || []).length > 0
         spacing: 2
 
-        Text { text: "See also:"; font.pixelSize: 12; color: root.hintColor }
+        Text { text: "See also:"; font.pixelSize: 12; color: Theme.hintColor }
 
         Flow {
             width: parent.width; spacing: 6
             Repeater {
                 model: root.sense.xref || []
                 delegate: Tag {
-                    label: modelData.label; tagColor: root.hintColor
+                    label: modelData.label
                     MouseArea {
-                        anchors.fill: parent; cursorShape: Qt.PointingHandCursor; hoverEnabled: true
-                        onClicked: stack.push("qrc:/qml/pages/DetailsPage.qml", { docId: modelData.id })
-                        onEntered: parent.opacity = 0.6
-                        onExited:  parent.opacity = 1.0
+                        anchors.fill:  parent
+                        cursorShape:   Qt.PointingHandCursor
+                        hoverEnabled:  true
+                        onClicked:     root.navigateTo("qrc:/qml/pages/DetailsPage.qml", { docId: modelData.id })
+                        onEntered:     parent.opacity = 0.6
+                        onExited:      parent.opacity = 1.0
                     }
                 }
             }
@@ -148,19 +149,21 @@ Column {
         visible: (root.sense.ant || []).length > 0
         spacing: 2
 
-        Text { text: "Antonym:"; font.pixelSize: 12; color: root.hintColor }
+        Text { text: "Antonym:"; font.pixelSize: 12; color: Theme.hintColor }
 
         Flow {
             width: parent.width; spacing: 6
             Repeater {
                 model: root.sense.ant || []
                 delegate: Tag {
-                    label: modelData.label; tagColor: root.hintColor
+                    label: modelData.label
                     MouseArea {
-                        anchors.fill: parent; cursorShape: Qt.PointingHandCursor; hoverEnabled: true
-                        onClicked: stack.push("qrc:/qml/pages/DetailsPage.qml", { docId: modelData.id })
-                        onEntered: parent.opacity = 0.6
-                        onExited:  parent.opacity = 1.0
+                        anchors.fill:  parent
+                        cursorShape:   Qt.PointingHandCursor
+                        hoverEnabled:  true
+                        onClicked:     root.navigateTo("qrc:/qml/pages/DetailsPage.qml", { docId: modelData.id })
+                        onEntered:     parent.opacity = 0.6
+                        onExited:      parent.opacity = 1.0
                     }
                 }
             }
@@ -169,7 +172,7 @@ Column {
 
     /* DIVIDER */
     Rectangle {
-        width: parent.width; height: 1
-        color: root.dividerColor; opacity: 0.5
+        width:   parent.width; height: 1
+        color:   Theme.dividerColor; opacity: 0.5
     }
 }

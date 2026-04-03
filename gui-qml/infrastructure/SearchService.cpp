@@ -29,7 +29,7 @@ SearchService::~SearchService()
 
 void SearchService::query(const QString &q)
 {
-    if (q.isEmpty()) {
+        if (q.isEmpty()) {
         reset_search_context(&m_ctx);
         return;
     }
@@ -72,11 +72,6 @@ void SearchService::queryNextPage()
 void SearchService::updateConfig(const Configuration* config)
 {
     m_config = config;
-    qDebug() << "SearchService::updateConfig called. New languages:";
-    for (int i = 0; i < KOTOBA_LANG_COUNT; ++i) {
-        if (config->languages[i] == 0) continue;
-        qDebug() << i << " -" << config->languages[i];
-    }
     update_search_config(&m_ctx, config->languages, config->pageSize, config->maxResults);
 }
 

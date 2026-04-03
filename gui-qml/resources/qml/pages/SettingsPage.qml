@@ -2,28 +2,25 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Controls.Material
-import QtQuick.Effects          // MultiEffect — replaces Qt5Compat.GraphicalEffects
+import QtQuick.Effects
 
+import "../components"
 import "../theme"
 
 Page {
     id: page
     padding: 0
 
-    readonly property color textColor:    Theme.textColor
-    readonly property color hintColor:    Theme.hintColor
-    readonly property color accentColor:  Theme.accentColor
-    readonly property color dividerColor: Theme.dividerColor
-
-    readonly property int rowH:   56
-    readonly property int ctrlH:  32
-    readonly property int ctrlW: 220
-    readonly property int unitW:  52
-    readonly property int secGap: 24
-
     background: Rectangle { color: Theme.background }
 
-    // ── Snapshot-based dirty detection ────────────────────────────────────────
+    // ── Layout constants ──────────────────────────────────────────────────────
+    readonly property int rowH:  56
+    readonly property int ctrlH: 32
+    readonly property int ctrlW: 220
+    readonly property int unitW: 52
+    readonly property int secGap: 24
+
+    // ── Dirty detection ───────────────────────────────────────────────────────
     property bool ready:    false
     property bool dirty:    false
     property var  snapshot: ({})
@@ -52,27 +49,20 @@ Page {
         }
     }
 
+    function _snapEq(key) {
+        const a = snapshot[key], b = appConfig[key]
+        if (typeof a === "number" && typeof b === "number")
+            return Math.abs(a - b) <= 0.001
+        return a === b
+    }
+
     function checkDirty() {
         if (!ready || Object.keys(snapshot).length === 0) { dirty = false; return }
-        dirty = snapshot.theme             !== appConfig.theme
-             || snapshot.accentColor       !== appConfig.accentColor
-             || Math.abs(snapshot.fontScale      - appConfig.fontScale)      > 0.001
-             || snapshot.glossLanguages    !== appConfig.glossLanguages
-             || snapshot.fallbackLanguage  !== appConfig.fallbackLanguage
-             || snapshot.interfaceLanguage !== appConfig.interfaceLanguage
-             || snapshot.searchOnTyping    !== appConfig.searchOnTyping
-             || snapshot.searchDelayMs     !== appConfig.searchDelayMs
-             || snapshot.newCardsPerDay    !== appConfig.newCardsPerDay
-             || snapshot.reviewsPerDay     !== appConfig.reviewsPerDay
-             || Math.abs(snapshot.desiredRetention - appConfig.desiredRetention) > 0.001
-             || snapshot.maximumInterval   !== appConfig.maximumInterval
-             || snapshot.leechThreshold    !== appConfig.leechThreshold
-             || snapshot.dayOffset         !== appConfig.dayOffset
-             || snapshot.enableFuzz        !== appConfig.enableFuzz
-             || snapshot.orderMode         !== appConfig.orderMode
-             || snapshot.showRomaji        !== appConfig.showRomaji
-             || snapshot.maxResults        !== appConfig.maxResults
-             || snapshot.pageSize          !== appConfig.pageSize
+        dirty = !["theme","accentColor","fontScale","glossLanguages","fallbackLanguage",
+                  "interfaceLanguage","searchOnTyping","searchDelayMs","newCardsPerDay",
+                  "reviewsPerDay","desiredRetention","maximumInterval","leechThreshold",
+                  "dayOffset","enableFuzz","orderMode","showRomaji","maxResults","pageSize"]
+                 .every(k => _snapEq(k))
     }
 
     function markDirty() { if (ready) checkDirty() }
@@ -102,7 +92,7 @@ Page {
         appConfig.enableFuzz        = true
         appConfig.orderMode         = 0
         appConfig.showRomaji        = false
-        appConfig.maxResults        = SEARCH_MAX_RESULTS_DEFAULT
+        appConfig.maxResults        = 20000
         appConfig.pageSize          = 20
         checkDirty()
         applySettings()
@@ -122,11 +112,10 @@ Page {
         }
     }
 
-    // ══════════════════════════════════════════════════════════════════════════
-    // REUSABLE INLINE COMPONENTS
-    // ══════════════════════════════════════════════════════════════════════════
+    // ═════════════════════════════════════════════════════════════════════════
+    // INLINE COMPONENTS  (settings-page–specific, not needed elsewhere)
+    // ═════════════════════════════════════════════════════════════════════════
 
-    // ── Tooltip badge ─────────────────────────────────────────────────────────
     component InfoBadge: Item {
         id: badge
         property string tip: ""
@@ -135,8 +124,8 @@ Page {
         Rectangle {
             anchors.centerIn: parent
             width: 18; height: 18; radius: 9
-            color: ma.containsMouse
-                ? Qt.rgba(page.accentColor.r, page.accentColor.g, page.accentColor.b, 0.25)
+            color: badgeMa.containsMouse
+                ? Qt.rgba(Theme.accentColor.r, Theme.accentColor.g, Theme.accentColor.b, 0.25)
                 : Theme.surfaceSubtle
             border.width: 1; border.color: Theme.surfaceBorder
             Behavior on color { ColorAnimation { duration: 120 } }
@@ -145,179 +134,58 @@ Page {
                 anchors.centerIn: parent
                 text: "?"
                 font.pixelSize: Theme.fontSizeXSmall
-                color: Qt.rgba(page.hintColor.r, page.hintColor.g, page.hintColor.b, 0.7)
+                color: Qt.rgba(Theme.hintColor.r, Theme.hintColor.g, Theme.hintColor.b, 0.7)
             }
         }
 
         Rectangle {
-            visible: ma.containsMouse
+            visible: badgeMa.containsMouse
             z: 999
-            width: Math.min(tipText.implicitWidth + 20, 260)
-            height: tipText.implicitHeight + 14
+            width:  Math.min(tipTxt.implicitWidth + 20, 260)
+            height: tipTxt.implicitHeight + 14
             radius: 6
-            color: Theme.cardBackground
-            border.width: 1; border.color: page.dividerColor
-            anchors.right: parent.right
-            anchors.bottom: parent.top; anchors.bottomMargin: 6
+            color:  Theme.cardBackground
+            border.width: 1; border.color: Theme.dividerColor
+            anchors { right: parent.right; bottom: parent.top; bottomMargin: 6 }
 
             Text {
-                id: tipText
-                anchors.fill: parent; anchors.margins: 10
-                text: badge.tip
+                id: tipTxt
+                anchors { fill: parent; margins: 10 }
+                text:           badge.tip
                 font.pixelSize: Theme.fontSizeXSmall
-                color: Qt.rgba(page.hintColor.r, page.hintColor.g, page.hintColor.b, 0.9)
+                color: Qt.rgba(Theme.hintColor.r, Theme.hintColor.g, Theme.hintColor.b, 0.9)
                 wrapMode: Text.Wrap
             }
         }
 
-        MouseArea { id: ma; anchors.fill: parent; hoverEnabled: true }
+        MouseArea { id: badgeMa; anchors.fill: parent; hoverEnabled: true }
     }
 
-    // ── Section header ────────────────────────────────────────────────────────
     component SectionHeader: Item {
         property string title: ""
         Layout.fillWidth: true
-        implicitHeight: 44
+        implicitHeight:   44
 
         Text {
-            anchors.left: parent.left
-            anchors.bottom: parent.bottom; anchors.bottomMargin: 6
-            text: parent.title.toUpperCase()
-            font.pixelSize: Theme.fontSizeXSmall; font.weight: Font.Medium
+            anchors { left: parent.left; bottom: parent.bottom; bottomMargin: 6 }
+            text:               parent.title.toUpperCase()
+            font.pixelSize:     Theme.fontSizeXSmall; font.weight: Font.Medium
             font.letterSpacing: 1.2
-            color: Qt.rgba(page.hintColor.r, page.hintColor.g, page.hintColor.b, 0.55)
+            color: Qt.rgba(Theme.hintColor.r, Theme.hintColor.g, Theme.hintColor.b, 0.55)
         }
         Rectangle {
             anchors.bottom: parent.bottom
             width: parent.width; height: 1
-            color: page.dividerColor; opacity: 0.5
+            color: Theme.dividerColor; opacity: 0.5
         }
     }
 
-    // ── Row divider ───────────────────────────────────────────────────────────
     component RowDivider: Rectangle {
         Layout.fillWidth: true
-        implicitHeight: 1
-        color: page.dividerColor; opacity: 0.28
+        implicitHeight:   1
+        color:   Theme.dividerColor; opacity: 0.28
     }
 
-    // ── Toggle switch ─────────────────────────────────────────────────────────
-    component ToggleSwitch: Rectangle {
-        id: toggle
-        property bool checked: false
-        signal toggled(bool newValue)
-
-        implicitWidth: 48; implicitHeight: page.ctrlH
-        radius: height / 2
-        color: checked
-            ? Qt.rgba(page.accentColor.r, page.accentColor.g, page.accentColor.b, 0.25)
-            : Theme.surfaceSubtle
-        border.width: 1
-        border.color: checked
-            ? Qt.rgba(page.accentColor.r, page.accentColor.g, page.accentColor.b, 0.6)
-            : Theme.surfaceBorder
-        Behavior on color        { ColorAnimation { duration: 150 } }
-        Behavior on border.color { ColorAnimation { duration: 150 } }
-
-        Rectangle {
-            id: knob
-            width: 20; height: 20; radius: 10
-            anchors.verticalCenter: parent.verticalCenter
-            x: toggle.checked ? parent.width - width - 6 : 6
-            color: toggle.checked ? page.accentColor : Theme.surfaceInactive
-            Behavior on x     { NumberAnimation { duration: 150; easing.type: Easing.OutQuad } }
-            Behavior on color { ColorAnimation  { duration: 150 } }
-        }
-
-        MouseArea {
-            anchors.fill: parent; cursorShape: Qt.PointingHandCursor
-            onClicked: toggle.toggled(!toggle.checked)
-        }
-    }
-
-    // ── Step button (−/+) ─────────────────────────────────────────────────────
-    component StepButton: Rectangle {
-        property string label: "+"
-        signal clicked()
-
-        implicitWidth: Math.max(28, Theme.minTapTarget - 16)
-        implicitHeight: page.ctrlH
-        radius: 6
-        color: stepMa.pressed
-            ? Theme.surfacePress
-            : stepMa.containsMouse ? Theme.surfaceHover : Theme.surfaceSubtle
-        border.width: 1; border.color: Theme.surfaceBorder
-        Behavior on color { ColorAnimation { duration: 100 } }
-
-        Text {
-            anchors.centerIn: parent
-            text: parent.label
-            font.pixelSize: Theme.fontSizeBody; color: page.hintColor
-        }
-        MouseArea {
-            id: stepMa; anchors.fill: parent
-            hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-            onClicked: parent.clicked()
-        }
-    }
-
-    // ── Stepper field ─────────────────────────────────────────────────────────
-    component StepperField: RowLayout {
-        id: sf
-        property int    value:     0
-        property int    min:       0
-        property int    max:       99999
-        property string zeroLabel: ""
-        property string unit:      ""
-
-        spacing: 0
-
-        StepButton {
-            label: "−"
-            onClicked: if (sf.value > sf.min) sf.value--
-        }
-
-        Rectangle {
-            implicitWidth: 72; implicitHeight: page.ctrlH
-            color: Theme.surfaceInput
-            border.width: 1; border.color: Theme.surfaceBorder
-
-            TextInput {
-                anchors.centerIn: parent
-                width: parent.width - 8
-                font.pixelSize: Theme.fontSizeSmall; font.weight: Font.Medium
-                horizontalAlignment: Text.AlignHCenter
-                color: (sf.value === 0 && sf.zeroLabel !== "") ? page.accentColor : page.textColor
-                validator: IntValidator { bottom: sf.min; top: sf.max }
-                text: (sf.value === 0 && sf.zeroLabel !== "") ? sf.zeroLabel
-                                                              : sf.value.toString()
-                onEditingFinished: {
-                    if (sf.zeroLabel !== "" && text === sf.zeroLabel) {
-                        sf.value = 0
-                    } else {
-                        var v = parseInt(text)
-                        if (!isNaN(v)) sf.value = Math.max(sf.min, Math.min(sf.max, v))
-                    }
-                }
-            }
-        }
-
-        StepButton {
-            label: "+"
-            onClicked: if (sf.value < sf.max) sf.value++
-        }
-
-        Text {
-            visible: sf.unit !== ""
-            Layout.preferredWidth: page.unitW
-            text: sf.unit
-            font.pixelSize: Theme.fontSizeXSmall
-            color: Qt.rgba(page.hintColor.r, page.hintColor.g, page.hintColor.b, 0.55)
-            verticalAlignment: Text.AlignVCenter
-        }
-    }
-
-    // ── Setting row ───────────────────────────────────────────────────────────
     component SettingRow: Item {
         id: sr
         property string label:    ""
@@ -325,10 +193,10 @@ Page {
         property string tip:      ""
         property bool   compact:  false
 
-        default property alias content: controlSlot.data
+        default property alias content: slot.data
 
         Layout.fillWidth: true
-        implicitHeight: subtitle !== "" ? 64 : (compact ? 44 : page.rowH)
+        implicitHeight:   subtitle !== "" ? 64 : (compact ? 44 : page.rowH)
 
         RowLayout {
             anchors.fill: parent
@@ -339,17 +207,17 @@ Page {
                 spacing: 3
 
                 Text {
-                    width: parent.width
-                    text: sr.label
+                    width:          parent.width
+                    text:           sr.label
                     font.pixelSize: Theme.fontSizeBody; font.weight: Font.Medium
-                    color: page.textColor; elide: Text.ElideRight
+                    color:          Theme.textColor; elide: Text.ElideRight
                 }
                 Text {
-                    visible: sr.subtitle !== ""
-                    width: parent.width
-                    text: sr.subtitle
+                    visible:        sr.subtitle !== ""
+                    width:          parent.width
+                    text:           sr.subtitle
                     font.pixelSize: Theme.fontSizeXSmall
-                    color: Qt.rgba(page.hintColor.r, page.hintColor.g, page.hintColor.b, 0.55)
+                    color: Qt.rgba(Theme.hintColor.r, Theme.hintColor.g, Theme.hintColor.b, 0.55)
                     wrapMode: Text.Wrap
                 }
             }
@@ -360,21 +228,21 @@ Page {
                 Layout.alignment: Qt.AlignVCenter
             }
             Item {
-                visible: sr.tip === ""
-                Layout.preferredWidth: Theme.minTapTarget; Layout.preferredHeight: 1
+                visible:              sr.tip === ""
+                Layout.preferredWidth: Theme.minTapTarget
+                Layout.preferredHeight: 1
                 Layout.alignment: Qt.AlignVCenter
             }
 
             Item {
-                id: controlSlot
-                Layout.preferredWidth: page.ctrlW
+                id: slot
+                Layout.preferredWidth:  page.ctrlW
                 Layout.alignment: Qt.AlignVCenter | Qt.AlignRight
                 implicitHeight: page.ctrlH
             }
         }
     }
 
-    // ── Pill ─────────────────────────────────────────────────────────────────
     component Pill: Rectangle {
         property string pillLabel:    ""
         property bool   pillSelected: false
@@ -384,33 +252,30 @@ Page {
         implicitHeight: 30
         radius: 6
         color: pillSelected
-            ? Qt.rgba(page.accentColor.r, page.accentColor.g, page.accentColor.b, 0.20)
+            ? Qt.rgba(Theme.accentColor.r, Theme.accentColor.g, Theme.accentColor.b, 0.20)
             : Theme.surfaceSubtle
         border.width: 1
         border.color: pillSelected
-            ? Qt.rgba(page.accentColor.r, page.accentColor.g, page.accentColor.b, 0.55)
+            ? Qt.rgba(Theme.accentColor.r, Theme.accentColor.g, Theme.accentColor.b, 0.55)
             : Theme.surfaceBorder
         Behavior on color { ColorAnimation { duration: 120 } }
 
         Text {
             id: pillTxt
             anchors.centerIn: parent
-            text: parent.pillLabel
+            text:           parent.pillLabel
             font.pixelSize: Theme.fontSizeSmall; font.weight: Font.Medium
-            color: parent.pillSelected ? page.accentColor
-                                       : Qt.rgba(page.hintColor.r, page.hintColor.g, page.hintColor.b, 0.7)
+            color: parent.pillSelected ? Theme.accentColor
+                : Qt.rgba(Theme.hintColor.r, Theme.hintColor.g, Theme.hintColor.b, 0.7)
         }
         MouseArea {
-            // Expand tap area without changing visual height
-            anchors.horizontalCenter: parent.horizontalCenter
-            anchors.verticalCenter:   parent.verticalCenter
+            anchors.centerIn: parent
             width: parent.width; height: Theme.minTapTarget
             cursorShape: Qt.PointingHandCursor
             onClicked: parent.pillClicked()
         }
     }
 
-    // ── Color chip ────────────────────────────────────────────────────────────
     component ColorChip: Rectangle {
         property string chipValue:    ""
         property color  chipColor:    "gray"
@@ -421,7 +286,7 @@ Page {
         width: 30; height: 30; radius: 15
         color: chipColor
         border.width: chipSelected ? 2 : 0
-        border.color: Theme.textColor   // adapts to light/dark
+        border.color: Theme.textColor
         opacity: chipSelected ? 1.0 : 0.5
         Behavior on opacity      { NumberAnimation { duration: 120 } }
         Behavior on border.width { NumberAnimation { duration: 120 } }
@@ -429,29 +294,28 @@ Page {
         Rectangle {
             anchors.centerIn: parent
             width: 8; height: 8; radius: 4
-            color: Theme.textColor
+            color:   Theme.textColor
             visible: parent.chipSelected
         }
 
+        // Hover label
         Rectangle {
-            anchors.horizontalCenter: parent.horizontalCenter
-            anchors.top: parent.bottom; anchors.topMargin: 4
-            width: hoverLbl.implicitWidth + 8; height: 16; radius: 3
-            color: Theme.cardBackground
-            border.width: 1; border.color: page.dividerColor
+            anchors { horizontalCenter: parent.horizontalCenter; top: parent.bottom; topMargin: 4 }
+            width:  hoverLbl.implicitWidth + 8; height: 16; radius: 3
+            color:  Theme.cardBackground
+            border.width: 1; border.color: Theme.dividerColor
             visible: chipMa.containsMouse; z: 10
 
             Text {
                 id: hoverLbl
                 anchors.centerIn: parent
-                text: parent.parent.chipLabel
-                font.pixelSize: 9; color: page.hintColor
+                text:           parent.parent.chipLabel
+                font.pixelSize: 9; color: Theme.hintColor
             }
         }
 
         MouseArea {
             id: chipMa
-            // Expand tap area
             anchors.centerIn: parent
             width: Theme.minTapTarget; height: Theme.minTapTarget
             hoverEnabled: true; cursorShape: Qt.PointingHandCursor
@@ -459,16 +323,14 @@ Page {
         }
     }
 
-    // ══════════════════════════════════════════════════════════════════════════
+    // ═════════════════════════════════════════════════════════════════════════
     // ROOT LAYOUT
-    // ══════════════════════════════════════════════════════════════════════════
-
+    // ═════════════════════════════════════════════════════════════════════════
     Item {
         anchors.fill: parent
 
         ScrollView {
-            anchors.fill: parent
-            anchors.bottomMargin: page.dirty ? 56 : 0
+            anchors { fill: parent; bottomMargin: page.dirty ? 56 : 0 }
             Behavior on anchors.bottomMargin { NumberAnimation { duration: 200; easing.type: Easing.OutQuad } }
             clip: true
             ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
@@ -480,7 +342,7 @@ Page {
                 ColumnLayout {
                     id: col
                     anchors.horizontalCenter: parent.horizontalCenter
-                    width: Math.min(parent.width - 32, 680)
+                    width:   Math.min(parent.width - 32, 680)
                     spacing: 0
 
                     Item { Layout.fillWidth: true; implicitHeight: 20 }
@@ -490,17 +352,11 @@ Page {
 
                     SettingRow {
                         label: "Theme"
-
                         Row {
-                            anchors.right: parent.right
-                            anchors.verticalCenter: parent.verticalCenter
+                            anchors { right: parent.right; verticalCenter: parent.verticalCenter }
                             spacing: 8
-
                             Repeater {
-                                model: [
-                                    { label: "Dark",  value: "dark"  },
-                                    { label: "Light", value: "light" },
-                                ]
+                                model: [{ label: "Dark", value: "dark" }, { label: "Light", value: "light" }]
                                 Pill {
                                     required property var modelData
                                     pillLabel:    modelData.label
@@ -513,24 +369,22 @@ Page {
                     RowDivider {}
 
                     ColumnLayout {
-                        Layout.fillWidth: true
-                        spacing: 10
+                        Layout.fillWidth: true; spacing: 10
 
                         Item {
                             Layout.fillWidth: true; implicitHeight: 44
                             Text {
-                                anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter
-                                text: "Accent Color"
+                                anchors { left: parent.left; verticalCenter: parent.verticalCenter }
+                                text:           "Accent Color"
                                 font.pixelSize: Theme.fontSizeBody; font.weight: Font.Medium
-                                color: page.textColor
+                                color:          Theme.textColor
                             }
                         }
 
                         Flow {
-                            Layout.fillWidth: true
+                            Layout.fillWidth:    true
                             Layout.bottomMargin: 20
                             spacing: 8
-
                             Repeater {
                                 model: [
                                     { label: "Red",         value: "red",        hex: "#F44336" },
@@ -568,10 +422,9 @@ Page {
                     SettingRow {
                         label:    "Text Scale"
                         subtitle: "Current: " + Math.round(appConfig.fontScale * 100) + "%  (default: 100%)"
-                        tip:      "Scales all text proportionally. 85% = smaller, 100% = default, 115% = larger."
-
+                        tip:      "Scales all text proportionally."
                         StepperField {
-                            anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter
+                            anchors { left: parent.left; verticalCenter: parent.verticalCenter }
                             value: Math.round(appConfig.fontScale * 100)
                             min: 70; max: 200; unit: " %"
                             onValueChanged: { appConfig.fontScale = value / 100.0; page.markDirty() }
@@ -589,7 +442,7 @@ Page {
                             Text {
                                 text: "Gloss Languages"
                                 font.pixelSize: Theme.fontSizeBody; font.weight: Font.Medium
-                                color: page.textColor
+                                color: Theme.textColor
                                 Layout.fillWidth: true; Layout.alignment: Qt.AlignVCenter
                             }
                             InfoBadge {
@@ -607,13 +460,12 @@ Page {
 
                             function active(lang) {
                                 return appConfig.glossLanguages
-                                    .split(",").map(function(s) { return s.trim() })
-                                    .indexOf(lang) >= 0
+                                    .split(",").map(s => s.trim()).indexOf(lang) >= 0
                             }
                             function toggle(lang) {
-                                var set = {}
-                                appConfig.glossLanguages.split(",").forEach(function(t) {
-                                    var r = t.trim()
+                                const set = {}
+                                appConfig.glossLanguages.split(",").forEach(t => {
+                                    const r = t.trim()
                                     if (r.length > 0) set[r] = true
                                 })
                                 if (set[lang]) {
@@ -648,7 +500,7 @@ Page {
                             Text {
                                 text: "Fallback Language"
                                 font.pixelSize: Theme.fontSizeBody; font.weight: Font.Medium
-                                color: page.textColor
+                                color: Theme.textColor
                                 Layout.fillWidth: true; Layout.alignment: Qt.AlignVCenter
                             }
                             InfoBadge {
@@ -684,16 +536,16 @@ Page {
                                 Text {
                                     text: "Interface Language"
                                     font.pixelSize: Theme.fontSizeBody; font.weight: Font.Medium
-                                    color: page.textColor
+                                    color: Theme.textColor
                                 }
                                 Text {
                                     text: "Requires restart"
                                     font.pixelSize: Theme.fontSizeXSmall
-                                    color: Qt.rgba(page.hintColor.r, page.hintColor.g, page.hintColor.b, 0.5)
+                                    color: Qt.rgba(Theme.hintColor.r, Theme.hintColor.g, Theme.hintColor.b, 0.5)
                                 }
                             }
                             InfoBadge {
-                                tip: "Language used for the app UI. Not all languages may be fully translated."
+                                tip: "Language used for the app UI."
                                 Layout.alignment: Qt.AlignVCenter
                             }
                         }
@@ -725,7 +577,7 @@ Page {
                     SettingRow {
                         label: "Search on Typing"
                         ToggleSwitch {
-                            anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
+                            anchors { right: parent.right; verticalCenter: parent.verticalCenter }
                             checked: appConfig.searchOnTyping
                             onToggled: (v) => { appConfig.searchOnTyping = v; page.markDirty() }
                         }
@@ -736,7 +588,7 @@ Page {
                         label: "Search Delay"
                         tip:   "Milliseconds after typing before triggering search.\n\nDefault: 150 ms"
                         StepperField {
-                            anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter
+                            anchors { left: parent.left; verticalCenter: parent.verticalCenter }
                             value: appConfig.searchDelayMs; min: 0; max: 2000; unit: " ms"
                             onValueChanged: { appConfig.searchDelayMs = value; page.markDirty() }
                         }
@@ -746,30 +598,29 @@ Page {
                     SettingRow {
                         label: "Show Romaji"
                         ToggleSwitch {
-                            anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
+                            anchors { right: parent.right; verticalCenter: parent.verticalCenter }
                             checked: appConfig.showRomaji
                             onToggled: (v) => { appConfig.showRomaji = v; page.markDirty() }
                         }
                     }
-
                     RowDivider {}
 
                     SettingRow {
                         label: "Max Search Results"
                         tip:   "Maximum dictionary entries shown in search results.\n\nDefault: 20000"
                         StepperField {
-                            anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter
+                            anchors { left: parent.left; verticalCenter: parent.verticalCenter }
                             value: appConfig.maxResults; min: 1; max: 100000; unit: " results"
                             onValueChanged: { appConfig.maxResults = value; page.markDirty() }
                         }
                     }
-
                     RowDivider {}
+
                     SettingRow {
                         label: "Results Per Page"
                         tip:   "Number of results shown per page in the dictionary view.\n\nDefault: 20"
                         StepperField {
-                            anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter
+                            anchors { left: parent.left; verticalCenter: parent.verticalCenter }
                             value: appConfig.pageSize; min: 1; max: 100; unit: " per page"
                             onValueChanged: { appConfig.pageSize = value; page.markDirty() }
                         }
@@ -782,7 +633,7 @@ Page {
                         label: "New Cards / Day"
                         tip:   "Maximum new cards per day. 0 = unlimited.\n\nDefault: 20"
                         StepperField {
-                            anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter
+                            anchors { left: parent.left; verticalCenter: parent.verticalCenter }
                             value: appConfig.newCardsPerDay; min: 0; max: 9999; zeroLabel: "∞"
                             onValueChanged: { appConfig.newCardsPerDay = value; page.markDirty() }
                         }
@@ -793,7 +644,7 @@ Page {
                         label: "Reviews / Day"
                         tip:   "Maximum review cards per day. 0 = unlimited.\n\nDefault: 200"
                         StepperField {
-                            anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter
+                            anchors { left: parent.left; verticalCenter: parent.verticalCenter }
                             value: appConfig.reviewsPerDay; min: 0; max: 9999; zeroLabel: "∞"
                             onValueChanged: { appConfig.reviewsPerDay = value; page.markDirty() }
                         }
@@ -805,8 +656,7 @@ Page {
                         subtitle: Math.round(appConfig.desiredRetention * 100) + "% recall target"
                         tip:      "Target recall probability at review time. Higher = more reviews.\n\nRecommended: 85–92%. Default: 90%."
                         Slider {
-                            anchors.left: parent.left; anchors.right: parent.right
-                            anchors.verticalCenter: parent.verticalCenter
+                            anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter }
                             from: 0.70; to: 0.97; stepSize: 0.01
                             value: appConfig.desiredRetention
                             onMoved: { appConfig.desiredRetention = value; page.markDirty() }
@@ -818,7 +668,7 @@ Page {
                         label: "Maximum Interval"
                         tip:   "Longest gap between reviews in days. Default: 36500 (≈100 years)."
                         StepperField {
-                            anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter
+                            anchors { left: parent.left; verticalCenter: parent.verticalCenter }
                             value: appConfig.maximumInterval; min: 1; max: 99999; unit: " days"
                             onValueChanged: { appConfig.maximumInterval = value; page.markDirty() }
                         }
@@ -829,7 +679,7 @@ Page {
                         label: "Leech Threshold"
                         tip:   "Lapses before a card is flagged as a leech.\n\nDefault: 8"
                         StepperField {
-                            anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter
+                            anchors { left: parent.left; verticalCenter: parent.verticalCenter }
                             value: appConfig.leechThreshold; min: 2; max: 99; unit: " lapses"
                             onValueChanged: { appConfig.leechThreshold = value; page.markDirty() }
                         }
@@ -840,7 +690,7 @@ Page {
                         label: "Day Offset"
                         tip:   "Seconds after midnight when the SRS day starts. 14400 = 4:00 AM.\n\nDefault: 14400"
                         StepperField {
-                            anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter
+                            anchors { left: parent.left; verticalCenter: parent.verticalCenter }
                             value: appConfig.dayOffset; min: 0; max: 86399; unit: " sec"
                             onValueChanged: { appConfig.dayOffset = value; page.markDirty() }
                         }
@@ -852,7 +702,7 @@ Page {
                         tip:     "Randomizes intervals slightly to avoid review clustering."
                         compact: true
                         ToggleSwitch {
-                            anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
+                            anchors { right: parent.right; verticalCenter: parent.verticalCenter }
                             checked: appConfig.enableFuzz
                             onToggled: (v) => { appConfig.enableFuzz = v; page.markDirty() }
                         }
@@ -874,30 +724,28 @@ Page {
 
                             background: Rectangle {
                                 radius: 6
-                                color: combo.pressed
-                                    ? Theme.surfacePress
-                                    : combo.hovered ? Theme.surfaceHover : Theme.surfaceSubtle
+                                color: combo.pressed ? Theme.surfacePress
+                                     : combo.hovered ? Theme.surfaceHover : Theme.surfaceSubtle
                                 border.width: 1
                                 border.color: combo.hovered
-                                    ? Qt.rgba(page.accentColor.r, page.accentColor.g, page.accentColor.b, 0.5)
+                                    ? Qt.rgba(Theme.accentColor.r, Theme.accentColor.g, Theme.accentColor.b, 0.5)
                                     : Theme.surfaceBorder
                                 Behavior on color        { ColorAnimation { duration: 100 } }
                                 Behavior on border.color { ColorAnimation { duration: 120 } }
                             }
 
                             contentItem: Text {
-                                text: combo.displayText
-                                font.pixelSize: Theme.fontSizeSmall
-                                color: page.textColor
+                                text:              combo.displayText
+                                font.pixelSize:    Theme.fontSizeSmall
+                                color:             Theme.textColor
                                 verticalAlignment: Text.AlignVCenter
-                                elide: Text.ElideRight
+                                elide:             Text.ElideRight
                                 leftPadding: 10; rightPadding: 24
                             }
 
                             indicator: Text {
-                                text: "▾"; font.pixelSize: 12; color: page.hintColor
-                                anchors.right: parent.right; anchors.rightMargin: 8
-                                anchors.verticalCenter: parent.verticalCenter
+                                text: "▾"; font.pixelSize: 12; color: Theme.hintColor
+                                anchors { right: parent.right; rightMargin: 8; verticalCenter: parent.verticalCenter }
                             }
 
                             popup: Popup {
@@ -910,28 +758,20 @@ Page {
                                 background: Rectangle {
                                     radius: 6
                                     color: Theme.cardBackground
-                                    border.width: 1; border.color: page.dividerColor
-
-                                    // MultiEffect replaces DropShadow from Qt5Compat.GraphicalEffects
+                                    border.width: 1; border.color: Theme.dividerColor
                                     layer.enabled: true
                                     layer.effect: MultiEffect {
-                                        shadowEnabled:     true
-                                        shadowColor:       "#60000000"
-                                        shadowBlur:        0.6
-                                        shadowVerticalOffset: 4
-                                        shadowHorizontalOffset: 0
+                                        shadowEnabled: true; shadowColor: "#60000000"
+                                        shadowBlur: 0.6; shadowVerticalOffset: 4
                                     }
                                 }
 
                                 contentItem: ListView {
                                     clip: true; interactive: false
                                     model: combo.delegateModel
-
                                     highlight: Rectangle {
                                         radius: 4
-                                        color: Qt.rgba(
-                                            page.accentColor.r, page.accentColor.g,
-                                            page.accentColor.b, 0.20)
+                                        color: Qt.rgba(Theme.accentColor.r, Theme.accentColor.g, Theme.accentColor.b, 0.20)
                                         Behavior on y { SmoothedAnimation { velocity: 200 } }
                                     }
                                     highlightFollowsCurrentItem: true
@@ -951,16 +791,14 @@ Page {
                                 contentItem: Row {
                                     spacing: 8; leftPadding: 6
                                     anchors.verticalCenter: parent.verticalCenter
-
                                     Text {
                                         text: index === combo.currentIndex ? "✓" : ""
-                                        font.pixelSize: Theme.fontSizeSmall; color: page.accentColor
+                                        font.pixelSize: Theme.fontSizeSmall; color: Theme.accentColor
                                         width: 14; verticalAlignment: Text.AlignVCenter
                                     }
                                     Text {
-                                        text: modelData
-                                        font.pixelSize: Theme.fontSizeSmall
-                                        color: index === combo.currentIndex ? page.accentColor : page.textColor
+                                        text: modelData; font.pixelSize: Theme.fontSizeSmall
+                                        color: index === combo.currentIndex ? Theme.accentColor : Theme.textColor
                                         verticalAlignment: Text.AlignVCenter
                                         Behavior on color { ColorAnimation { duration: 80 } }
                                     }
@@ -975,10 +813,10 @@ Page {
                     SettingRow {
                         label: "Version"
                         Text {
-                            anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
-                            text: appConfig.appVersion
+                            anchors { right: parent.right; verticalCenter: parent.verticalCenter }
+                            text:           appConfig.appVersion
                             font.pixelSize: Theme.fontSizeBody
-                            color: Qt.rgba(page.hintColor.r, page.hintColor.g, page.hintColor.b, 0.6)
+                            color: Qt.rgba(Theme.hintColor.r, Theme.hintColor.g, Theme.hintColor.b, 0.6)
                         }
                     }
                     RowDivider {}
@@ -987,35 +825,21 @@ Page {
                         label:    "Device ID"
                         subtitle: "Used for sync identification"
                         Text {
-                            anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
-                            text: appConfig.deviceId.toString(16).toUpperCase().substring(0, 8) + "…"
+                            anchors { right: parent.right; verticalCenter: parent.verticalCenter }
+                            text:           appConfig.deviceId.toString(16).toUpperCase().substring(0, 8) + "…"
                             font.pixelSize: Theme.fontSizeSmall; font.family: "monospace"
-                            color: Qt.rgba(page.hintColor.r, page.hintColor.g, page.hintColor.b, 0.5)
+                            color: Qt.rgba(Theme.hintColor.r, Theme.hintColor.g, Theme.hintColor.b, 0.5)
                         }
                     }
                     RowDivider {}
 
                     SettingRow {
-                        label:    qsTr("Reset to Defaults")
+                        label:    "Reset to Defaults"
                         subtitle: "Restore all settings to their original values"
 
-                        Component.onCompleted: {
-                            for (var i = 0; i < children.length; i++) {
-                                var c = children[i]
-                                if (c && c.children) {
-                                    for (var j = 0; j < c.children.length; j++) {
-                                        if (c.children[j] && c.children[j].text === qsTr("Reset to Defaults")) {
-                                            c.children[j].color = "#F87171"
-                                            break
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
                         Rectangle {
-                            anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
-                            width: rstLbl.implicitWidth + 20; height: 30; radius: 6
+                            anchors { right: parent.right; verticalCenter: parent.verticalCenter }
+                            width:  rstLbl.implicitWidth + 20; height: 30; radius: 6
                             color: rstMa.containsMouse
                                 ? Qt.rgba(0.97, 0.44, 0.44, 0.22)
                                 : Qt.rgba(0.97, 0.44, 0.44, 0.10)
@@ -1024,8 +848,7 @@ Page {
 
                             Text {
                                 id: rstLbl; anchors.centerIn: parent
-                                text: "Reset"
-                                font.pixelSize: Theme.fontSizeSmall; font.weight: Font.Medium
+                                text: "Reset"; font.pixelSize: Theme.fontSizeSmall; font.weight: Font.Medium
                                 color: "#F87171"
                             }
                             MouseArea {
@@ -1043,24 +866,22 @@ Page {
 
         // ── Apply / Discard bar ───────────────────────────────────────────────
         Rectangle {
-            id: applyBar
-            anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
+            anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
             height: page.dirty ? 56 : 0
             clip: true; color: Theme.cardBackground; z: 10
             Behavior on height { NumberAnimation { duration: 200; easing.type: Easing.OutQuad } }
 
-            Rectangle { anchors.top: parent.top; width: parent.width; height: 1; color: page.dividerColor }
+            Rectangle { anchors.top: parent.top; width: parent.width; height: 1; color: Theme.dividerColor }
 
             RowLayout {
-                anchors.fill: parent
-                anchors.leftMargin: 24; anchors.rightMargin: 24
+                anchors { fill: parent; leftMargin: 24; rightMargin: 24 }
                 spacing: 12
                 visible: page.dirty
 
                 Text {
-                    text: "Unsaved changes"
+                    text:           "Unsaved changes"
                     font.pixelSize: Theme.fontSizeSmall
-                    color: Qt.rgba(page.hintColor.r, page.hintColor.g, page.hintColor.b, 0.65)
+                    color: Qt.rgba(Theme.hintColor.r, Theme.hintColor.g, Theme.hintColor.b, 0.65)
                     Layout.fillWidth: true; Layout.alignment: Qt.AlignVCenter
                 }
 
@@ -1070,12 +891,10 @@ Page {
                     border.width: 1; border.color: Theme.surfaceBorder
                     Layout.alignment: Qt.AlignVCenter
                     Behavior on color { ColorAnimation { duration: 100 } }
-
                     Text {
-                        id: dscLbl; anchors.centerIn: parent
-                        text: "Discard"
+                        id: dscLbl; anchors.centerIn: parent; text: "Discard"
                         font.pixelSize: Theme.fontSizeSmall; font.weight: Font.Medium
-                        color: Qt.rgba(page.hintColor.r, page.hintColor.g, page.hintColor.b, 0.7)
+                        color: Qt.rgba(Theme.hintColor.r, Theme.hintColor.g, Theme.hintColor.b, 0.7)
                     }
                     MouseArea {
                         id: dscMa; anchors.fill: parent
@@ -1086,13 +905,11 @@ Page {
 
                 Rectangle {
                     width: aplLbl.implicitWidth + 24; height: 30; radius: 6
-                    color: aplMa.containsMouse ? Qt.lighter(page.accentColor, 1.15) : page.accentColor
+                    color: aplMa.containsMouse ? Qt.lighter(Theme.accentColor, 1.15) : Theme.accentColor
                     Layout.alignment: Qt.AlignVCenter
                     Behavior on color { ColorAnimation { duration: 100 } }
-
                     Text {
-                        id: aplLbl; anchors.centerIn: parent
-                        text: "Apply"
+                        id: aplLbl; anchors.centerIn: parent; text: "Apply"
                         font.pixelSize: Theme.fontSizeSmall; font.weight: Font.Medium
                         color: "white"
                     }
@@ -1106,18 +923,15 @@ Page {
         }
     }
 
-    // ── Reset confirmation dialog ─────────────────────────────────────────────
     Dialog {
         id: resetConfirmDialog
         title: "Reset to defaults?"
-        width: 320
-        anchors.centerIn: Overlay.overlay
-        modal: true
+        width: 320; anchors.centerIn: Overlay.overlay; modal: true
 
         Text {
             text: "All settings will be restored to their default values."
             wrapMode: Text.Wrap; width: 260
-            color: page.textColor; font.pixelSize: Theme.fontSizeBody
+            color: Theme.textColor; font.pixelSize: Theme.fontSizeBody
         }
         standardButtons: Dialog.Ok | Dialog.Cancel
         onAccepted: page.resetToDefaults()

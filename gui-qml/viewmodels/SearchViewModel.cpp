@@ -17,6 +17,7 @@ void SearchViewModel::initialize(SearchService *service,
     m_model = model;
     m_dict = dict;
     m_config = config;
+    qDebug() << "SearchViewModel initialized with SearchService and SearchResultModel.";
 
 }
 
@@ -32,6 +33,7 @@ SearchViewModel::SearchViewModel(QObject *parent)
 
 void SearchViewModel::setQuery(const QString &q)
 {
+    qDebug() << "SearchViewModel::setQuery called with:" << q;
     if (q == m_query) return;
     m_query = q;
     emit queryChanged();
@@ -56,6 +58,7 @@ void SearchViewModel::onDebounceTimeout()
 
 void SearchViewModel::search(const QString &text)
 {
+    qDebug() << "SearchViewModel::search called with:" << text;
     m_docCache.clear();
     m_model->resetWith({});
     m_service->query(text);

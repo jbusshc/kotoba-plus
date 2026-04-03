@@ -6,11 +6,11 @@ QtObject {
     property bool darkTheme: appConfig?.theme === "dark" ?? false
 
     // ── Base palette ──────────────────────────────────────────────────────────
-    property color background:    darkTheme ? "#121212" : "#f0f2f5"
-    property color textColor:     darkTheme ? "#ECEFF1" : "#212121"
-    property color hintColor:     darkTheme ? "#B0BEC5" : "#757575"
-    property color dividerColor:  darkTheme ? "#424242" : "#d0d4da"
-    property color cardBackground:darkTheme ? "#222222" : "#ffffff"
+    property color background:     darkTheme ? "#121212" : "#f0f2f5"
+    property color textColor:      darkTheme ? "#ECEFF1" : "#212121"
+    property color hintColor:      darkTheme ? "#B0BEC5" : "#757575"
+    property color dividerColor:   darkTheme ? "#424242" : "#d0d4da"
+    property color cardBackground: darkTheme ? "#222222" : "#ffffff"
 
     property color accentColor: {
         switch ((appConfig?.accentColor ?? "blue").toLowerCase()) {
@@ -52,6 +52,7 @@ QtObject {
     property color surfaceClear:    darkTheme ? Qt.rgba(1,1,1,0.10) : Qt.rgba(0,0,0,0.08)
     property color surfaceInput:    darkTheme ? Qt.rgba(1,1,1,0.05) : Qt.rgba(0,0,0,0.04)
 
+    // ── SRS state helpers ─────────────────────────────────────────────────────
     function srsStateColor(state, fallback) {
         switch (state ?? "") {
             case "New":        return "#4A9EFF"
@@ -61,6 +62,17 @@ QtObject {
             case "Suspended":  return "#9E9E9E"
             default:           return fallback !== undefined ? fallback : hintColor
         }
+    }
+
+    // Returns a semi-transparent background fill for state badges/chips.
+    // alpha: 0.15 for chips, 0.18 for larger badges.
+    function srsStateColorBg(state, alpha) {
+        const c = srsStateColor(state)
+        return Qt.rgba(
+            parseInt(c.slice(1,3),16)/255,
+            parseInt(c.slice(3,5),16)/255,
+            parseInt(c.slice(5,7),16)/255,
+            alpha ?? 0.15)
     }
 
     function srsStateIcon(state) {
@@ -74,6 +86,7 @@ QtObject {
         }
     }
 
+    // ── Typography ────────────────────────────────────────────────────────────
     property real   fontScale:  appConfig?.fontScale ?? 1.0
     property string fontFamily: (appConfig?.fontFamily ?? "default") === "default" ? "" : appConfig?.fontFamily ?? ""
 
