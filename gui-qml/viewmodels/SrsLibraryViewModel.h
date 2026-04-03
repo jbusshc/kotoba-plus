@@ -7,6 +7,10 @@
 #include <QTimer>
 #include <cstdint>
 
+#include <mutex>
+#include <atomic>
+
+
 extern "C" {
 #include "../../core/include/loader.h"
 #include "../../core/include/fsrs.h"
@@ -92,7 +96,8 @@ public:
     QHash<int, QByteArray> roleNames() const override;
     bool     canFetchMore(const QModelIndex &parent) const override;
     void     fetchMore(const QModelIndex &parent) override;
-
+    void applyRefresh(QVector<SrsCardItem> allCards,
+                      QVector<SrsCardItem> filtered);
 signals:
     void activeSearchChanged();
 
@@ -120,4 +125,7 @@ private:
     QTimer  m_debounceTimer;
 
     const int m_pageSize = 200;
+
+    std::atomic<bool> m_refreshPending{false};
+
 };

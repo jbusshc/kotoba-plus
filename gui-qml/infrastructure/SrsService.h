@@ -79,7 +79,7 @@ public:
     void updateConfig(const Configuration* config);
 
     void saveAsync(const char *path = nullptr);
-
+    std::mutex& deckMutex() { return m_deckMutex; }
 private:
 
     struct UndoEntry {

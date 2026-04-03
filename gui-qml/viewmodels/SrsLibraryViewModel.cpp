@@ -4,6 +4,7 @@
 #include "../app/Configuration.h"
 #include <QDebug>
 #include <QDateTime>
+#include <QThreadPool>
 
 extern "C" {
 #include "../../core/include/viewer.h"
@@ -261,9 +262,81 @@ void SrsLibraryViewModel::resetToInitialPage()
 
 void SrsLibraryViewModel::refresh()
 {
-    loadAllCards();
-    rebuildFiltered();
-    resetToInitialPage();
+    // Evitar que se acumulen refresh concurrentes
+    if (m_refreshPending.exchange(true)) return;
+
+    QThreadPool::globalInstance()->start([this]() {
+
+        // ── 1) Cargar todas las cartas (lectura concurrente) ─────────
+        QVector<SrsCardItem> allCards;
+        {
+            // dict es read-only → no necesita lock
+            // deck necesita mutex
+            std::lock_guard<std::mutex> lock(m_service->deckMutex());
+            // ... llenar allCards desde SrsService ...
+        }
+
+        // ── 2) Filtrado / búsqueda ─────────────────────────────────────
+        QVector<SrsCardItem> filtered;
+        {
+            const QString s = m_search.trimmed();
+            const bool hasSearch = !s.isEmpty();
+
+            QSet<uint32_t> resultIds;
+            if (hasSearch) {
+                // queryNonPagination ya toma su mutex interno
+                m_searchService->queryNonPagination(s);
+
+                std::lock_guard<std::mutex> lock(m_searchService->mutex());
+                const SearchContext *ctx = m_searchService->searchCtx();
+                for (uint32_t i = 0; i < ctx->results_left; ++i)
+                    resultIds.insert(ctx->results_buffer[i].p->doc_id);
+            }
+
+            for (const SrsCardItem &it : allCards) {
+                bool matchSearch = !hasSearch
+                    || resultIds.contains(it.id)
+                    || variantMatch(it, s);
+
+                bool matchFilter = true;
+                if      (m_filter == QLatin1String("New"))
+                    matchFilter = (it.state == QLatin1String("New"));
+                else if (m_filter == QLatin1String("Learning"))
+                    matchFilter = (it.state == QLatin1String("Learning") ||
+                                   it.state == QLatin1String("Relearning"));
+                else if (m_filter == QLatin1String("Review"))
+                    matchFilter = (it.state == QLatin1String("Review"));
+                else if (m_filter == QLatin1String("Suspended"))
+                    matchFilter = (it.state == QLatin1String("Suspended"));
+
+                if (matchSearch && matchFilter)
+                    filtered.append(it);
+            }
+        }
+
+        // ── 3) Aplicar al modelo en el main thread ───────────────────
+        QMetaObject::invokeMethod(this,
+            [this, allCards = std::move(allCards),
+                   filtered = std::move(filtered)]() mutable {
+                applyRefresh(std::move(allCards), std::move(filtered));
+            }, Qt::QueuedConnection);
+    });
+}
+
+
+void SrsLibraryViewModel::applyRefresh(QVector<SrsCardItem> allCards,
+                                       QVector<SrsCardItem> filtered)
+{
+    m_allCards  = std::move(allCards);
+    m_filtered  = std::move(filtered);
+    m_refreshPending = false;
+
+    beginResetModel();
+    m_visible.clear();
+    int to = qMin(m_pageSize, m_filtered.size());
+    for (int i = 0; i < to; ++i)
+        m_visible.append(m_filtered.at(i));
+    endResetModel();
 }
 
 void SrsLibraryViewModel::setFilter(const QString &filter)
