@@ -43,17 +43,48 @@ ApplicationWindow {
     }
 
     // ── Header ────────────────────────────────────────────────────────────────
-    header: Item {
-        width:  parent.width
+    header: Rectangle {
+        width:  parent ? parent.width : root.width
         height: tabBar.implicitHeight
+        color:  Theme.headerBarColor
+
+        Rectangle {
+            anchors.left:   parent.left
+            anchors.right:  parent.right
+            anchors.bottom: parent.bottom
+            height: 1
+            color:  Theme.dividerColor
+        }
 
         TabBar {
             id: tabBar
-            width:        parent.width - gearBtn.width
+            width: parent.width - gearBtn.width
             currentIndex: root.currentTab === 2 ? -1 : root.currentTab
+            background: Rectangle { color: "transparent" }
 
-            TabButton { text: "Dictionary"; onClicked: root.requestTabSwitch(0) }
-            TabButton { text: "SRS";        onClicked: root.requestTabSwitch(1) }
+            TabButton {
+                text: "Dictionary"
+                onClicked: root.requestTabSwitch(0)
+                contentItem: Text {
+                    text: parent.text
+                    color: parent.checked ? Theme.textColor : Theme.hintColor
+                    font.pixelSize: 16
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+            }
+
+            TabButton {
+                text: "SRS"
+                onClicked: root.requestTabSwitch(1)
+                contentItem: Text {
+                    text: parent.text
+                    color: parent.checked ? Theme.textColor : Theme.hintColor
+                    font.pixelSize: 16
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+            }
         }
 
         Item {

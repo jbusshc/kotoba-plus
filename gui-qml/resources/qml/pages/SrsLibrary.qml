@@ -81,7 +81,7 @@ Page {
 
                     BackButton {
                         onClicked: stack.pop()
-                        implicitWidth: Math.max(implicitWidth, Theme.minTapTarget)
+                        Layout.minimumWidth: Theme.minTapTarget
                     }
                     Item { Layout.fillWidth: true }
                 }

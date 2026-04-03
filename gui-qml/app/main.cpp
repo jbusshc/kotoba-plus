@@ -140,14 +140,14 @@ int main(int argc, char **argv)
     int result = app.exec();
 
     // ── Limpiar memoria ───────────────────────────────────────────────────
+    delete libVM;
+    delete srsVM;
+    delete detailsVM;
     delete searchVM;
     delete searchModel;
-    delete detailsVM;
-    delete srsVM;
-    delete libVM;
-    delete searchSvc;
-    delete srsSvc;
     delete controller;
+    delete srsSvc;
+    delete searchSvc;
 
     return result;
 }

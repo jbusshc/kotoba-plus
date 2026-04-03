@@ -8,9 +8,11 @@ QtObject {
     // ── Base palette ──────────────────────────────────────────────────────────
     property color background:     darkTheme ? "#121212" : "#f0f2f5"
     property color textColor:      darkTheme ? "#ECEFF1" : "#212121"
-    property color hintColor:      darkTheme ? "#B0BEC5" : "#757575"
+    property color hintColor:      darkTheme ? "#B0BEC5" : "#424242"
     property color dividerColor:   darkTheme ? "#424242" : "#d0d4da"
     property color cardBackground: darkTheme ? "#222222" : "#ffffff"
+    property color borderColor: darkTheme ? "#888888" : "#444444"
+    property color headerBarColor: darkTheme ? "#1E1E1E" : "#ffffff"
 
     property color accentColor: {
         switch ((appConfig?.accentColor ?? "blue").toLowerCase()) {
