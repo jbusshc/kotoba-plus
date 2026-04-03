@@ -63,7 +63,9 @@ signals:
 
 private slots:
     void onDebounceTimeout();
-
+    void onSearchDone();
+    void onPageReady();
+    
 private:
     void fillFromContext(bool append = false);
 

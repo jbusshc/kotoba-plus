@@ -6,8 +6,6 @@
 #include <QFile>
 #include <QDebug>
 #include <QQuickStyle>
-#include <QtConcurrent/QtConcurrent>
-#include <QFuture>
 
 #include "../infrastructure/DictionaryRepository.h"
 #include "../infrastructure/SearchService.h"
@@ -66,14 +64,14 @@ int main(int argc, char **argv)
     std::string srsProfilePath;
 
     // ── Hilo concurrente para carga pesada ─────────────────────────────────────
-    QFuture<void> future = QtConcurrent::run([=, &configWrapper, &srsProfilePath]() {
+    QThreadPool::globalInstance()->start([=, &configWrapper, &srsProfilePath]() {
 
         // ── 1) Paths y configuración ─────────────────────────────────────────
         AppPaths paths = AppPaths::resolve();
 
-#ifdef Q_OS_ANDROID
+    #ifdef Q_OS_ANDROID
         AppPaths::extractAssetsIfNeeded(paths.dataDir);
-#endif
+    #endif
 
         loadConfiguration(configWrapper.m_config, paths.configPath);
         configWrapper.m_configPath = paths.configPath;
@@ -117,7 +115,7 @@ int main(int argc, char **argv)
             controller->setStatus("Loading SRS profile…");
         }, Qt::QueuedConnection);
         srsSvc->initialize(static_cast<uint32_t>(dict->entry_count),
-                           &configWrapper.m_config);
+                        &configWrapper.m_config);
         srsSvc->load(srsProfilePath.c_str());
 
         // ── 4) Inicializar ViewModels en hilo principal ────────────────
@@ -130,6 +128,7 @@ int main(int argc, char **argv)
             configWrapper.setServices(searchSvc, srsSvc);
             controller->notifyReady();  // dispara transición QML
         }, Qt::QueuedConnection);
+
     });
 
     // ── Persistir cambios al cerrar ─────────────────────────────────────────

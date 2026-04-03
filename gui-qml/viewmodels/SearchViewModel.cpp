@@ -14,11 +14,15 @@ void SearchViewModel::initialize(SearchService *service,
                                  Configuration* config)
 {
     m_service = service;
-    m_model = model;
-    m_dict = dict;
-    m_config = config;
-    qDebug() << "SearchViewModel initialized with SearchService and SearchResultModel.";
+    m_model   = model;
+    m_dict    = dict;
+    m_config  = config;
 
+    // Conectar resultados async del servicio
+    connect(m_service, &SearchService::searchDone,
+            this,      &SearchViewModel::onSearchDone);
+    connect(m_service, &SearchService::pageReady,
+            this,      &SearchViewModel::onPageReady);
 }
 
 SearchViewModel::SearchViewModel(QObject *parent)
@@ -51,7 +55,9 @@ void SearchViewModel::onDebounceTimeout()
         emit resultsChanged();
         return;
     }
-    search(m_activeQuery);
+
+    // Lanzar query async — la UI no se bloquea
+    m_service->queryAsync(m_activeQuery);
 }
 
 // ── Búsqueda ─────────────────────────────────────────────────────────────────
@@ -69,9 +75,7 @@ void SearchViewModel::search(const QString &text)
 void SearchViewModel::needMore()
 {
     if (!m_service) return;
-    m_service->queryNextPage();
-    fillFromContext(true);
-    emit resultsChanged();
+    m_service->queryNextPage(); // ahora es async, emite pageReady()
 }
 
 // ── fillFromContext ───────────────────────────────────────────────────────────
@@ -206,4 +210,19 @@ void SearchViewModel::openEntryAt(int index)
     details["senses"] = sensesList;
 
     emit entrySelected(details);
+}
+
+void SearchViewModel::onSearchDone()
+{
+    // Corremos en el main thread, el ctx ya está listo
+    m_docCache.clear();
+    m_model->resetWith({});
+    fillFromContext(false);
+    emit resultsChanged();
+}
+
+void SearchViewModel::onPageReady()
+{
+    fillFromContext(true);
+    emit resultsChanged();
 }
