@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="108" height="108" viewBox="0 0 108 108">
+  <defs>
+    <clipPath id="android-mask">
+      <rect width="108" height="108" rx="18" ry="18" />
+    </clipPath>
+  </defs>
+
+  <g clip-path="url(#android-mask)">
+    <rect width="100%" height="100%" fill="#212121" />
+
+    <g transform="translate(54, 54) scale(0.65) translate(-100, -100)">
+      
+      <g transform="translate(18, 22) scale(4.25)">
+        <path fill="#F1F5F9" d="M9.925 9.032c0-1.271.93-2.294 2.325-2.294c1.333 0 2.325.868 2.325 2.294v6.697l7.627-8.124c.342-.372.93-.868 1.799-.868c1.178 0 2.295.899 2.295 2.232c0 .806-.496 1.457-1.52 2.48l-5.861 5.767l7.162 7.473c.744.744 1.303 1.426 1.303 2.357c0 1.457-1.146 2.139-2.418 2.139c-.898 0-1.488-.526-2.357-1.457l-8.031-8.682v7.906c0 1.21-.93 2.232-2.325 2.232c-1.333 0-2.325-.867-2.325-2.232V9.032z"/>
+      </g>
+      
+      <g transform="translate(-10, 0)">
+        <path stroke="#00BAFF" stroke-width="15" stroke-linecap="round" d="M138 99 H170"/>
+        <path stroke="#00BAFF" stroke-width="15" stroke-linecap="round" d="M154 83 V115"/>
+      </g>
+      
+    </g>
+  </g>
+</svg>

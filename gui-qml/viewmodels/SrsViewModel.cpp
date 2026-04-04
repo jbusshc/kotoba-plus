@@ -182,3 +182,9 @@ void SrsViewModel::updateStats()
 {
     emit statsChanged();
 }
+
+// refresh when app is active again (puede haber cambiado la fecha mientras estaba en background)
+void SrsViewModel::refresh()
+{
+    loadNext();
+}

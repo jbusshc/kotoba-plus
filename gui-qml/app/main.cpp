@@ -135,11 +135,52 @@ int main(int argc, char **argv)
 
     });
 
+    // ── Ciclo de vida Android ─────────────────────────────────────────────────
+    #ifdef Q_OS_ANDROID
+    QObject::connect(&app, &QGuiApplication::applicationStateChanged,
+        [&](Qt::ApplicationState state) {
+
+        switch (state) {
+
+        case Qt::ApplicationSuspended:
+            // App en background profundo — Android puede matarla en cualquier momento.
+            // Guardamos inmediatamente sin esperar al aboutToQuit.
+            srsSvc->save(srsProfilePath.c_str());
+            saveConfiguration(configWrapper.m_config, configWrapper.m_configPath);
+            break;
+
+        case Qt::ApplicationHidden:
+            // Minimizando — notificar a QML para que congele la UI.
+            QMetaObject::invokeMethod(controller, [=]() {
+                controller->setAppActive(false);
+            }, Qt::QueuedConnection);
+            break;
+
+        case Qt::ApplicationInactive:
+            // Foco perdido pero aún visible (notificación encima, etc.).
+            // No hacemos nada agresivo.
+            break;
+
+        case Qt::ApplicationActive:
+            // Volviendo al frente — reactivar UI y refrescar contadores SRS
+            // (puede haber cambiado la fecha mientras estaba en background).
+            QMetaObject::invokeMethod(controller, [=]() {
+                controller->setAppActive(true);
+            }, Qt::QueuedConnection);
+            QMetaObject::invokeMethod(qApp, [=]() {
+                srsVM->refresh();
+            }, Qt::QueuedConnection);
+            break;
+        }
+    });
+    #endif
+
     // ── Persistir cambios al cerrar ─────────────────────────────────────────
     QObject::connect(&app, &QCoreApplication::aboutToQuit, [&]() {
         srsSvc->save(srsProfilePath.c_str());
         saveConfiguration(configWrapper.m_config, configWrapper.m_configPath);
     });
+
     // ── Ejecutar app ───────────────────────────────────────────────────────
     int result = app.exec();
 

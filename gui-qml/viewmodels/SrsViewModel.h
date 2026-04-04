@@ -75,6 +75,8 @@ public:
     int         currentEntryId()   const;
     QVariantMap currentEntryData() const;
 
+    void refresh();
+
 signals:
     void showQuestion(QString word);
     void showAnswer(QString meaning);

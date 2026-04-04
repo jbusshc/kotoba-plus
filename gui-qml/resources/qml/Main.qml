@@ -130,13 +130,35 @@ ApplicationWindow {
                      ? splashPageComponent
                      : dictionaryPageComponent
 
-        // 🔴 Desactivar TODAS las animaciones
+        // Desactivar TODAS las animaciones
         pushEnter: null
         pushExit: null
         popEnter: null
         popExit: null
         replaceEnter: null
         replaceExit: null
+    }
+
+    // ── Overlay anti-lag para Android ─────────────────────────────────────────
+    // Tapa el primer frame de recomposición al volver del background,
+    // evitando el parpadeo/lag visual al maximizar la app.
+    Rectangle {
+        anchors.fill: parent
+        color:   Theme.background
+        z:       9999
+        opacity: _resumeOverlayTimer.running ? 1.0 : 0.0
+        visible: opacity > 0
+
+        Behavior on opacity {
+            NumberAnimation { duration: 150; easing.type: Easing.OutQuad }
+        }
+
+        // Pequeño timer: da tiempo al renderer para recomponer antes de
+        // desvanecer el overlay. 100 ms es suficiente en dispositivos lentos.
+        Timer {
+            id: _resumeOverlayTimer
+            interval: 100
+        }
     }
 
     Component { id: splashPageComponent;     SplashPage     {} }
@@ -146,10 +168,16 @@ ApplicationWindow {
 
     Connections {
         target: appController
+
         function onAppReady() {
-            // 🔴 sin transición
             stack.replace(dictionaryPageComponent)
             root.currentTab = 0
+        }
+
+        // Al volver del background: activar overlay brevemente para tapar
+        // el frame "frío" que Qt renderiza al reanudar la ventana.
+        function onAppActiveChanged(active) {
+            if (active) _resumeOverlayTimer.restart()
         }
     }
 
