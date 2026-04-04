@@ -25,6 +25,10 @@
 
 int main(int argc, char **argv)
 {
+    #ifdef Q_OS_ANDROID
+        qputenv("QSG_RENDER_LOOP", "basic");
+        QCoreApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
+    #endif
     QGuiApplication app(argc, argv);
     app.setApplicationName("KotobaPlus");
     app.setOrganizationName("KotobaPlus");

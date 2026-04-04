@@ -18,7 +18,6 @@ ApplicationWindow {
     property int currentTab:  0
     property int pendingTab:  -1
 
-    // ── Helper: push a page onto the shared StackView ─────────────────────────
     function navigate(url, props) {
         stack.push(url, props ?? {})
     }
@@ -42,7 +41,6 @@ ApplicationWindow {
         }
     }
 
-    // ── Header ────────────────────────────────────────────────────────────────
     header: Rectangle {
         width:  parent ? parent.width : root.width
         height: tabBar.implicitHeight
@@ -100,7 +98,7 @@ ApplicationWindow {
 
             Text {
                 anchors.centerIn: parent
-                text:           "⚙"
+                text: "⚙"
                 font.pixelSize: 17
                 color: root.currentTab === 2 ? Theme.textColor : Theme.hintColor
             }
@@ -114,22 +112,31 @@ ApplicationWindow {
             }
 
             MouseArea {
-                id:           gearMouse
+                id: gearMouse
                 anchors.fill: parent
                 hoverEnabled: true
-                cursorShape:  Qt.PointingHandCursor
-                onClicked:    root.requestTabSwitch(2)
+                cursorShape: Qt.PointingHandCursor
+                onClicked: root.requestTabSwitch(2)
             }
         }
     }
 
-    // ── Stack ─────────────────────────────────────────────────────────────────
+    // ── Stack SIN animaciones ────────────────────────────────────────────────
     StackView {
         id: stack
         anchors.fill: parent
-        initialItem:  Qt.platform.os === "android"
-                      ? splashPageComponent
-                      : dictionaryPageComponent
+
+        initialItem: Qt.platform.os === "android"
+                     ? splashPageComponent
+                     : dictionaryPageComponent
+
+        // 🔴 Desactivar TODAS las animaciones
+        pushEnter: null
+        pushExit: null
+        popEnter: null
+        popExit: null
+        replaceEnter: null
+        replaceExit: null
     }
 
     Component { id: splashPageComponent;     SplashPage     {} }
@@ -140,24 +147,24 @@ ApplicationWindow {
     Connections {
         target: appController
         function onAppReady() {
-            stack.replace(dictionaryPageComponent, {}, StackView.Transition)
+            // 🔴 sin transición
+            stack.replace(dictionaryPageComponent)
             root.currentTab = 0
         }
     }
 
-    // ── Unsaved-settings dialog ───────────────────────────────────────────────
     Dialog {
         id: unsavedDialog
-        title:  "Unsaved changes"
-        width:  340
+        title: "Unsaved changes"
+        width: 340
         anchors.centerIn: Overlay.overlay
-        modal:  true
+        modal: true
 
         Text {
-            text:     "You have unsaved settings changes.\nDiscard them and leave?"
+            text: "You have unsaved settings changes.\nDiscard them and leave?"
             wrapMode: Text.Wrap
-            width:    296
-            color:    Theme.textColor
+            width: 296
+            color: Theme.textColor
         }
 
         footer: DialogButtonBox {
@@ -174,10 +181,14 @@ ApplicationWindow {
             }
         }
 
-        onRejected: { root.pendingTab = -1; root.currentTab = 2 }
+        onRejected: {
+            root.pendingTab = -1
+            root.currentTab = 2
+        }
+
         onAccepted: {
             if (appConfig) appConfig.reloadFromDisk()
-            const target  = root.pendingTab
+            const target = root.pendingTab
             root.pendingTab = -1
             root.switchTab(target)
         }

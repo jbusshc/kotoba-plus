@@ -4,6 +4,9 @@
 #include <QStringList>
 #include "../app/Configuration.h"
 
+#include <QTimer>
+#include <QDebug>
+
 #include "../../core/include/viewer.h"
 #include "../../core/include/types.h"
 #include "../../core/include/kana.h"
@@ -28,9 +31,7 @@ void SearchViewModel::initialize(SearchService *service,
 SearchViewModel::SearchViewModel(QObject *parent)
     : QObject(parent), m_service(nullptr), m_model(nullptr), m_dict(nullptr), m_config(nullptr)
 {
-    m_debounceTimer.setSingleShot(true);
-    connect(&m_debounceTimer, &QTimer::timeout,
-            this, &SearchViewModel::onDebounceTimeout);
+    // Constructor limpio, sin timer
 }
 
 // ── Debounce ─────────────────────────────────────────────────────────────────
@@ -39,9 +40,24 @@ void SearchViewModel::setQuery(const QString &q)
 {
     qDebug() << "SearchViewModel::setQuery called with:" << q;
     if (q == m_query) return;
+
     m_query = q;
     emit queryChanged();
-    m_debounceTimer.start(m_config ? m_config->searchDelayMs : 150);
+
+    // Debounce usando QTimer::singleShot
+    static int lastDebounceId = 0;
+    ++lastDebounceId;
+    int thisDebounceId = lastDebounceId;
+
+    int delayMs = m_config ? m_config->searchDelayMs : 150;
+
+    QTimer::singleShot(delayMs, this, [this, thisDebounceId]() {
+        // Solo ejecutar si no hubo otro setQuery más reciente
+        if (thisDebounceId != lastDebounceId)
+            return;
+
+        this->onDebounceTimeout();
+    });
 }
 
 void SearchViewModel::onDebounceTimeout()
@@ -51,13 +67,13 @@ void SearchViewModel::onDebounceTimeout()
 
     if (m_activeQuery.isEmpty()) {
         m_docCache.clear();
-        m_model->resetWith({});
+        if (m_model) m_model->resetWith({});
         emit resultsChanged();
         return;
     }
 
-    // Lanzar query async — la UI no se bloquea
-    m_service->queryAsync(m_activeQuery);
+    // Lanzar query async para no bloquear la UI
+    if (m_service) m_service->queryAsync(m_activeQuery);
 }
 
 // ── Búsqueda ─────────────────────────────────────────────────────────────────
@@ -66,8 +82,8 @@ void SearchViewModel::search(const QString &text)
 {
     qDebug() << "SearchViewModel::search called with:" << text;
     m_docCache.clear();
-    m_model->resetWith({});
-    m_service->query(text);
+    if (m_model) m_model->resetWith({});
+    if (m_service) m_service->query(text);
     fillFromContext(false);
     emit resultsChanged();
 }
@@ -82,6 +98,7 @@ void SearchViewModel::needMore()
 
 void SearchViewModel::fillFromContext(bool append)
 {
+    if (!m_service) return;
     const SearchContext *ctx = m_service->searchCtx();
     if (!ctx) return;
 
@@ -152,17 +169,19 @@ void SearchViewModel::fillFromContext(bool append)
         m_docCache.push_back(doc);
     }
 
+    if (!m_model) return;
+
     if (append)
         m_model->append(rows);
     else
         m_model->resetWith(rows);
 }
 
-
 QString SearchViewModel::highlightField(const QString &field) const
 {
     if (m_activeQuery.isEmpty() || field.isEmpty())
         return field;
+    if (!m_service) return field;
     return m_service->highlightField(field);
 }
 
@@ -212,11 +231,12 @@ void SearchViewModel::openEntryAt(int index)
     emit entrySelected(details);
 }
 
+// ── Slots async ─────────────────────────────────────────────────────────────
+
 void SearchViewModel::onSearchDone()
 {
-    // Corremos en el main thread, el ctx ya está listo
     m_docCache.clear();
-    m_model->resetWith({});
+    if (m_model) m_model->resetWith({});
     fillFromContext(false);
     emit resultsChanged();
 }

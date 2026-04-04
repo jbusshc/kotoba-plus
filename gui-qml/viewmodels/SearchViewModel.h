@@ -3,7 +3,6 @@
 #include <QVector>
 #include <QVariantMap>
 #include <QString>
-#include <QTimer>
 
 extern "C" {
 #include "../../core/include/loader.h"
@@ -50,7 +49,7 @@ public:
     // Retorna el texto original (plain) si no hay match o si activeQuery está vacío.
     Q_INVOKABLE QString highlightField(const QString &field) const;
 
-    int     resultCount() const { return m_model->rowCount(); }
+    int     resultCount() const { return m_model ? m_model->rowCount() : 0; }
     QString query()       const { return m_query; }
     QString activeQuery() const { return m_activeQuery; }
     void    setQuery(const QString &q);
@@ -69,14 +68,13 @@ private slots:
 private:
     void fillFromContext(bool append = false);
 
-    SearchService     *m_service;
-    SearchResultModel *m_model;
-    kotoba_dict       *m_dict;
-    Configuration     *m_config;
+    SearchService     *m_service    = nullptr;
+    SearchResultModel *m_model      = nullptr;
+    kotoba_dict       *m_dict       = nullptr;
+    Configuration     *m_config     = nullptr;
 
     QVector<uint32_t>  m_docCache;
 
     QString  m_query;        // texto en el campo, actualizado en cada keystroke
     QString  m_activeQuery;  // query con la que se ejecutó la última búsqueda real
-    QTimer   m_debounceTimer;
 };
