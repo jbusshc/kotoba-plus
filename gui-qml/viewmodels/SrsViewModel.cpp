@@ -186,5 +186,6 @@ void SrsViewModel::updateStats()
 // refresh when app is active again (puede haber cambiado la fecha mientras estaba en background)
 void SrsViewModel::refresh()
 {
+    if (!m_service) return;
     loadNext();
 }

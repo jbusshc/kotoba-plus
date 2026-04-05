@@ -61,6 +61,7 @@ endif()
 
 # ── ANDROID
 if(ANDROID)
+    add_definitions(-DQT_ANDROID_NO_SURFACEVIEW)
     set_target_properties(kotoba_qml PROPERTIES
         QT_ANDROID_EXTRA_FILES "${KOTOBAPOS_ASSETS_DIR}"
         QT_ANDROID_PACKAGE_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/android
