@@ -31,7 +31,8 @@ Page {
         // ── Search bar ────────────────────────────────────────────────────────
         Rectangle {
             Layout.fillWidth: true
-            height: 56
+            // Escala con la fuente en vez de ser fijo en 56
+            height: Math.max(Theme.fontSizeBase * 3.5, 48)
             color: Theme.cardBackground
 
             Rectangle {
@@ -66,7 +67,7 @@ Page {
                 }
 
                 Rectangle {
-                    width: 20; height: 20; radius: 10
+                    width: Theme.fontSizeBase * 1.3; height: Theme.fontSizeBase * 1.3; radius: width / 2
                     color:   Theme.surfaceClear
                     visible: searchField.text.length > 0
 
@@ -99,15 +100,16 @@ Page {
                 id: del
                 width: listView.width
 
-                readonly property bool hasSubline: variants.length > 0 || readings.length > 0
-                height: hasSubline ? 72 : 56
-
                 readonly property bool doHl: appConfig.highlightMatches
                                           && searchVM
                                           && searchVM.activeQuery.length > 0
 
                 property bool hovered: false
                 property bool pressed: false
+
+                // Altura dinámica: el contenido manda, con un mínimo razonable.
+                // Así funciona con cualquier fontScale sin truncar ni desbordarse.
+                height: contentCol.implicitHeight + 20
 
                 // ── Background ────────────────────────────────────────────
                 Rectangle {
@@ -120,8 +122,11 @@ Page {
 
                 // ── Content ───────────────────────────────────────────────
                 RowLayout {
-                    anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter
-                              leftMargin: 16; rightMargin: 16 }
+                    anchors {
+                        left: parent.left; right: parent.right
+                        verticalCenter: parent.verticalCenter
+                        leftMargin: 16; rightMargin: 16
+                    }
                     spacing: 12
 
                     Rectangle {
@@ -139,13 +144,13 @@ Page {
                         spacing: 2
 
                         Text {
-                            width:            parent.width
-                            textFormat:       Text.RichText
-                            font.pixelSize:   Theme.fontSizeItem
-                            font.weight:      Font.Medium
-                            color:            Theme.textColor
-                            elide:            Text.ElideRight
-                            maximumLineCount: 1
+                            width:      parent.width
+                            textFormat: Text.RichText
+                            font.pixelSize: Theme.fontSizeItem
+                            font.weight:    Font.Medium
+                            color:          Theme.textColor
+                            wrapMode:       Text.NoWrap
+                            elide:          Text.ElideRight
                             text: {
                                 const hw = page._hl(headword, del.doHl)
                                 if (variants.length === 0) return hw
@@ -156,13 +161,13 @@ Page {
                         }
 
                         Text {
-                            visible:          readings.length > 0
-                            width:            parent.width
-                            textFormat:       Text.RichText
-                            font.pixelSize:   Theme.fontSizeSmall
+                            visible:    readings.length > 0
+                            width:      parent.width
+                            textFormat: Text.RichText
+                            font.pixelSize: Theme.fontSizeSmall
                             color: Qt.rgba(Theme.hintColor.r, Theme.hintColor.g, Theme.hintColor.b, 0.6)
-                            elide:            Text.ElideRight
-                            maximumLineCount: 1
+                            wrapMode: Text.NoWrap
+                            elide:    Text.ElideRight
                             text: {
                                 if (!readings || readings.length === 0) return ""
                                 const sep   = page._dotSep(0.35)
@@ -172,12 +177,12 @@ Page {
                         }
 
                         Text {
-                            width:            parent.width
-                            textFormat:       Text.RichText
-                            font.pixelSize:   Theme.fontSizeSmall
+                            width:      parent.width
+                            textFormat: Text.RichText
+                            font.pixelSize: Theme.fontSizeSmall
                             color: Qt.rgba(Theme.hintColor.r, Theme.hintColor.g, Theme.hintColor.b, 0.8)
-                            elide:            Text.ElideRight
-                            maximumLineCount: 1
+                            wrapMode: Text.NoWrap
+                            elide:    Text.ElideRight
                             text: del.doHl ? page._hl(gloss, true) : gloss
                         }
                     }
@@ -196,7 +201,6 @@ Page {
                     height: 1; color: Theme.dividerColor; opacity: 0.5
                 }
 
-                // ── Single MouseArea — no competing TapHandlers ────────────
                 MouseArea {
                     anchors.fill:  parent
                     hoverEnabled:  true

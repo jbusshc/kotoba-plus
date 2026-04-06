@@ -13,12 +13,12 @@ Page {
 
     background: Rectangle { color: Theme.background }
 
-    // ── Layout constants ──────────────────────────────────────────────────────
-    readonly property int rowH:  56
-    readonly property int ctrlH: 32
-    readonly property int ctrlW: 220
+    // ── Layout constants — escalan con fontScale vía Theme.fontSizeBase ────────
+    readonly property int rowH:  Math.max(Theme.fontSizeBase * 3.5, 48)
+    readonly property int ctrlH: Math.max(Theme.fontSizeBase * 2.0, 28)
+    readonly property int ctrlW: Math.max(Theme.fontSizeBase * 13,  200)
     readonly property int unitW: 52
-    readonly property int secGap: 24
+    readonly property int secGap: Math.max(Theme.fontSizeBase * 1.5, 20)
 
     // ── Dirty detection ───────────────────────────────────────────────────────
     property bool ready:    false
@@ -167,7 +167,7 @@ Page {
     component SectionHeader: Item {
         property string title: ""
         Layout.fillWidth: true
-        implicitHeight:   44
+        implicitHeight:   Math.max(Theme.fontSizeBase * 2.8, 40)
 
         Text {
             anchors { left: parent.left; bottom: parent.bottom; bottomMargin: 6 }
@@ -251,8 +251,8 @@ Page {
         property bool   pillSelected: false
         signal pillClicked()
 
-        implicitWidth:  pillTxt.implicitWidth + 20
-        implicitHeight: 30
+        implicitWidth:  pillTxt.implicitWidth + Theme.fontSizeSmall * 1.3
+        implicitHeight: Math.max(Theme.fontSizeSmall * 2.1, 26)
         radius: 6
         color: pillSelected
             ? Qt.rgba(Theme.accentColor.r, Theme.accentColor.g, Theme.accentColor.b, 0.20)

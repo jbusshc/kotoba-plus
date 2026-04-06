@@ -91,8 +91,8 @@ Page {
             // Card-type badge — visual distintivo de Recognition vs Recall
             Rectangle {
                 visible: srsVM && srsVM.hasCard
-                height: 26
-                width: typeBadgeTxt.implicitWidth + 18
+                implicitHeight: Math.max(Theme.fontSizeXSmall * 2.0, 22)
+                implicitWidth:  typeBadgeTxt.implicitWidth + Theme.fontSizeXSmall * 1.2
                 radius: 5
                 color: {
                     const t = srsVM ? srsVM.currentCardType : "Recognition"
@@ -237,7 +237,7 @@ Page {
         Item {
             id: actionBar
             anchors { bottom: parent.bottom; left: parent.left; right: parent.right }
-            height: Theme.minTapTarget + 20
+            height: Math.max(Theme.minTapTarget + Theme.fontSizeBase, 56)
 
             Rectangle {
                 anchors.fill: parent

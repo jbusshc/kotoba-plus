@@ -15,15 +15,14 @@ Item {
 
     property string activeQuery:      ""
     property bool   highlightEnabled: false
-    property var    highlightFunc     // function(text) → html string
+    property var    highlightFunc
 
     readonly property bool doHighlight: highlightEnabled && activeQuery.length > 0
 
     signal openDetails(int entryId)
 
-    readonly property bool hasReadings: readings.length > 0
-
-    height: hasReadings ? 72 : 56
+    // Altura dinámica: el contenido manda
+    height: contentCol.implicitHeight + 20
 
     property bool hovered: false
     property bool pressed: false
@@ -51,7 +50,7 @@ Item {
     }
 
     function _readingsText() {
-        if (!hasReadings) return ""
+        if (!readings || readings.length === 0) return ""
         const sep   = _dotSep(0.35)
         const parts = readings.split("・").map(r => _hl(r))
         return parts.join(sep)
@@ -73,7 +72,11 @@ Item {
 
     // ── Content ───────────────────────────────────────────────────────────────
     RowLayout {
-        anchors { fill: parent; leftMargin: 16; rightMargin: 12 }
+        anchors {
+            left: parent.left; right: parent.right
+            verticalCenter: parent.verticalCenter
+            leftMargin: 16; rightMargin: 12
+        }
         spacing: 12
 
         // Hover accent bar
@@ -90,50 +93,54 @@ Item {
 
         // Text column
         Column {
+            id: contentCol
             Layout.fillWidth: true
             Layout.alignment: Qt.AlignVCenter
             spacing: 2
 
             Text {
-                width:            parent.width
-                textFormat:       Text.RichText
-                text:             root._wordText()
-                font.pixelSize:   Theme.fontSizeItem
-                font.weight:      Font.Medium
-                color:            Theme.textColor
-                elide:            Text.ElideRight
-                maximumLineCount: 1
+                width:          parent.width
+                textFormat:     Text.RichText
+                text:           root._wordText()
+                font.pixelSize: Theme.fontSizeItem
+                font.weight:    Font.Medium
+                color:          Theme.textColor
+                wrapMode:       Text.NoWrap
+                elide:          Text.ElideRight
             }
 
             Text {
-                visible:          root.hasReadings
-                width:            parent.width
-                textFormat:       Text.RichText
-                text:             root._readingsText()
-                font.pixelSize:   Theme.fontSizeXSmall
+                visible:        readings.length > 0
+                width:          parent.width
+                textFormat:     Text.RichText
+                text:           root._readingsText()
+                font.pixelSize: Theme.fontSizeXSmall
                 color: Qt.rgba(Theme.hintColor.r, Theme.hintColor.g, Theme.hintColor.b, 0.6)
-                elide:            Text.ElideRight
-                maximumLineCount: 1
+                wrapMode:       Text.NoWrap
+                elide:          Text.ElideRight
             }
 
             Text {
-                width:            parent.width
-                textFormat:       Text.RichText
-                text:             root._hl(meaning)
-                font.pixelSize:   Theme.fontSizeSmall
+                width:          parent.width
+                textFormat:     Text.RichText
+                text:           root._hl(meaning)
+                font.pixelSize: Theme.fontSizeSmall
                 color: Qt.rgba(Theme.hintColor.r, Theme.hintColor.g, Theme.hintColor.b, 0.8)
-                elide:            Text.ElideRight
-                maximumLineCount: 1
+                wrapMode:       Text.NoWrap
+                elide:          Text.ElideRight
             }
         }
 
-        // State chip
+        // State chip — tamaño proporcional a la fuente
         Rectangle {
             Layout.alignment: Qt.AlignVCenter
-            width: 76; height: 22; radius: 4
+            implicitWidth:  stateChipTxt.implicitWidth + Theme.fontSizeSmall
+            implicitHeight: Theme.fontSizeSmall * 1.8
+            radius: 4
             color: Theme.srsStateColorBg(cardState, 0.15)
 
             Text {
+                id: stateChipTxt
                 anchors.centerIn: parent
                 text:           cardState === "Relearning" ? "Relearn" : cardState
                 font.pixelSize: Theme.fontSizeXSmall
@@ -142,10 +149,12 @@ Item {
             }
         }
 
-        // Details button
+        // Details button — tamaño proporcional
         Rectangle {
             Layout.alignment: Qt.AlignVCenter
-            width: 58; height: 28; radius: 6
+            implicitWidth:  detailsTxt.implicitWidth + Theme.fontSizeSmall * 1.2
+            implicitHeight: Theme.fontSizeSmall * 2.0
+            radius: 6
             color: detailsMa.pressed
                 ? Theme.surfacePress
                 : detailsMa.containsMouse ? Theme.surfaceHover : Theme.surfaceSubtle
@@ -153,6 +162,7 @@ Item {
             Behavior on color { ColorAnimation { duration: 80 } }
 
             Text {
+                id: detailsTxt
                 anchors.centerIn: parent
                 text:           "Details"
                 font.pixelSize: Theme.fontSizeXSmall

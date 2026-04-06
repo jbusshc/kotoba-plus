@@ -52,8 +52,8 @@ Page {
             // ── Recognition badge ─────────────────────────────────────────────
             Rectangle {
                 id: recognitionBadge
-                implicitWidth:  recRow.implicitWidth + 24
-                implicitHeight: 34
+                implicitWidth:  recRow.implicitWidth + Theme.fontSizeSmall * 1.5
+                implicitHeight: Math.max(Theme.fontSizeSmall * 2.4, 28)
                 radius: 6
 
                 color: page.inSrsRecognition
@@ -99,8 +99,8 @@ Page {
             // ── Recall badge ──────────────────────────────────────────────────
             Rectangle {
                 id: recallBadge
-                implicitWidth:  recallRow.implicitWidth + 24
-                implicitHeight: 34
+                implicitWidth:  recallRow.implicitWidth + Theme.fontSizeSmall * 1.5
+                implicitHeight: Math.max(Theme.fontSizeSmall * 2.4, 28)
                 radius: 6
 
                 readonly property color recallAccent: Qt.rgba(0.96, 0.62, 0.25, 1)
