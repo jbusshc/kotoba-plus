@@ -9,13 +9,17 @@ Page {
 
     property int docId:    -1
     property var entryData: ({})
-    property bool inSrs:   false
+
+    // Estado reactivo por tipo de carta
+    property bool inSrsRecognition: false
+    property bool inSrsRecall:      false
 
     background: Rectangle { color: Theme.background }
 
     function updateSrsState() {
-        if (srsVM && docId !== -1)
-            inSrs = srsVM.contains(docId)
+        if (!srsVM || docId === -1) return
+        inSrsRecognition = srsVM.containsRecognition(docId)
+        inSrsRecall      = srsVM.containsRecall(docId)
     }
 
     Component.onCompleted: {
@@ -24,9 +28,10 @@ Page {
         updateSrsState()
     }
 
+    // containsChanged(entryId, cardTypeMask) — 1=Recognition, 2=Recall, 3=ambos
     Connections {
         target: srsVM
-        function onContainsChanged(changedId) {
+        function onContainsChanged(changedId, mask) {
             if (changedId === docId) updateSrsState()
         }
     }
@@ -38,40 +43,43 @@ Page {
         // ── Top bar ───────────────────────────────────────────────────────────
         RowLayout {
             Layout.fillWidth: true
-            spacing: 0
+            spacing: 8
 
             BackButton { onClicked: stack.pop() }
 
             Item { Layout.fillWidth: true }
 
-            // SRS toggle
+            // ── Recognition badge ─────────────────────────────────────────────
             Rectangle {
-                width:  srsRow.implicitWidth + 24
-                height: 34; radius: 6
-                color: page.inSrs
+                id: recognitionBadge
+                implicitWidth:  recRow.implicitWidth + 24
+                implicitHeight: 34
+                radius: 6
+
+                color: page.inSrsRecognition
                     ? Qt.rgba(Theme.accentColor.r, Theme.accentColor.g, Theme.accentColor.b, 0.15)
                     : Theme.surfaceSubtle
                 border.width: 1
-                border.color: page.inSrs
+                border.color: page.inSrsRecognition
                     ? Qt.rgba(Theme.accentColor.r, Theme.accentColor.g, Theme.accentColor.b, 0.5)
                     : Theme.surfaceBorder
                 Behavior on color { ColorAnimation { duration: 180 } }
 
                 RowLayout {
-                    id: srsRow
+                    id: recRow
                     anchors.centerIn: parent
                     spacing: 6
 
                     Rectangle {
                         width: 7; height: 7; radius: 4
-                        color: page.inSrs ? Theme.accentColor : Theme.surfaceInactive
+                        color: page.inSrsRecognition ? Theme.accentColor : Theme.surfaceInactive
                         Behavior on color { ColorAnimation { duration: 180 } }
                     }
                     Text {
-                        text:           page.inSrs ? "In SRS" : "Add to SRS"
+                        text: page.inSrsRecognition ? "Recog. ✓" : "+ Recog."
                         font.pixelSize: Theme.fontSizeSmall
                         font.weight:    Font.Medium
-                        color: page.inSrs ? Theme.accentColor : Theme.hintColor
+                        color: page.inSrsRecognition ? Theme.accentColor : Theme.hintColor
                         Behavior on color { ColorAnimation { duration: 180 } }
                     }
                 }
@@ -80,8 +88,61 @@ Page {
                     anchors.fill: parent
                     cursorShape:  Qt.PointingHandCursor
                     onClicked: {
-                        if (page.inSrs) { srsVM.remove(page.docId); page.inSrs = false }
-                        else            { srsVM.add(page.docId);    page.inSrs = true  }
+                        if (page.inSrsRecognition)
+                            srsVM.remove(page.docId)
+                        else
+                            srsVM.add(page.docId)
+                    }
+                }
+            }
+
+            // ── Recall badge ──────────────────────────────────────────────────
+            Rectangle {
+                id: recallBadge
+                implicitWidth:  recallRow.implicitWidth + 24
+                implicitHeight: 34
+                radius: 6
+
+                readonly property color recallAccent: Qt.rgba(0.96, 0.62, 0.25, 1)
+
+                color: page.inSrsRecall
+                    ? Qt.rgba(recallAccent.r, recallAccent.g, recallAccent.b, 0.15)
+                    : Theme.surfaceSubtle
+                border.width: 1
+                border.color: page.inSrsRecall
+                    ? Qt.rgba(recallAccent.r, recallAccent.g, recallAccent.b, 0.5)
+                    : Theme.surfaceBorder
+                Behavior on color { ColorAnimation { duration: 180 } }
+
+                RowLayout {
+                    id: recallRow
+                    anchors.centerIn: parent
+                    spacing: 6
+
+                    Rectangle {
+                        width: 7; height: 7; radius: 4
+                        color: page.inSrsRecall
+                            ? recallBadge.recallAccent
+                            : Theme.surfaceInactive
+                        Behavior on color { ColorAnimation { duration: 180 } }
+                    }
+                    Text {
+                        text: page.inSrsRecall ? "Recall ✓" : "+ Recall"
+                        font.pixelSize: Theme.fontSizeSmall
+                        font.weight:    Font.Medium
+                        color: page.inSrsRecall ? recallBadge.recallAccent : Theme.hintColor
+                        Behavior on color { ColorAnimation { duration: 180 } }
+                    }
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape:  Qt.PointingHandCursor
+                    onClicked: {
+                        if (page.inSrsRecall)
+                            srsVM.removeRecall(page.docId)
+                        else
+                            srsVM.addRecall(page.docId)
                     }
                 }
             }

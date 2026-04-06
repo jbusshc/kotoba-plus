@@ -1,6 +1,7 @@
 #include "SrsLibraryViewModel.h"
 #include "../infrastructure/SrsService.h"
 #include "../infrastructure/SearchService.h"
+#include "../infrastructure/CardType.h"
 #include "../app/Configuration.h"
 #include <QDebug>
 #include <QDateTime>
@@ -11,7 +12,6 @@ extern "C" {
 #include "../../core/include/index_search.h"
 }
 
-// Misma tabla que SearchViewModel::accentToHex — hex CSS para inline style de <b>
 static QString accentToHex(const QString &name)
 {
     static const QHash<QString, QString> table = {
@@ -30,24 +30,6 @@ static QString accentToHex(const QString &name)
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-void SrsLibraryViewModel::initialize(
-        SrsService*    service,
-        kotoba_dict*   dict,
-        SearchService* searchService,
-        Configuration* config
-    )
-{
-    m_service = service;
-    m_dict = dict;
-    m_searchService = searchService;
-    m_config = config;
-
-
-    loadAllCards();
-    rebuildFiltered();
-    resetToInitialPage();
-}
-
 SrsLibraryViewModel::SrsLibraryViewModel(QObject* parent)
     : QAbstractListModel(parent)
     , m_service(nullptr), m_dict(nullptr)
@@ -58,7 +40,24 @@ SrsLibraryViewModel::SrsLibraryViewModel(QObject* parent)
             this, &SrsLibraryViewModel::onDebounceTimeout);
 }
 
-// ── Debounce ─────────────────────────────────────────────────────────────────
+void SrsLibraryViewModel::initialize(
+        SrsService*    service,
+        kotoba_dict*   dict,
+        SearchService* searchService,
+        Configuration* config
+    )
+{
+    m_service       = service;
+    m_dict          = dict;
+    m_searchService = searchService;
+    m_config        = config;
+
+    loadAllCards();
+    rebuildFiltered();
+    resetToInitialPage();
+}
+
+// ── Debounce ──────────────────────────────────────────────────────────────────
 
 void SrsLibraryViewModel::setSearch(const QString &text)
 {
@@ -71,15 +70,13 @@ void SrsLibraryViewModel::onDebounceTimeout()
     const QString prev = m_search;
     m_search = m_pendingSearch;
     loadAllCards();
-    rebuildFiltered();   // llama queryNonPagination → llena ctx buffers
+    rebuildFiltered();
     resetToInitialPage();
     if (m_search != prev)
         emit activeSearchChanged();
 }
 
 // ── highlightField ────────────────────────────────────────────────────────────
-// Mismo algoritmo que SearchViewModel::highlightField.
-// Válido solo después de rebuildFiltered() (que llama queryNonPagination).
 
 QString SrsLibraryViewModel::highlightField(const QString &field) const
 {
@@ -126,11 +123,18 @@ void SrsLibraryViewModel::loadAllCards()
         const fsrs_card* card = fsrs_deck_card(m_service->getDeck(), i);
         if (!card) continue;
 
-        const entry_bin* entry = kotoba_dict_get_entry(m_dict, card->id);
+        // Descomponer el fsrsId en entryId + cardType
+        uint32_t fsrsId  = card->id;
+        uint32_t entryId = CardTypeHelper::toEntryId(fsrsId);
+        CardType cardType = CardTypeHelper::toCardType(fsrsId);
+
+        const entry_bin* entry = kotoba_dict_get_entry(m_dict, entryId);
         if (!entry) continue;
 
         SrsCardItem item;
-        item.id           = card->id;
+        item.fsrsId       = fsrsId;
+        item.entryId      = entryId;
+        item.cardType     = cardType;
         item.reps         = card->reps;
         item.lapses       = card->lapses;
         item.stability    = card->stability;
@@ -167,7 +171,7 @@ void SrsLibraryViewModel::loadAllCards()
             item.variants << QString::fromUtf8(s.ptr, s.len);
         }
 
-        // matchVariants: k_ele[0] + hiragana de cada r_ele (para variantMatch)
+        // matchVariants: k_ele[0] + hiragana de cada r_ele
         char mixed_buf[MAX_QUERY_LEN];
         if (entry->k_elements_count > 0) {
             const k_ele_bin* ke0 = kotoba_k_ele(m_dict, entry, 0);
@@ -200,7 +204,7 @@ void SrsLibraryViewModel::loadAllCards()
             item.meaning = glosses.join(QStringLiteral("; "));
         }
 
-        item.due = QString::fromStdString(m_service->dueDateText(card->id));
+        item.due = QString::fromStdString(m_service->dueDateText(fsrsId));
         m_allCards.append(item);
     }
 }
@@ -214,7 +218,6 @@ void SrsLibraryViewModel::rebuildFiltered()
     const QString s = m_search.trimmed();
     const bool hasSearch = !s.isEmpty();
 
-    // queryNonPagination llena ctx buffers → lastVariants() válido para highlightField()
     if (hasSearch)
         m_searchService->queryNonPagination(s);
 
@@ -228,8 +231,9 @@ void SrsLibraryViewModel::rebuildFiltered()
     }
 
     for (const SrsCardItem &it : m_allCards) {
+        // La búsqueda usa entryId (sin el bit de tipo) para matchear contra el dict
         bool matchSearch = !hasSearch
-            || resultEntryIds.contains(it.id)
+            || resultEntryIds.contains(it.entryId)
             || variantMatch(it, s);
 
         bool matchFilter = true;
@@ -262,21 +266,75 @@ void SrsLibraryViewModel::resetToInitialPage()
 
 void SrsLibraryViewModel::refresh()
 {
-    // Evitar que se acumulen refresh concurrentes
     if (m_refreshPending.exchange(true)) return;
 
     QThreadPool::globalInstance()->start([this]() {
 
-        // ── 1) Cargar todas las cartas (lectura concurrente) ─────────
+        // Cargar todas las cartas con lock del deck
         QVector<SrsCardItem> allCards;
         {
-            // dict es read-only → no necesita lock
-            // deck necesita mutex
             std::lock_guard<std::mutex> lock(m_service->deckMutex());
-            // ... llenar allCards desde SrsService ...
+
+            uint32_t count = fsrs_deck_count(m_service->getDeck());
+            for (uint32_t i = 0; i < count; ++i) {
+                const fsrs_card* card = fsrs_deck_card(m_service->getDeck(), i);
+                if (!card) continue;
+
+                uint32_t fsrsId   = card->id;
+                uint32_t entryId  = CardTypeHelper::toEntryId(fsrsId);
+                CardType cardType = CardTypeHelper::toCardType(fsrsId);
+
+                const entry_bin* entry = kotoba_dict_get_entry(m_dict, entryId);
+                if (!entry) continue;
+
+                SrsCardItem item;
+                item.fsrsId       = fsrsId;
+                item.entryId      = entryId;
+                item.cardType     = cardType;
+                item.reps         = card->reps;
+                item.lapses       = card->lapses;
+                item.stability    = card->stability;
+                item.difficulty   = card->difficulty;
+                item.lastReview   = card->last_review;
+                item.totalReviews = card->total_answers;
+
+                switch (card->state) {
+                    case FSRS_STATE_NEW:        item.state = QStringLiteral("New");        break;
+                    case FSRS_STATE_LEARNING:   item.state = QStringLiteral("Learning");   break;
+                    case FSRS_STATE_RELEARNING: item.state = QStringLiteral("Relearning"); break;
+                    case FSRS_STATE_REVIEW:     item.state = QStringLiteral("Review");     break;
+                    case FSRS_STATE_SUSPENDED:  item.state = QStringLiteral("Suspended");  break;
+                    default:                    item.state = QStringLiteral("Unknown");    break;
+                }
+
+                if (entry->k_elements_count > 0) {
+                    const k_ele_bin* k = kotoba_k_ele(m_dict, entry, 0);
+                    kotoba_str s = kotoba_keb(m_dict, k);
+                    item.word = QString::fromUtf8(s.ptr, s.len);
+                } else if (entry->r_elements_count > 0) {
+                    const r_ele_bin* r = kotoba_r_ele(m_dict, entry, 0);
+                    kotoba_str s = kotoba_reb(m_dict, r);
+                    item.word = QString::fromUtf8(s.ptr, s.len);
+                } else {
+                    item.word = QStringLiteral("[unknown]");
+                }
+
+                if (entry->senses_count > 0) {
+                    const sense_bin* sense = kotoba_sense(m_dict, entry, 0);
+                    QStringList glosses;
+                    for (uint32_t g = 0; g < sense->gloss_count; ++g) {
+                        kotoba_str gs = kotoba_gloss(m_dict, sense, g);
+                        glosses << QString::fromUtf8(gs.ptr, gs.len);
+                    }
+                    item.meaning = glosses.join(QStringLiteral("; "));
+                }
+
+                item.due = QString::fromStdString(m_service->dueDateText(fsrsId));
+                allCards.append(item);
+            }
         }
 
-        // ── 2) Filtrado / búsqueda ─────────────────────────────────────
+        // Filtrado / búsqueda
         QVector<SrsCardItem> filtered;
         {
             const QString s = m_search.trimmed();
@@ -284,7 +342,6 @@ void SrsLibraryViewModel::refresh()
 
             QSet<uint32_t> resultIds;
             if (hasSearch) {
-                // queryNonPagination ya toma su mutex interno
                 m_searchService->queryNonPagination(s);
 
                 std::lock_guard<std::mutex> lock(m_searchService->mutex());
@@ -295,7 +352,7 @@ void SrsLibraryViewModel::refresh()
 
             for (const SrsCardItem &it : allCards) {
                 bool matchSearch = !hasSearch
-                    || resultIds.contains(it.id)
+                    || resultIds.contains(it.entryId)
                     || variantMatch(it, s);
 
                 bool matchFilter = true;
@@ -314,7 +371,6 @@ void SrsLibraryViewModel::refresh()
             }
         }
 
-        // ── 3) Aplicar al modelo en el main thread ───────────────────
         QMetaObject::invokeMethod(this,
             [this, allCards = std::move(allCards),
                    filtered = std::move(filtered)]() mutable {
@@ -322,7 +378,6 @@ void SrsLibraryViewModel::refresh()
             }, Qt::QueuedConnection);
     });
 }
-
 
 void SrsLibraryViewModel::applyRefresh(QVector<SrsCardItem> allCards,
                                        QVector<SrsCardItem> filtered)
@@ -347,39 +402,76 @@ void SrsLibraryViewModel::setFilter(const QString &filter)
     resetToInitialPage();
 }
 
-// ── Getters ───────────────────────────────────────────────────────────────────
+// ── Getters — por fsrsId ──────────────────────────────────────────────────────
 
-int SrsLibraryViewModel::getReps(int entryId) const {
-    for (const auto &it : m_allCards) if ((int)it.id == entryId) return it.reps; return 0; }
-int SrsLibraryViewModel::getLapses(int entryId) const {
-    for (const auto &it : m_allCards) if ((int)it.id == entryId) return it.lapses; return 0; }
-int SrsLibraryViewModel::getTotalReviews(int entryId) const {
-    for (const auto &it : m_allCards) if ((int)it.id == entryId) return (int)it.totalReviews; return 0; }
-float SrsLibraryViewModel::getStability(int entryId) const {
-    for (const auto &it : m_allCards) if ((int)it.id == entryId) return it.stability; return 0.f; }
-float SrsLibraryViewModel::getDifficulty(int entryId) const {
-    for (const auto &it : m_allCards) if ((int)it.id == entryId) return it.difficulty; return 0.f; }
+int SrsLibraryViewModel::getReps(int fsrsId) const {
+    for (const auto &it : m_allCards) if ((int)it.fsrsId == fsrsId) return it.reps; return 0; }
+int SrsLibraryViewModel::getLapses(int fsrsId) const {
+    for (const auto &it : m_allCards) if ((int)it.fsrsId == fsrsId) return it.lapses; return 0; }
+int SrsLibraryViewModel::getTotalReviews(int fsrsId) const {
+    for (const auto &it : m_allCards) if ((int)it.fsrsId == fsrsId) return (int)it.totalReviews; return 0; }
+float SrsLibraryViewModel::getStability(int fsrsId) const {
+    for (const auto &it : m_allCards) if ((int)it.fsrsId == fsrsId) return it.stability; return 0.f; }
+float SrsLibraryViewModel::getDifficulty(int fsrsId) const {
+    for (const auto &it : m_allCards) if ((int)it.fsrsId == fsrsId) return it.difficulty; return 0.f; }
 
-QString SrsLibraryViewModel::getLastReview(int entryId) const {
+QString SrsLibraryViewModel::getLastReview(int fsrsId) const {
     for (const auto &it : m_allCards) {
-        if ((int)it.id != entryId) continue;
+        if ((int)it.fsrsId != fsrsId) continue;
         if (it.lastReview == 0) return QStringLiteral("Never");
         return QDateTime::fromSecsSinceEpoch((qint64)it.lastReview)
                          .toString(QStringLiteral("MMM d, yyyy"));
     }
     return QStringLiteral("Never");
 }
-QString SrsLibraryViewModel::getDue(int entryId) const {
-    return m_service ? QString::fromStdString(m_service->dueDateText((uint32_t)entryId)) : QString{}; }
-QString SrsLibraryViewModel::getState(int entryId) const {
-    return m_service ? QString::fromStdString(m_service->stateText((uint32_t)entryId)) : QString{}; }
 
-// ── Acciones ─────────────────────────────────────────────────────────────────
+QString SrsLibraryViewModel::getDue(int fsrsId) const {
+    return m_service
+        ? QString::fromStdString(m_service->dueDateText((uint32_t)fsrsId))
+        : QString{};
+}
 
-void SrsLibraryViewModel::suspend(int entryId)   { if (m_service&&entryId>=0){m_service->suspend((uint32_t)entryId);refresh();} }
-void SrsLibraryViewModel::unsuspend(int entryId) { if (m_service&&entryId>=0){m_service->unsuspend((uint32_t)entryId);refresh();} }
-void SrsLibraryViewModel::reset(int entryId)     { if (m_service&&entryId>=0&&m_service->reset((uint32_t)entryId))refresh(); }
-void SrsLibraryViewModel::remove(int entryId)    { if (m_service&&entryId>=0&&m_service->remove((uint32_t)entryId))refresh(); }
+QString SrsLibraryViewModel::getState(int fsrsId) const {
+    return m_service
+        ? QString::fromStdString(m_service->stateText((uint32_t)fsrsId))
+        : QString{};
+}
+
+QString SrsLibraryViewModel::getCardType(int fsrsId) const {
+    return CardTypeHelper::toCardType((uint32_t)fsrsId) == CardType::Recall
+        ? QStringLiteral("Recall")
+        : QStringLiteral("Recognition");
+}
+
+// ── Acciones — toman fsrsId completo ──────────────────────────────────────────
+
+void SrsLibraryViewModel::suspend(int fsrsId) {
+    if (!m_service || fsrsId < 0) return;
+    m_service->suspend(CardTypeHelper::toEntryId((uint32_t)fsrsId),
+                       CardTypeHelper::toCardType((uint32_t)fsrsId));
+    refresh();
+}
+
+void SrsLibraryViewModel::unsuspend(int fsrsId) {
+    if (!m_service || fsrsId < 0) return;
+    m_service->unsuspend(CardTypeHelper::toEntryId((uint32_t)fsrsId),
+                         CardTypeHelper::toCardType((uint32_t)fsrsId));
+    refresh();
+}
+
+void SrsLibraryViewModel::reset(int fsrsId) {
+    if (!m_service || fsrsId < 0) return;
+    if (m_service->reset(CardTypeHelper::toEntryId((uint32_t)fsrsId),
+                         CardTypeHelper::toCardType((uint32_t)fsrsId)))
+        refresh();
+}
+
+void SrsLibraryViewModel::remove(int fsrsId) {
+    if (!m_service || fsrsId < 0) return;
+    if (m_service->remove(CardTypeHelper::toEntryId((uint32_t)fsrsId),
+                          CardTypeHelper::toCardType((uint32_t)fsrsId)))
+        refresh();
+}
 
 // ── Model interface ───────────────────────────────────────────────────────────
 
@@ -393,7 +485,8 @@ QVariant SrsLibraryViewModel::data(const QModelIndex &index, int role) const
     if (!index.isValid() || index.row() < 0 || index.row() >= m_visible.size()) return {};
     const SrsCardItem &c = m_visible.at(index.row());
     switch (role) {
-        case EntryIdRole:  return (int)c.id;
+        case EntryIdRole:  return (int)c.entryId;   // siempre sin bit de tipo
+        case FsrsIdRole:   return (int)c.fsrsId;    // con bit de tipo (para acciones)
         case WordRole:     return c.word;
         case MeaningRole:  return c.meaning;
         case StateRole:    return c.state;
@@ -402,6 +495,9 @@ QVariant SrsLibraryViewModel::data(const QModelIndex &index, int role) const
         case LapsesRole:   return (int)c.lapses;
         case VariantsRole: return c.variants.join(QStringLiteral("・"));
         case ReadingsRole: return c.readingsList.join(QStringLiteral("・"));
+        case CardTypeRole: return (c.cardType == CardType::Recall)
+                               ? QStringLiteral("Recall")
+                               : QStringLiteral("Recognition");
         default:           return {};
     }
 }
@@ -410,6 +506,7 @@ QHash<int, QByteArray> SrsLibraryViewModel::roleNames() const
 {
     QHash<int, QByteArray> roles;
     roles[EntryIdRole]  = "entryId";
+    roles[FsrsIdRole]   = "fsrsId";
     roles[WordRole]     = "word";
     roles[MeaningRole]  = "meaning";
     roles[StateRole]    = "state";
@@ -418,6 +515,7 @@ QHash<int, QByteArray> SrsLibraryViewModel::roleNames() const
     roles[LapsesRole]   = "lapses";
     roles[VariantsRole] = "variants";
     roles[ReadingsRole] = "readings";
+    roles[CardTypeRole] = "cardType";
     return roles;
 }
 

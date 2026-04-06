@@ -46,6 +46,7 @@ Page {
             showRomaji:        appConfig.showRomaji,
             maxResults:        appConfig.maxResults,
             pageSize:          appConfig.pageSize,
+            autoAddRecall:     appConfig.autoAddRecall,
         }
     }
 
@@ -61,7 +62,8 @@ Page {
         dirty = !["theme","accentColor","fontScale","glossLanguages","fallbackLanguage",
                   "interfaceLanguage","searchOnTyping","searchDelayMs","newCardsPerDay",
                   "reviewsPerDay","desiredRetention","maximumInterval","leechThreshold",
-                  "dayOffset","enableFuzz","orderMode","showRomaji","maxResults","pageSize"]
+                  "dayOffset","enableFuzz","orderMode","showRomaji","maxResults","pageSize",
+                  "autoAddRecall"]
                  .every(k => _snapEq(k))
     }
 
@@ -94,6 +96,7 @@ Page {
         appConfig.showRomaji        = false
         appConfig.maxResults        = 20000
         appConfig.pageSize          = 20
+        appConfig.autoAddRecall     = false
         checkDirty()
         applySettings()
     }
@@ -113,7 +116,7 @@ Page {
     }
 
     // ═════════════════════════════════════════════════════════════════════════
-    // INLINE COMPONENTS  (settings-page–specific, not needed elsewhere)
+    // INLINE COMPONENTS
     // ═════════════════════════════════════════════════════════════════════════
 
     component InfoBadge: Item {
@@ -228,7 +231,7 @@ Page {
                 Layout.alignment: Qt.AlignVCenter
             }
             Item {
-                visible:              sr.tip === ""
+                visible:               sr.tip === ""
                 Layout.preferredWidth: Theme.minTapTarget
                 Layout.preferredHeight: 1
                 Layout.alignment: Qt.AlignVCenter
@@ -298,7 +301,6 @@ Page {
             visible: parent.chipSelected
         }
 
-        // Hover label
         Rectangle {
             anchors { horizontalCenter: parent.horizontalCenter; top: parent.bottom; topMargin: 4 }
             width:  hoverLbl.implicitWidth + 8; height: 16; radius: 3
@@ -804,6 +806,19 @@ Page {
                                     }
                                 }
                             }
+                        }
+                    }
+                    RowDivider {}
+
+                    SettingRow {
+                        label:   "Auto-add Recall Card"
+                        subtitle: "Adds a Recall card whenever you add a Recognition card"
+                        tip:     "Recognition: see the word → recall the meaning.\nRecall: see the meaning → recall the word.\n\nYou can always add Recall cards manually from the entry details page."
+                        compact: true
+                        ToggleSwitch {
+                            anchors { right: parent.right; verticalCenter: parent.verticalCenter }
+                            checked: appConfig.autoAddRecall
+                            onToggled: (v) => { appConfig.autoAddRecall = v; page.markDirty() }
                         }
                     }
 

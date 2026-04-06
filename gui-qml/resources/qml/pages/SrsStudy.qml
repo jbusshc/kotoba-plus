@@ -31,7 +31,7 @@ Page {
         }
     }
 
-    // ── Rating button (study-specific, not shared elsewhere) ──────────────────
+    // ── Rating button ─────────────────────────────────────────────────────────
     component RatingButton: Rectangle {
         property string label:    ""
         property string interval: ""
@@ -88,6 +88,39 @@ Page {
 
             Item { Layout.fillWidth: true }
 
+            // Card-type badge — visual distintivo de Recognition vs Recall
+            Rectangle {
+                visible: srsVM && srsVM.hasCard
+                height: 26
+                width: typeBadgeTxt.implicitWidth + 18
+                radius: 5
+                color: {
+                    const t = srsVM ? srsVM.currentCardType : "Recognition"
+                    return t === "Recall"
+                        ? Qt.rgba(0.96, 0.62, 0.25, 0.18)
+                        : Qt.rgba(Theme.accentColor.r, Theme.accentColor.g, Theme.accentColor.b, 0.15)
+                }
+                border.width: 1
+                border.color: {
+                    const t = srsVM ? srsVM.currentCardType : "Recognition"
+                    return t === "Recall"
+                        ? Qt.rgba(0.96, 0.62, 0.25, 0.55)
+                        : Qt.rgba(Theme.accentColor.r, Theme.accentColor.g, Theme.accentColor.b, 0.45)
+                }
+
+                Text {
+                    id: typeBadgeTxt
+                    anchors.centerIn: parent
+                    text: srsVM ? srsVM.currentCardType : ""
+                    font.pixelSize: Theme.fontSizeXSmall
+                    font.weight:    Font.Medium
+                    color: {
+                        const t = srsVM ? srsVM.currentCardType : "Recognition"
+                        return t === "Recall" ? Qt.rgba(0.96, 0.62, 0.25, 1) : Theme.accentColor
+                    }
+                }
+            }
+
             // Undo button
             Item {
                 width:   Math.max(undoLbl.implicitWidth + 24, Theme.minTapTarget)
@@ -118,10 +151,35 @@ Page {
             }
         }
 
+        // ── Prompt hint (encima de la card) ───────────────────────────────────
+        // Le recuerda al user qué se espera que recuerde según el tipo de carta
+        Text {
+            id: promptHint
+            anchors { top: topBar.bottom; left: parent.left; right: parent.right }
+            anchors.topMargin: 8
+            height: visible ? implicitHeight : 0
+            visible: srsVM && srsVM.hasCard
+
+            text: {
+                if (!srsVM) return ""
+                return srsVM.currentCardType === "Recall"
+                    ? "Write / recall the Japanese word"
+                    : "Recall the reading and meaning"
+            }
+            font.pixelSize: Theme.fontSizeXSmall
+            color: Qt.rgba(Theme.hintColor.r, Theme.hintColor.g, Theme.hintColor.b, 0.5)
+            horizontalAlignment: Text.AlignHCenter
+        }
+
         // ── Flash card ────────────────────────────────────────────────────────
         Item {
-            anchors { top: topBar.bottom; bottom: actionBar.top; left: parent.left; right: parent.right }
-            anchors.topMargin:    16
+            anchors {
+                top:    promptHint.bottom
+                bottom: actionBar.top
+                left:   parent.left
+                right:  parent.right
+            }
+            anchors.topMargin:    8
             anchors.bottomMargin: 16
 
             Rectangle {
@@ -133,10 +191,15 @@ Page {
                 color:  Theme.cardBackground
                 border.width: 1; border.color: Theme.dividerColor
 
+                // Borde superior: distinto color para Recall vs Recognition
                 Rectangle {
                     anchors { top: parent.top; left: parent.left; right: parent.right }
                     height: 2; radius: 1
-                    color: Theme.accentColor; opacity: 0.6
+                    color: (srsVM && srsVM.currentCardType === "Recall")
+                        ? Qt.rgba(0.96, 0.62, 0.25, 0.8)
+                        : Theme.accentColor
+                    opacity: 0.7
+                    Behavior on color { ColorAnimation { duration: 200 } }
                 }
 
                 ScrollView {
@@ -155,8 +218,14 @@ Page {
                         sourceComponent: EntryView {
                             width:     parent.width
                             entryData: srsVM ? srsVM.currentEntryData : ({})
-                            mode:      "srs"
-                            revealed:  page.answerShown
+                            // Pasamos el tipo de carta para que EntryView sepa
+                            // qué campo ocultar antes de revelar la respuesta.
+                            // "srs_recognition" → oculta gloss hasta revelar
+                            // "srs_recall"      → oculta headword/lectura hasta revelar
+                            mode:     srsVM
+                                ? (srsVM.currentCardType === "Recall" ? "srs_recall" : "srs_recognition")
+                                : "srs_recognition"
+                            revealed: page.answerShown
                             onNavigateTo: (url, props) => stack.push(url, props)
                         }
                     }
@@ -170,18 +239,22 @@ Page {
             anchors { bottom: parent.bottom; left: parent.left; right: parent.right }
             height: Theme.minTapTarget + 20
 
-            // Show Answer
             Rectangle {
                 anchors.fill: parent
                 visible: !page.answerShown
-                radius:  8
+                radius: 8
+
+                readonly property color _btnAccent: (srsVM && srsVM.currentCardType === "Recall")
+                    ? Qt.rgba(0.96, 0.62, 0.25, 1)
+                    : Theme.accentColor
+
                 color: showMa.pressed
-                    ? Qt.rgba(Theme.accentColor.r, Theme.accentColor.g, Theme.accentColor.b, 0.24)
+                    ? Qt.rgba(_btnAccent.r, _btnAccent.g, _btnAccent.b, 0.24)
                     : showMa.containsMouse
-                        ? Qt.rgba(Theme.accentColor.r, Theme.accentColor.g, Theme.accentColor.b, 0.18)
-                        : Qt.rgba(Theme.accentColor.r, Theme.accentColor.g, Theme.accentColor.b, 0.10)
+                        ? Qt.rgba(_btnAccent.r, _btnAccent.g, _btnAccent.b, 0.18)
+                        : Qt.rgba(_btnAccent.r, _btnAccent.g, _btnAccent.b, 0.10)
                 border.width: 1
-                border.color: Qt.rgba(Theme.accentColor.r, Theme.accentColor.g, Theme.accentColor.b, 0.35)
+                border.color: Qt.rgba(_btnAccent.r, _btnAccent.g, _btnAccent.b, 0.35)
                 enabled: srsVM && srsVM.hasCard
                 opacity: enabled ? 1.0 : 0.4
                 Behavior on color { ColorAnimation { duration: 120 } }
@@ -190,7 +263,7 @@ Page {
                     anchors.centerIn: parent
                     text:           "Show Answer"
                     font.pixelSize: Theme.fontSizeBase; font.weight: Font.Medium
-                    color:          Theme.accentColor
+                    color: parent._btnAccent
                 }
                 MouseArea {
                     id: showMa; anchors.fill: parent
@@ -199,7 +272,6 @@ Page {
                 }
             }
 
-            // Rating buttons
             RowLayout {
                 anchors.fill: parent
                 spacing: 8

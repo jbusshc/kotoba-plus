@@ -10,9 +10,9 @@
 #include "../infrastructure/SearchService.h"
 #include "../infrastructure/SrsService.h"
 
-// ─────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 // device id
-// ─────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 
 uint64_t generateDeviceId()
 {
@@ -22,9 +22,9 @@ uint64_t generateDeviceId()
     return dis(gen);
 }
 
-// ─────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 // parse "1m 10m 1h 2d"
-// ─────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 
 QVector<uint32_t> parseSteps(const QString &steps)
 {
@@ -50,9 +50,9 @@ QVector<uint32_t> parseSteps(const QString &steps)
     return result;
 }
 
-// ─────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 // parse gloss languages
-// ─────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 
 static void parseGlossLanguages(const QString &glossLangs, bool *langArray)
 {
@@ -65,9 +65,9 @@ static void parseGlossLanguages(const QString &glossLangs, bool *langArray)
     }
 }
 
-// ─────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 // validation
-// ─────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 
 static void validateConfig(Configuration &c)
 {
@@ -107,49 +107,49 @@ static void validateConfig(Configuration &c)
         c.pageSize = 20;
     else if (c.pageSize > 100)
         c.pageSize = 100;
-    
+
     if (c.orderMode < 0 || c.orderMode > 2)
         c.orderMode = 0;
+
+    // autoAddRecall es bool — no requiere validación de rango
 }
 
-// ─────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 // migration helper
-// ─────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 
 static void migrateConfig(Configuration &c, int storedVersion)
 {
-    // Versión 1: defaults actuales
     if (storedVersion < 1) {
         if (c.fontScale <= 0) c.fontScale = 1.0;
         if (c.accentColor.isEmpty()) c.accentColor = "blue";
     }
-
     // futuras migraciones se agregan aquí...
 }
 
-// ─────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 // save
-// ─────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 
 void saveConfiguration(const Configuration &c, const QString &filePath)
 {
     QSettings s(filePath, QSettings::IniFormat);
 
     s.beginGroup("Meta");
-    s.setValue("config_version", 1); // migración futura
+    s.setValue("config_version", 1);
     s.endGroup();
 
     s.beginGroup("App");
-    s.setValue("app_version",  c.appVersion);
-    s.setValue("auto_save",    c.autoSave);
-    s.setValue("check_updates",c.checkUpdates);
-    s.setValue("first_run",    c.firstRun);
+    s.setValue("app_version",   c.appVersion);
+    s.setValue("auto_save",     c.autoSave);
+    s.setValue("check_updates", c.checkUpdates);
+    s.setValue("first_run",     c.firstRun);
     s.endGroup();
 
     s.beginGroup("Sync");
-    s.setValue("device_id",           static_cast<qulonglong>(c.deviceId));
-    s.setValue("backup_enabled",      c.backupEnabled);
-    s.setValue("backup_interval_days",c.backupIntervalDays);
+    s.setValue("device_id",            static_cast<qulonglong>(c.deviceId));
+    s.setValue("backup_enabled",       c.backupEnabled);
+    s.setValue("backup_interval_days", c.backupIntervalDays);
     s.endGroup();
 
     s.beginGroup("Dictionary");
@@ -168,21 +168,22 @@ void saveConfiguration(const Configuration &c, const QString &filePath)
     s.endGroup();
 
     s.beginGroup("Session");
-    s.setValue("daily_new_cards",   c.dailyNewCards);
-    s.setValue("daily_review_limit",c.dailyReviewLimit);
+    s.setValue("daily_new_cards",    c.dailyNewCards);
+    s.setValue("daily_review_limit", c.dailyReviewLimit);
     s.endGroup();
 
     s.beginGroup("FSRS");
-    s.setValue("desiredRetention",  std::round(c.desiredRetention * 10000.0)/10000.0);
-    s.setValue("maximumInterval",   c.maximumInterval);
-    s.setValue("newCardsPerDay",    c.newCardsPerDay);
-    s.setValue("reviewsPerDay",     c.reviewsPerDay);
-    s.setValue("leechThreshold",    c.leechThreshold);
-    s.setValue("enableFuzz",        c.enableFuzz);
-    s.setValue("learningSteps",     c.learningSteps);
-    s.setValue("relearningSteps",   c.relearningSteps);
-    s.setValue("dayOffset",         c.dayOffset);
-    s.setValue("order_mode",        c.orderMode);
+    s.setValue("desiredRetention", std::round(c.desiredRetention * 10000.0) / 10000.0);
+    s.setValue("maximumInterval",  c.maximumInterval);
+    s.setValue("newCardsPerDay",   c.newCardsPerDay);
+    s.setValue("reviewsPerDay",    c.reviewsPerDay);
+    s.setValue("leechThreshold",   c.leechThreshold);
+    s.setValue("enableFuzz",       c.enableFuzz);
+    s.setValue("learningSteps",    c.learningSteps);
+    s.setValue("relearningSteps",  c.relearningSteps);
+    s.setValue("dayOffset",        c.dayOffset);
+    s.setValue("order_mode",       c.orderMode);
+    s.setValue("autoAddRecall",    c.autoAddRecall);
     s.endGroup();
 
     s.beginGroup("UI");
@@ -190,15 +191,15 @@ void saveConfiguration(const Configuration &c, const QString &filePath)
     s.setValue("primary_color", c.primaryColor);
     s.setValue("theme",         c.theme);
     s.setValue("font_family",   c.fontFamily);
-    s.setValue("fontScale",     std::round(c.fontScale*100.0)/100.0);
+    s.setValue("fontScale",     std::round(c.fontScale * 100.0) / 100.0);
     s.endGroup();
 
     s.sync();
 }
 
-// ─────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 // load
-// ─────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 
 bool loadConfiguration(Configuration &c, const QString &filePath)
 {
@@ -223,12 +224,11 @@ bool loadConfiguration(Configuration &c, const QString &filePath)
     s.endGroup();
 
     s.beginGroup("Sync");
-    c.deviceId          = s.value("device_id", (qulonglong)c.deviceId).toULongLong();
-    c.backupEnabled     = s.value("backup_enabled",        c.backupEnabled).toBool();
-    c.backupIntervalDays= s.value("backup_interval_days",  c.backupIntervalDays).toInt();
+    c.deviceId           = s.value("device_id",           (qulonglong)c.deviceId).toULongLong();
+    c.backupEnabled      = s.value("backup_enabled",       c.backupEnabled).toBool();
+    c.backupIntervalDays = s.value("backup_interval_days", c.backupIntervalDays).toInt();
     s.endGroup();
 
-    // Data paths NOT loaded
     s.beginGroup("Dictionary");
     c.highlightMatches = s.value("highlight_matches", c.highlightMatches).toBool();
     c.maxResults       = s.value("max_results",       c.maxResults).toInt();
@@ -250,16 +250,17 @@ bool loadConfiguration(Configuration &c, const QString &filePath)
     s.endGroup();
 
     s.beginGroup("FSRS");
-    c.desiredRetention = std::round(s.value("desiredRetention",  c.desiredRetention).toDouble()*10000.0)/10000.0;
-    c.maximumInterval  = s.value("maximumInterval",   c.maximumInterval).toInt();
-    c.newCardsPerDay   = s.value("newCardsPerDay",    c.newCardsPerDay).toInt();
-    c.reviewsPerDay    = s.value("reviewsPerDay",     c.reviewsPerDay).toInt();
+    c.desiredRetention = std::round(s.value("desiredRetention", c.desiredRetention).toDouble() * 10000.0) / 10000.0;
+    c.maximumInterval  = s.value("maximumInterval",  c.maximumInterval).toInt();
+    c.newCardsPerDay   = s.value("newCardsPerDay",   c.newCardsPerDay).toInt();
+    c.reviewsPerDay    = s.value("reviewsPerDay",    c.reviewsPerDay).toInt();
     c.leechThreshold   = s.value("leechThreshold",   c.leechThreshold).toInt();
-    c.enableFuzz       = s.value("enableFuzz",        c.enableFuzz).toBool();
-    c.learningSteps    = s.value("learningSteps",     c.learningSteps).toString();
-    c.relearningSteps  = s.value("relearningSteps",   c.relearningSteps).toString();
-    c.dayOffset        = s.value("dayOffset",          c.dayOffset).toInt();
-    c.orderMode        = s.value("order_mode",         c.orderMode).toInt();
+    c.enableFuzz       = s.value("enableFuzz",       c.enableFuzz).toBool();
+    c.learningSteps    = s.value("learningSteps",    c.learningSteps).toString();
+    c.relearningSteps  = s.value("relearningSteps",  c.relearningSteps).toString();
+    c.dayOffset        = s.value("dayOffset",        c.dayOffset).toInt();
+    c.orderMode        = s.value("order_mode",       c.orderMode).toInt();
+    c.autoAddRecall    = s.value("autoAddRecall",    c.autoAddRecall).toBool();
     s.endGroup();
 
     s.beginGroup("UI");
@@ -267,7 +268,7 @@ bool loadConfiguration(Configuration &c, const QString &filePath)
     c.primaryColor = s.value("primary_color", c.primaryColor).toString();
     c.theme        = s.value("theme",         c.theme).toString();
     c.fontFamily   = s.value("font_family",   c.fontFamily).toString();
-    c.fontScale    = std::round(s.value("fontScale",  c.fontScale).toDouble()*100.0)/100.0;
+    c.fontScale    = std::round(s.value("fontScale", c.fontScale).toDouble() * 100.0) / 100.0;
     s.endGroup();
 
     validateConfig(c);
@@ -280,9 +281,9 @@ bool loadConfiguration(Configuration &c, const QString &filePath)
     return true;
 }
 
-// ─────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 // ConfigWrapper (expose to QML)
-// ─────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 
 void ConfigWrapper::saveToDisk()
 {
@@ -294,7 +295,6 @@ void ConfigWrapper::reloadFromDisk()
 {
     if (m_configPath.isEmpty()) return;
 
-    // Preserve platform-resolved paths
     QString savedDict      = m_config.dictPath;
     QString savedDictIdx   = m_config.dictIndexPath;
     QString savedSrs       = m_config.srsPath;
@@ -311,7 +311,6 @@ void ConfigWrapper::reloadFromDisk()
 
     loadConfiguration(m_config, m_configPath);
 
-    // Restore data paths
     m_config.dictPath      = savedDict;
     m_config.dictIndexPath = savedDictIdx;
     m_config.srsPath       = savedSrs;
@@ -326,7 +325,6 @@ void ConfigWrapper::reloadFromDisk()
     m_config.glossSvPath   = savedGlossSv;
     m_config.jpPath        = savedJp;
 
-    // Notify QML
     emit themeChanged();
     emit accentColorChanged();
     emit primaryColorChanged();
@@ -347,6 +345,7 @@ void ConfigWrapper::reloadFromDisk()
     emit firstRunChanged();
     emit showRomajiChanged();
     emit orderModeChanged();
+    emit autoAddRecallChanged();
 }
 
 void ConfigWrapper::applyToServices()

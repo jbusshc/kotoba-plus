@@ -12,19 +12,8 @@
 class SearchService;
 class SrsService;
 
-// ─────────────────────────────────────────────────────────────
-// Core config struct
-//
-// NOTE ON DATA PATHS:
-//   dictPath, dictIndexPath, srsPath, gloss*Path, jpPath are NOT
-//   read from or written to config.ini. They are always set at
-//   startup by AppPaths::resolve() in main.cpp, so they correctly
-//   point to writable storage on both desktop and Android.
-// ─────────────────────────────────────────────────────────────
-
 struct Configuration {
 
-    // LANG array for search (filled when config is loaded)
     bool languages[KOTOBA_LANG_COUNT];
 
     // ---------------- App ----------------
@@ -64,7 +53,7 @@ struct Configuration {
     // ---------------- Language ----------------
     QString fallbackLanguage = "en";
     QString glossLanguages   = "en";
-    QString interface        = "en";   // UI language
+    QString interface        = "en";
 
     // ---------------- Session ----------------
     int dailyNewCards    = 20;
@@ -80,7 +69,12 @@ struct Configuration {
     QString learningSteps    = "1m 10m";
     QString relearningSteps  = "10m";
     int     dayOffset        = 14400;
-    int     orderMode        = 0;  // 0=MIXED, 1=REVIEW_FIRST, 2=NEW_FIRST
+    int     orderMode        = 0;
+
+    // ---------------- SRS Card Types ----------------
+    // Si está activo, al agregar una carta de Recognition se agrega
+    // automáticamente la carta de Recall correspondiente.
+    bool autoAddRecall = false;
 
     // ---------------- UI ----------------
     QString accentColor  = "blue";
@@ -95,22 +89,22 @@ struct Configuration {
 };
 
 
-// ─────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 // QML wrapper
-// ─────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 
 class ConfigWrapper : public QObject
 {
     Q_OBJECT
 
-    // ── UI ──────────────────────────────────────────────────────────────────
+    // ── UI ───────────────────────────────────────────────────────────────────
     Q_PROPERTY(QString theme             READ theme             WRITE setTheme             NOTIFY themeChanged)
     Q_PROPERTY(QString accentColor       READ accentColor       WRITE setAccentColor       NOTIFY accentColorChanged)
     Q_PROPERTY(QString primaryColor      READ primaryColor      WRITE setPrimaryColor      NOTIFY primaryColorChanged)
     Q_PROPERTY(double  fontScale         READ fontScale         WRITE setFontScale         NOTIFY fontScaleChanged)
     Q_PROPERTY(QString fontFamily        READ fontFamily        WRITE setFontFamily        NOTIFY fontFamilyChanged)
 
-    // ── Dictionary ──────────────────────────────────────────────────────────
+    // ── Dictionary ───────────────────────────────────────────────────────────
     Q_PROPERTY(int     searchDelayMs     READ searchDelayMs     WRITE setSearchDelayMs     NOTIFY searchDelayMsChanged)
     Q_PROPERTY(bool    searchOnTyping    READ searchOnTyping    WRITE setSearchOnTyping    NOTIFY searchOnTypingChanged)
     Q_PROPERTY(bool    showRomaji        READ showRomaji        WRITE setShowRomaji        NOTIFY showRomajiChanged)
@@ -118,13 +112,12 @@ class ConfigWrapper : public QObject
     Q_PROPERTY(int     pageSize          READ pageSize          WRITE setPageSize          NOTIFY pageSizeChanged)
     Q_PROPERTY(bool    highlightMatches  READ highlightMatches  WRITE setHighlightMatches  NOTIFY highlightMatchesChanged)
 
-
-    // ── Language ────────────────────────────────────────────────────────────
+    // ── Language ─────────────────────────────────────────────────────────────
     Q_PROPERTY(QString glossLanguages    READ glossLanguages    WRITE setGlossLanguages    NOTIFY glossLanguagesChanged)
     Q_PROPERTY(QString fallbackLanguage  READ fallbackLanguage  WRITE setFallbackLanguage  NOTIFY fallbackLanguageChanged)
     Q_PROPERTY(QString interfaceLanguage READ interfaceLanguage WRITE setInterfaceLanguage NOTIFY interfaceLanguageChanged)
 
-    // ── FSRS ────────────────────────────────────────────────────────────────
+    // ── FSRS ─────────────────────────────────────────────────────────────────
     Q_PROPERTY(int     newCardsPerDay    READ newCardsPerDay    WRITE setNewCardsPerDay    NOTIFY newCardsPerDayChanged)
     Q_PROPERTY(int     reviewsPerDay     READ reviewsPerDay     WRITE setReviewsPerDay     NOTIFY reviewsPerDayChanged)
     Q_PROPERTY(double  desiredRetention  READ desiredRetention  WRITE setDesiredRetention  NOTIFY desiredRetentionChanged)
@@ -134,7 +127,10 @@ class ConfigWrapper : public QObject
     Q_PROPERTY(int     dayOffset         READ dayOffset         WRITE setDayOffset         NOTIFY dayOffsetChanged)
     Q_PROPERTY(int     orderMode         READ orderMode         WRITE setOrderMode         NOTIFY orderModeChanged)
 
-    // ── Read-only ────────────────────────────────────────────────────────────
+    // ── SRS Card Types ────────────────────────────────────────────────────────
+    Q_PROPERTY(bool    autoAddRecall     READ autoAddRecall     WRITE setAutoAddRecall     NOTIFY autoAddRecallChanged)
+
+    // ── Read-only ─────────────────────────────────────────────────────────────
     Q_PROPERTY(QString appVersion  CONSTANT READ appVersion)
     Q_PROPERTY(quint64 deviceId    CONSTANT READ deviceId)
     Q_PROPERTY(bool    firstRun    CONSTANT READ firstRun)
@@ -153,7 +149,7 @@ public:
     Q_INVOKABLE void reloadFromDisk();
     Q_INVOKABLE void applyToServices();
 
-    // ── Getters ──────────────────────────────────────────────────────────────
+    // ── Getters ───────────────────────────────────────────────────────────────
     QString theme()              const { return m_config.theme; }
     QString accentColor()        const { return m_config.accentColor; }
     QString primaryColor()       const { return m_config.primaryColor; }
@@ -179,31 +175,33 @@ public:
     int     maxResults()         const { return m_config.maxResults; }
     int     pageSize()           const { return m_config.pageSize; }
     bool    highlightMatches()   const { return m_config.highlightMatches; }
+    bool    autoAddRecall()      const { return m_config.autoAddRecall; }
 
-    // ── Setters ──────────────────────────────────────────────────────────────
-    void setTheme(const QString &v)             { if (v != m_config.theme)            { m_config.theme            = v; emit themeChanged(); } }
-    void setAccentColor(const QString &v)       { if (v != m_config.accentColor)      { m_config.accentColor      = v; emit accentColorChanged(); } }
-    void setPrimaryColor(const QString &v)      { if (v != m_config.primaryColor)     { m_config.primaryColor     = v; emit primaryColorChanged(); } }
-    void setFontScale(double v)                 { if (v != m_config.fontScale)        { m_config.fontScale        = v; emit fontScaleChanged(); } }
-    void setFontFamily(const QString &v)        { if (v != m_config.fontFamily)       { m_config.fontFamily       = v; emit fontFamilyChanged(); } }
-    void setSearchDelayMs(int v)                { if (v != m_config.searchDelayMs)    { m_config.searchDelayMs    = v; emit searchDelayMsChanged(); } }
-    void setSearchOnTyping(bool v)              { if (v != m_config.searchOnTyping)   { m_config.searchOnTyping   = v; emit searchOnTypingChanged(); } }
-    void setGlossLanguages(const QString &v)    { if (v != m_config.glossLanguages)   { m_config.glossLanguages   = v; emit glossLanguagesChanged(); } }
-    void setFallbackLanguage(const QString &v)  { if (v != m_config.fallbackLanguage) { m_config.fallbackLanguage = v; emit fallbackLanguageChanged(); } }
-    void setInterfaceLanguage(const QString &v) { if (v != m_config.interface)        { m_config.interface        = v; emit interfaceLanguageChanged(); } }
-    void setNewCardsPerDay(int v)               { if (v != m_config.newCardsPerDay)   { m_config.newCardsPerDay   = v; emit newCardsPerDayChanged(); } }
-    void setReviewsPerDay(int v)                { if (v != m_config.reviewsPerDay)    { m_config.reviewsPerDay    = v; emit reviewsPerDayChanged(); } }
-    void setDesiredRetention(double v)          { if (v != m_config.desiredRetention) { m_config.desiredRetention = v; emit desiredRetentionChanged(); } }
-    void setEnableFuzz(bool v)                  { if (v != m_config.enableFuzz)       { m_config.enableFuzz       = v; emit enableFuzzChanged(); } }
-    void setLeechThreshold(int v)               { if (v != m_config.leechThreshold)   { m_config.leechThreshold   = v; emit leechThresholdChanged(); } }
-    void setMaximumInterval(int v)              { if (v != m_config.maximumInterval)  { m_config.maximumInterval  = v; emit maximumIntervalChanged(); } }
-    void setDayOffset(int v)                    { if (v != m_config.dayOffset)        { m_config.dayOffset        = v; emit dayOffsetChanged(); } }
-    void setFirstRun(bool v)                    { if (v != m_config.firstRun)         { m_config.firstRun         = v; emit firstRunChanged(); } }
-    void setShowRomaji(bool v)                  { if (v != m_config.showRomaji)       { m_config.showRomaji       = v; emit showRomajiChanged(); } }
-    void setOrderMode(int v)                    { if (v != m_config.orderMode)        { m_config.orderMode        = v; emit orderModeChanged(); } }
-    void setMaxResults(int v)                   { if (v != m_config.maxResults)       { m_config.maxResults       = v; emit maxResultsChanged(); } }
-    void setPageSize(int v)                     { if (v != m_config.pageSize)         { m_config.pageSize         = v; emit pageSizeChanged(); } }
-    void setHighlightMatches(bool v)                { if (v != m_config.highlightMatches) { m_config.highlightMatches     = v; emit highlightMatchesChanged(); } }
+    // ── Setters ───────────────────────────────────────────────────────────────
+    void setTheme(const QString &v)             { if (v != m_config.theme)             { m_config.theme             = v; emit themeChanged(); } }
+    void setAccentColor(const QString &v)       { if (v != m_config.accentColor)       { m_config.accentColor       = v; emit accentColorChanged(); } }
+    void setPrimaryColor(const QString &v)      { if (v != m_config.primaryColor)      { m_config.primaryColor      = v; emit primaryColorChanged(); } }
+    void setFontScale(double v)                 { if (v != m_config.fontScale)         { m_config.fontScale         = v; emit fontScaleChanged(); } }
+    void setFontFamily(const QString &v)        { if (v != m_config.fontFamily)        { m_config.fontFamily        = v; emit fontFamilyChanged(); } }
+    void setSearchDelayMs(int v)                { if (v != m_config.searchDelayMs)     { m_config.searchDelayMs     = v; emit searchDelayMsChanged(); } }
+    void setSearchOnTyping(bool v)              { if (v != m_config.searchOnTyping)    { m_config.searchOnTyping    = v; emit searchOnTypingChanged(); } }
+    void setGlossLanguages(const QString &v)    { if (v != m_config.glossLanguages)    { m_config.glossLanguages    = v; emit glossLanguagesChanged(); } }
+    void setFallbackLanguage(const QString &v)  { if (v != m_config.fallbackLanguage)  { m_config.fallbackLanguage  = v; emit fallbackLanguageChanged(); } }
+    void setInterfaceLanguage(const QString &v) { if (v != m_config.interface)         { m_config.interface         = v; emit interfaceLanguageChanged(); } }
+    void setNewCardsPerDay(int v)               { if (v != m_config.newCardsPerDay)    { m_config.newCardsPerDay    = v; emit newCardsPerDayChanged(); } }
+    void setReviewsPerDay(int v)                { if (v != m_config.reviewsPerDay)     { m_config.reviewsPerDay     = v; emit reviewsPerDayChanged(); } }
+    void setDesiredRetention(double v)          { if (v != m_config.desiredRetention)  { m_config.desiredRetention  = v; emit desiredRetentionChanged(); } }
+    void setEnableFuzz(bool v)                  { if (v != m_config.enableFuzz)        { m_config.enableFuzz        = v; emit enableFuzzChanged(); } }
+    void setLeechThreshold(int v)               { if (v != m_config.leechThreshold)    { m_config.leechThreshold    = v; emit leechThresholdChanged(); } }
+    void setMaximumInterval(int v)              { if (v != m_config.maximumInterval)   { m_config.maximumInterval   = v; emit maximumIntervalChanged(); } }
+    void setDayOffset(int v)                    { if (v != m_config.dayOffset)         { m_config.dayOffset         = v; emit dayOffsetChanged(); } }
+    void setFirstRun(bool v)                    { if (v != m_config.firstRun)          { m_config.firstRun          = v; emit firstRunChanged(); } }
+    void setShowRomaji(bool v)                  { if (v != m_config.showRomaji)        { m_config.showRomaji        = v; emit showRomajiChanged(); } }
+    void setOrderMode(int v)                    { if (v != m_config.orderMode)         { m_config.orderMode         = v; emit orderModeChanged(); } }
+    void setMaxResults(int v)                   { if (v != m_config.maxResults)        { m_config.maxResults        = v; emit maxResultsChanged(); } }
+    void setPageSize(int v)                     { if (v != m_config.pageSize)          { m_config.pageSize          = v; emit pageSizeChanged(); } }
+    void setHighlightMatches(bool v)            { if (v != m_config.highlightMatches)  { m_config.highlightMatches  = v; emit highlightMatchesChanged(); } }
+    void setAutoAddRecall(bool v)               { if (v != m_config.autoAddRecall)     { m_config.autoAddRecall     = v; emit autoAddRecallChanged(); } }
 
     void setServices(SearchService *searchSvc, SrsService *srsSvc)
     {
@@ -235,16 +233,12 @@ signals:
     void maxResultsChanged();
     void pageSizeChanged();
     void highlightMatchesChanged();
+    void autoAddRecallChanged();
 
 private:
     SearchService *m_searchService = nullptr;
     SrsService    *m_srsService    = nullptr;
 };
-
-
-// ─────────────────────────────────────────────────────────────
-// API
-// ─────────────────────────────────────────────────────────────
 
 void saveConfiguration(const Configuration &config, const QString &filePath);
 bool loadConfiguration(Configuration &config, const QString &filePath);
@@ -252,5 +246,3 @@ uint64_t generateDeviceId();
 QVector<uint32_t> parseSteps(const QString &steps);
 
 #endif // CONFIGURATION_H
-
-
