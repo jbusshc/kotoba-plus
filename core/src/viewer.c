@@ -20,10 +20,16 @@ kotoba_view_string(const uint8_t *base, uint32_t off)
  * Entry
  * ============================================================================
  */
-const entry_bin *kotoba_entry(const kotoba_dict *d, uint32_t i)
+const entry_bin *kotoba_entry(const kotoba_dict *d, uint32_t ent_seq)
 {
-    if (i >= d->entry_count) return NULL;
-    return (const entry_bin *)((uint8_t *)d->bin.base + d->table[i].offset);
+    if (ent_seq == 0) return NULL;
+    return kotoba_dict_get_entry_by_entseq(d, ent_seq);
+}
+
+const entry_bin *kotoba_entry_by_index(const kotoba_dict *d, uint32_t idx)
+{
+    if (idx >= d->bin_header->entry_count) return NULL;
+    return kotoba_dict_get_entry(d, idx);
 }
 
 /* ============================================================================

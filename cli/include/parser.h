@@ -2,12 +2,14 @@
 #include <libxml2/libxml/tree.h>
 
 #include "../../core/include/dict_tokens.h"
+#include "../../core/include/loader.h"
+#include "../../core/include/writer.h"
 #include <stdio.h>
 #include <stdlib.h>
 
 
 #define ROUTE_JMDICT_IDX 0
-#define MAX_ENTRIES 209000
+#define MAX_ENTRIES RH_MAX_CAPACITY
 char *routes[] = {
     "../assets/JMdict",
 };
@@ -415,8 +417,6 @@ void parse_jmdict(xmlNodePtr root, kotoba_writer *writer)
                 } else {
                     e.priority = 0; // not common
                 }
-
-
 
 
 

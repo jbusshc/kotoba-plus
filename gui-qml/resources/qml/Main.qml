@@ -24,10 +24,13 @@ ApplicationWindow {
 
     function requestTabSwitch(index) {
         if (index === currentTab) return
-        if (currentTab === 2 && typeof cfg !== "undefined" && cfg && cfg.dirty) {
-            pendingTab = index
-            unsavedDialog.open()
-            return
+        if (currentTab === 2) {
+            const settingsItem = stack.currentItem
+            if (settingsItem && settingsItem.dirty) {
+                pendingTab = index
+                unsavedDialog.open()
+                return
+            }
         }
         switchTab(index)
     }
@@ -215,7 +218,8 @@ ApplicationWindow {
         }
 
         onAccepted: {
-            if (appConfig) appConfig.reloadFromDisk()
+            if (typeof appConfig !== "undefined" && appConfig)
+                appConfig.reloadFromDisk()
             const target = root.pendingTab
             root.pendingTab = -1
             root.switchTab(target)

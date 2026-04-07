@@ -179,7 +179,7 @@ int main(int argc, char **argv)
 
         int page_size = 10;
         struct SearchContext ctx;
-        init_search_context(&ctx, languages, &d, page_size);
+        init_search_context(&ctx, languages, &d, page_size, 0);
 
 
 
@@ -245,15 +245,15 @@ int main(int argc, char **argv)
             gloss_fps[i] = fopen(lang_fnames[i], "w");
         }
     
-        printf("Total entries: %u\n", d.entry_count);
-        for (uint32_t i = 0; i < d.entry_count; ++i)
+        printf("Total entries: %u\n", d.bin_header->entry_count);
+        for (uint32_t i = 0; i < d.bin_header->entry_count; ++i)
         {
             char str[64][1024];
             int str_count = 0;
             if (i % 1000 == 0)
-                printf("Processing entry %u/%u\n", i, d.entry_count);
+                printf("Processing entry %u/%u\n", i, d.bin_header->entry_count);
             
-            const entry_bin *e = kotoba_entry(&d, i);
+            const entry_bin *e = kotoba_entry_by_index(&d, i);
 
             if (e->k_elements_count > 0)
             {
@@ -261,7 +261,7 @@ int main(int argc, char **argv)
                 for (int j = 0; j < e->k_elements_count; ++j)
                 {
                     kotoba_str keb = kotoba_keb(&d, &k_ele[j]);
-                    fprintf(jp_fp, "%u\t%.*s\t%u\t%u\t%u\t%u\n", i, (int)keb.len, keb.ptr, j, TYPE_KANJI, keb.len, e->priority);
+                    fprintf(jp_fp, "%u\t%.*s\t%u\t%u\t%u\t%u\n", e->ent_seq, (int)keb.len, keb.ptr, j, TYPE_KANJI, keb.len, e->priority);
                 }
             }
 
@@ -293,7 +293,7 @@ int main(int argc, char **argv)
                     }
                     if (!is_duplicate)
                     {
-                        fprintf(jp_fp, "%u\t%s\t%u\t%u\t%u\t%u\n", i, str[j], j, TYPE_READING, strlen(str[j]), e->priority);
+                        fprintf(jp_fp, "%u\t%s\t%u\t%u\t%u\t%u\n", e->ent_seq, str[j], j, TYPE_READING, strlen(str[j]), e->priority);
                     }
                 }
             }
@@ -305,7 +305,7 @@ int main(int argc, char **argv)
                 {
                     kotoba_str gloss = kotoba_gloss(&d, sense, g);
                     int lang = sense->lang < KOTOBA_LANG_COUNT ? sense->lang : KOTOBA_LANG_UNK;
-                    fprintf( gloss_fps[lang], "%u\t%.*s\t%u\t%u\t%u\t%u\n", i, (int)gloss.len, gloss.ptr, s, g, gloss.len, e->priority);
+                    fprintf( gloss_fps[lang], "%u\t%.*s\t%u\t%u\t%u\t%u\n", e->ent_seq, (int)gloss.len, gloss.ptr, s, g, gloss.len, e->priority);
                 }
             }
         }
@@ -315,7 +315,7 @@ int main(int argc, char **argv)
         
 
     }
-    else if (strcmp(argv[1], "test") == 0)
+    else if (strcmp(argv[1], "patch") == 0)
     {
         kotoba_dict d;
         kotoba_dict_open(&d, dict_path, idx_path);
@@ -323,9 +323,22 @@ int main(int argc, char **argv)
         kotoba_writer w;
         kotoba_writer_open_patch(&w, dict_path, idx_path, &d);
 
-        //kotoba_writer_patch_entries(&w, &d); // 10 min, N² complexity, should be optimized 
+        kotoba_writer_patch_entries(&w, &d); // 10 min, N² complexity, should be optimized 
 
         print_entry(&d, 5);
+        kotoba_dict_close(&d);
+        return 0;
+    } else if (strcmp(argv[1], "test") == 0)
+    {
+        kotoba_dict d;
+        kotoba_dict_open(&d, dict_path, idx_path);
+
+        const entry_bin *e = kotoba_dict_get_entry(&d, 0);
+        
+        printf("Entry 0: ent_seq = %u, k_elements_count = %u, r_elements_count = %u, senses_count = %u\n",
+               e->ent_seq, e->k_elements_count, e->r_elements_count, e->senses_count);
+        print_entry(&d, 0);
+
         kotoba_dict_close(&d);
         return 0;
     }

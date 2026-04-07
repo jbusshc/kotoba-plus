@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE QtCreatorProject>
-<!-- Written by QtCreator 19.0.0, 2026-04-05T14:15:35. -->
+<!-- Written by QtCreator 19.0.0, 2026-04-05T21:40:06. -->
 <qtcreator>
  <data>
   <variable>EnvironmentId</variable>
@@ -241,7 +241,7 @@
      <valuelist type="QVariantList" key="PE.EnvironmentAspect.Changes"/>
      <value type="bool" key="PE.EnvironmentAspect.PrintOnRun">false</value>
      <value type="QString" key="PerfRecordArgsId">-e cpu-cycles --call-graph dwarf,4096 -F 250</value>
-     <value type="QString" key="ProjectExplorer.ProjectConfiguration.DisplayName">core</value>
+     <value type="QString" key="ProjectExplorer.ProjectConfiguration.DisplayName"></value>
      <value type="QString" key="ProjectExplorer.ProjectConfiguration.Id">Qt4ProjectManager.AndroidRunConfiguration:</value>
      <value type="QString" key="ProjectExplorer.RunConfiguration.BuildKey">core</value>
      <value type="bool" key="ProjectExplorer.RunConfiguration.Customized">true</value>
@@ -266,7 +266,7 @@
      <valuelist type="QVariantList" key="PE.EnvironmentAspect.Changes"/>
      <value type="bool" key="PE.EnvironmentAspect.PrintOnRun">false</value>
      <value type="QString" key="PerfRecordArgsId">-e cpu-cycles --call-graph dwarf,4096 -F 250</value>
-     <value type="QString" key="ProjectExplorer.ProjectConfiguration.DisplayName">kotoba_qml</value>
+     <value type="QString" key="ProjectExplorer.ProjectConfiguration.DisplayName"></value>
      <value type="QString" key="ProjectExplorer.ProjectConfiguration.Id">Qt4ProjectManager.AndroidRunConfiguration:</value>
      <value type="QString" key="ProjectExplorer.RunConfiguration.BuildKey">kotoba_qml</value>
      <value type="bool" key="ProjectExplorer.RunConfiguration.Customized">true</value>

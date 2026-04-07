@@ -20,5 +20,4 @@ target_compile_definitions(project_options INTERFACE
 add_subdirectory(core)
 add_subdirectory(gui-qml)
 
-# ✔ FIX: nombre válido (sin guiones)
 set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT kotoba_qml)

@@ -95,8 +95,8 @@ typedef struct {
 /* Card structure: due_day is FSRS day index, due_ts is unix seconds for ordering/cooldown.
  * heap_pos_due / heap_pos_learn store the position in each heap (-1 = not present). */
 typedef struct __attribute__((packed)) {
-    uint32_t id;
-
+    uint32_t id;    // ENT_SEQ
+    
     uint32_t due_day;       /* day index used by FSRS algorithm */
     uint64_t due_ts;        /* unix timestamp used for ordering / cooldown */
     uint64_t last_review;   /* last review unix seconds (0 = never) */

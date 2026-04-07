@@ -22,7 +22,8 @@ typedef struct
 /* -------------------------
  * Entry access
  * ------------------------- */
-KOTOBA_API const entry_bin *kotoba_entry(const kotoba_dict *d, uint32_t i);
+KOTOBA_API const entry_bin *kotoba_entry(const kotoba_dict *d, uint32_t offset);
+const entry_bin *kotoba_entry_by_index(const kotoba_dict *d, uint32_t idx);
 
 /* -------------------------
  * k_ele

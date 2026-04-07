@@ -100,26 +100,6 @@ typedef struct
     uint16_t type;
 } kotoba_bin_header;
 
-/* Header del archivo .idx (tabla de offsets) */
-typedef struct
-{
-    uint32_t magic;
-    uint32_t entry_count;
-    uint32_t entry_stride;
-    uint16_t version;
-    uint16_t type;
-} kotoba_idx_header;
-
-/* ============================================================================
- *  Tabla de índices
- * ============================================================================
- *
- * Cada entrada apunta al offset absoluto dentro del .bin
- */
-typedef struct
-{
-    uint32_t offset;
-} entry_index;
 
 /* ============================================================================
  *  Layout BINARIO mmapeable (INMUTABLE)
@@ -181,7 +161,7 @@ typedef struct
  */
 typedef struct
 {
-    int32_t ent_seq;
+    uint32_t ent_seq;
 
     uint32_t k_elements_off;
     uint32_t r_elements_off;

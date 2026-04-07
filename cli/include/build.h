@@ -245,7 +245,7 @@ static char *read_utf8_file(const char *path)
 
 void print_entry(const kotoba_dict *d, uint32_t i)
 {
-    const entry_bin *e = kotoba_entry(d, i);
+    const entry_bin *e = kotoba_dict_get_entry(d, i);
     if (!e)
         return;
 
@@ -496,9 +496,9 @@ void write_all_tsv(const kotoba_dict *d)
         }
     }
 
-    for (uint32_t i = 0; i < d->entry_count; ++i)
+    for (uint32_t i = 0; i < d->bin_header->entry_count; ++i)
     {
-        const entry_bin *e = kotoba_entry(d, i);
+        const entry_bin *e = kotoba_entry_by_index(d, i);
 
         for (uint32_t j = 0; j < e->k_elements_count; ++j)
         {
