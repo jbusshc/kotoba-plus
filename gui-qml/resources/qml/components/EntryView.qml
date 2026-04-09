@@ -13,7 +13,7 @@ Column {
 
     signal navigateTo(string page, var props)
 
-    width:   parent ? parent.width : 400
+    width: parent ? parent.width : 400
     spacing: 18
 
     // ── Datos normalizados — bindings reactivos sobre entryData ───────────────
@@ -58,7 +58,7 @@ Column {
     // ── [Recall] Glosas — visibles solo en el front (ocultas al revelar) ────────
     Text {
         visible:             root.isRecall && !root.revealed
-        width:               parent.width
+        width:               root.width
         text:                root.allGloss
         wrapMode:            Text.Wrap
         font.pixelSize:      22
@@ -70,7 +70,7 @@ Column {
     // ── [Recall] Separador ────────────────────────────────────────────────────
     Rectangle {
         visible: root.isRecall && !root.revealed
-        width:   parent.width
+        width:   root.width
         height:  1
         color:   Theme.dividerColor
         opacity: 0.4
@@ -79,7 +79,7 @@ Column {
     // ── [Recall] Hint antes de revelar ────────────────────────────────────────
     Text {
         visible:             root.isRecall && !root.revealed
-        width:               parent.width
+        width:               root.width
         text:                "↑ Recall the Japanese word"
         font.pixelSize:      Theme.fontSizeXSmall
         color:               Qt.rgba(Theme.hintColor.r, Theme.hintColor.g, Theme.hintColor.b, 0.35)
@@ -89,12 +89,12 @@ Column {
     // ── [Recall] Respuesta revelada: kanji + lecturas ─────────────────────────
     Column {
         visible: root.isRecall && root.revealed
-        width:   parent.width
+        width:   root.width
         spacing: 10
 
         Text {
             visible:             root.hasKanji
-            width:               parent.width
+            width:               root.width
             text:                root.headword
             font.pixelSize:      48
             font.bold:           true
@@ -104,7 +104,7 @@ Column {
 
         Flow {
             visible:  root.hasKanji && root.kanjiList.length > 1
-            width:    parent.width
+            width:    root.width
             spacing:  8
             Repeater {
                 model: root.kanjiList.slice(1)
@@ -119,7 +119,7 @@ Column {
 
         Column {
             visible:  root.readingList.length > 0
-            width:    parent.width
+            width:    root.width
             spacing:  4
 
             Text {
@@ -130,7 +130,7 @@ Column {
                 opacity:        0.7
             }
             Flow {
-                width:   parent.width
+                width:   root.width
                 spacing: 6
                 Repeater {
                     model: root.hasKanji ? root.readingList : root.readingList.slice(1)
@@ -164,7 +164,7 @@ Column {
     // ── [Recog/Dict] Headword ─────────────────────────────────────────────────
     Text {
         visible:             !root.isRecall
-        width:               parent.width
+        width:               root.width
         text:                root.headword
         font.pixelSize:      48
         font.bold:           true
@@ -175,7 +175,7 @@ Column {
     // ── [Recog/Dict] Kanji variantes ──────────────────────────────────────────
     Flow {
         visible: !root.isRecall && root.hasKanji && root.kanjiList.length > 1
-        width:   parent.width
+        width:   root.width
         spacing: 8
 
         opacity: (root.isDictionary || root.revealed) ? 1.0 : 0.0
@@ -209,7 +209,7 @@ Column {
         }
 
         Flow {
-            width:   parent.width
+            width:   root.width
             spacing: 6
             Repeater {
                 model: root.hasKanji ? root.readingList : root.readingList.slice(1)
@@ -226,7 +226,7 @@ Column {
     // ── [Recog/Dict] Divider ──────────────────────────────────────────────────
     Rectangle {
         visible: !root.isRecall
-        width:   parent.width
+        width:   root.width
         height:  1
         color:   Theme.dividerColor
 

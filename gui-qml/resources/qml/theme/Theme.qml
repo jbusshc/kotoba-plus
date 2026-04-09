@@ -11,7 +11,7 @@ QtObject {
     property color hintColor:      darkTheme ? "#B0BEC5" : "#424242"
     property color dividerColor:   darkTheme ? "#424242" : "#d0d4da"
     property color cardBackground: darkTheme ? "#222222" : "#ffffff"
-    property color borderColor: darkTheme ? "#888888" : "#444444"
+    property color borderColor:    darkTheme ? "#888888" : "#444444"
     property color headerBarColor: darkTheme ? "#1E1E1E" : "#ffffff"
 
     property color accentColor: {
@@ -66,15 +66,15 @@ QtObject {
         }
     }
 
-    // Returns a semi-transparent background fill for state badges/chips.
-    // alpha: 0.15 for chips, 0.18 for larger badges.
+    // Devuelve un color semitransparente para fondos de badges/chips.
+    // Usa Qt.rgba() con los canales del color QML directamente — no .slice().
     function srsStateColorBg(state, alpha) {
         const c = srsStateColor(state)
-        return Qt.rgba(
-            parseInt(c.slice(1,3),16)/255,
-            parseInt(c.slice(3,5),16)/255,
-            parseInt(c.slice(5,7),16)/255,
-            alpha ?? 0.15)
+        // srsStateColor devuelve un string hex cuando el estado es conocido,
+        // y un color QML (objeto) cuando cae en el default.
+        // Qt.rgba() acepta ambos si usamos Qt.color() para normalizar.
+        const qc = Qt.color(c)
+        return Qt.rgba(qc.r, qc.g, qc.b, alpha !== undefined ? alpha : 0.15)
     }
 
     function srsStateIcon(state) {

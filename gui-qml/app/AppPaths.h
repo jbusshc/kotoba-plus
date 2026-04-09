@@ -8,7 +8,6 @@
 #include <QDebug>
 
 // Bump this string whenever you ship new/changed asset files.
-// Any device that has a different version cached will re-extract everything.
 #define APP_ASSET_VERSION "1.0.0"
 
 struct AppPaths
@@ -17,7 +16,19 @@ struct AppPaths
     QString configPath;
     QString dictPath;
     QString dictIndexPath;
-    QString srsPath;
+
+    // Base del perfil SRS — sin extensión.
+    // Los archivos concretos se derivan así:
+    //   <srsBasePath>.recog.srs
+    //   <srsBasePath>.recog.sync.snap
+    //   <srsBasePath>.recog.sync.log
+    //   <srsBasePath>.recall.srs
+    //   <srsBasePath>.recall.sync.snap
+    //   <srsBasePath>.recall.sync.log
+    //   <srsBasePath>.recog.history.NNNN.log
+    //   <srsBasePath>.recall.history.NNNN.log
+    //   <srsBasePath>.custom_decks.json
+    QString srsBasePath;
 
     QString glossPath(const QString &lang) const
     {
@@ -45,20 +56,12 @@ struct AppPaths
         p.configPath    = QDir(p.dataDir).filePath("config.ini");
         p.dictPath      = QDir(p.dataDir).filePath("dict.kotoba");
         p.dictIndexPath = QDir(p.dataDir).filePath("dict.kotoba.idx");
-        p.srsPath       = QDir(p.dataDir).filePath("profile.srs");
+        p.srsBasePath   = QDir(p.dataDir).filePath("profile");
 
         return p;
     }
 
 #ifdef Q_OS_ANDROID
-    // ── Versioned asset extraction (Android only) ─────────────────────────
-    // Re-extracts all bundled assets whenever APP_ASSET_VERSION doesn't match
-    // the cached version stamp in dataDir/.asset_version.
-    //
-    // How to trigger a re-extract on users' devices:
-    //   1. Modify the asset file(s) in your repo.
-    //   2. Bump APP_ASSET_VERSION above (e.g. "1.0.0" → "1.1.0").
-    //   3. Ship the new APK.  Done — old cached files are replaced on next launch.
     static void extractAssetsIfNeeded(const QString &targetDir)
     {
         static const QStringList kDataFiles = {
@@ -78,9 +81,7 @@ struct AppPaths
 
         QDir().mkpath(targetDir);
 
-        // ── Version check ─────────────────────────────────────────────────
-        const QString versionFile =
-            QDir(targetDir).filePath(".asset_version");
+        const QString versionFile  = QDir(targetDir).filePath(".asset_version");
         const QString currentVersion = QString(APP_ASSET_VERSION);
 
         QString cachedVersion;
@@ -99,14 +100,12 @@ struct AppPaths
                  << cachedVersion << "→" << currentVersion
                  << "— re-extracting all assets";
 
-        // Remove stale files so nothing old lingers if the asset list shrank.
         for (const QString &name : kDataFiles) {
             const QString dest = QDir(targetDir).filePath(name);
             if (QFile::exists(dest) && !QFile::remove(dest))
                 qWarning() << "Could not remove stale asset:" << dest;
         }
 
-        // ── Extract ───────────────────────────────────────────────────────
         for (const QString &name : kDataFiles) {
             const QString dest = QDir(targetDir).filePath(name);
             const QString src  = QString("assets:/%1").arg(name);
@@ -118,8 +117,6 @@ struct AppPaths
 
             if (!QFile::copy(src, dest)) {
                 qWarning() << "Failed to extract asset:" << src << "→" << dest;
-                // On partial failure, don't write the version stamp —
-                // next launch will retry the full extraction.
                 return;
             }
 
@@ -130,7 +127,6 @@ struct AppPaths
             qDebug() << "Extracted:" << name;
         }
 
-        // ── Write version stamp ───────────────────────────────────────────
         QFile f(versionFile);
         if (f.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate)) {
             f.write(currentVersion.toUtf8());

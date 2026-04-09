@@ -1,20 +1,90 @@
 #include "SrsService.h"
 #include "SrsHistoryLog.h"
-#include "CardType.h"
 #include "../app/Configuration.h"
-#include "../../core/include/fsrs.h"
-#include <string>
+
 #include <cstring>
 #include <QThreadPool>
+#include <QString>
 
-/* ─── path helpers ─────────────────────────────────────────────────────────── */
+// ─────────────────────────────────────────────────────────────────────────────
+// rutas
+// ─────────────────────────────────────────────────────────────────────────────
 
-static inline std::string snapshot_path_for(const std::string &base) { return base + ".sync.snap"; }
-static inline std::string log_path_for     (const std::string &base) { return base + ".sync.log";  }
+static const char *typeSuffix(CardType type)
+{
+    return (type == CardType::Recall) ? ".recall" : ".recog";
+}
 
-/* ─── ctor / dtor ──────────────────────────────────────────────────────────── */
+std::string SrsService::srsPath(CardType type) const
+{
+    return m_basePath + typeSuffix(type) + ".srs";
+}
 
-SrsService::SrsService() : m_deck(nullptr), m_config(nullptr) {}
+std::string SrsService::snapPath(CardType type) const
+{
+    return m_basePath + typeSuffix(type) + ".sync.snap";
+}
+
+std::string SrsService::logPath(CardType type) const
+{
+    return m_basePath + typeSuffix(type) + ".sync.log";
+}
+
+std::string SrsService::customDecksPath() const
+{
+    return m_basePath + ".custom_decks.json";
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// helpers de acceso por tipo
+// ─────────────────────────────────────────────────────────────────────────────
+
+fsrs_deck *SrsService::deckFor(CardType type) const
+{
+    return (type == CardType::Recall) ? m_recall : m_recognition;
+}
+
+FsrsSync &SrsService::syncFor(CardType type)
+{
+    return (type == CardType::Recall) ? m_recallSync : m_recogSync;
+}
+
+SrsHistoryLog *SrsService::historyFor(CardType type) const
+{
+    return (type == CardType::Recall)
+        ? m_recallHistory.get()
+        : m_recogHistory.get();
+}
+
+fsrs_session &SrsService::sessionFor(CardType type)
+{
+    return (type == CardType::Recall) ? m_recallSession : m_recogSession;
+}
+
+fsrs_card *SrsService::getCard(uint32_t entSeq, CardType type) const
+{
+    fsrs_deck *d = deckFor(type);
+    if (!d) return nullptr;
+    return fsrs_get_card(d, entSeq);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ctor / dtor
+// ─────────────────────────────────────────────────────────────────────────────
+
+SrsService::SrsService() {}
+
+SrsService::~SrsService()
+{
+    fsrs_sync_free(&m_recogSync);
+    fsrs_sync_free(&m_recallSync);
+    if (m_recognition) fsrs_deck_free(m_recognition);
+    if (m_recall)      fsrs_deck_free(m_recall);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// initialize
+// ─────────────────────────────────────────────────────────────────────────────
 
 void SrsService::initialize(uint32_t dictSize, Configuration *config)
 {
@@ -23,436 +93,525 @@ void SrsService::initialize(uint32_t dictSize, Configuration *config)
 
     fsrs_params params = fsrs_default_params();
 
-    // El id_map y el bitmap del deck C son arrays directos indexados por ID.
-    // Hay que pre-dimensionarlos para cubrir el rango completo:
-    //   Recognition: [0,             dictSize)
-    //   Recall:      [RECALL_OFFSET, RECALL_OFFSET + dictSize)
-    // Pasamos el ID máximo posible + 1 como hint para evitar reallocs gigantes.
-    const uint32_t idSpaceHint = CardTypeHelper::RECALL_OFFSET + dictSize;
-    m_deck = fsrs_deck_create(idSpaceHint, &params);
+    // Cada deck solo necesita cubrir el rango [0, dictSize) porque
+    // ahora el ID == ent_seq y no hay offset de tipo.
+    m_recognition = fsrs_deck_create(dictSize, &params);
+    m_recall      = fsrs_deck_create(dictSize, &params);
 
     if (m_config) fsrs_seed(m_config->deviceId);
 
     uint64_t device_id = m_config ? m_config->deviceId : 0;
-    fsrs_sync_init(&m_sync, device_id);
-    fsrs_session_start(&m_session, fsrs_now(), 0);
+    fsrs_sync_init(&m_recogSync,  device_id);
+    fsrs_sync_init(&m_recallSync, device_id);
+
+    fsrs_session_start(&m_recogSession,  fsrs_now(), 0);
+    fsrs_session_start(&m_recallSession, fsrs_now(), 0);
 }
 
-SrsService::~SrsService()
+// ─────────────────────────────────────────────────────────────────────────────
+// applyConfig — aplica los parámetros de Configuration a un deck
+// ─────────────────────────────────────────────────────────────────────────────
+
+void SrsService::applyConfig(fsrs_deck *deck) const
 {
-    fsrs_sync_free(&m_sync);
-    if (m_deck) fsrs_deck_free(m_deck);
+    if (!deck || !m_config) return;
+
+    const auto &ls  = m_config->learningStepsParsed;
+    const auto &rls = m_config->relearningStepsParsed;
+
+    update_srs_config(deck,
+        nullptr,
+        m_config->desiredRetention,
+        m_config->maximumInterval,
+        m_config->leechThreshold,
+        m_config->dayOffset,
+        m_config->newCardsPerDay,
+        m_config->reviewsPerDay,
+        ls.isEmpty()  ? nullptr : ls.constData(),  ls.size(),
+        rls.isEmpty() ? nullptr : rls.constData(), rls.size(),
+        0, 0,
+        m_config->enableFuzz,
+        static_cast<fsrs_order_mode>(m_config->orderMode)
+    );
 }
 
-/* ─── helpers privados ──────────────────────────────────────────────────────── */
+// ─────────────────────────────────────────────────────────────────────────────
+// compactSync
+// ─────────────────────────────────────────────────────────────────────────────
 
-fsrs_card* SrsService::getCard(uint32_t fsrsId) const
+bool SrsService::compactSync(CardType type, uint64_t now)
 {
-    if (!m_deck) return nullptr;
-    return fsrs_get_card(m_deck, fsrsId);
+    if (m_basePath.empty()) return false;
+    return fsrs_sync_compact(&syncFor(type), deckFor(type),
+                             snapPath(type).c_str(),
+                             logPath(type).c_str(), now);
 }
 
-std::string SrsService::effectivePath() const
-{
-    if (!m_profilePath.empty()) return m_profilePath;
-    if (m_config && !m_config->srsPath.isEmpty())
-        return m_config->srsPath.toStdString();
-    return {};
-}
+// ─────────────────────────────────────────────────────────────────────────────
+// _add
+// ─────────────────────────────────────────────────────────────────────────────
 
-bool SrsService::compactSync(uint64_t now)
+bool SrsService::_add(uint32_t entSeq, CardType type)
 {
-    std::string base = effectivePath();
-    if (base.empty()) return false;
-    return fsrs_sync_compact(&m_sync, m_deck,
-                             snapshot_path_for(base).c_str(),
-                             log_path_for(base).c_str(), now);
-}
+    fsrs_deck *deck = deckFor(type);
+    if (!deck) return false;
 
-/* ─── operaciones de bajo nivel (fsrsId completo) ──────────────────────────── */
-
-bool SrsService::_add(uint32_t fsrsId)
-{
-    if (!m_deck) return false;
     uint64_t now = fsrs_now();
-    fsrs_card *card = fsrs_add_card(m_deck, fsrsId, now);
+    fsrs_card *card = fsrs_add_card(deck, entSeq, now);
     if (!card) return false;
 
-    if (m_history) m_history->recordAdd(card, now);
+    if (auto *h = historyFor(type)) h->recordAdd(card, now);
 
-    const std::string path = effectivePath();
-    if (!path.empty()) {
-        FsrsEvent *ev = fsrs_sync_record_add(&m_sync, card, now);
-        (void)fsrs_sync_log_append(log_path_for(path).c_str(), ev);
-
-        // Flush inmediato del .srs para que el add sobreviva a un crash.
-        // Es barato porque solo escribe la carta nueva al final del archivo.
-        (void)fsrs_save(m_deck, path.c_str());
+    if (!m_basePath.empty()) {
+        FsrsEvent *ev = fsrs_sync_record_add(&syncFor(type), card, now);
+        (void)fsrs_sync_log_append(logPath(type).c_str(), ev);
+        (void)fsrs_save(deck, srsPath(type).c_str());
     }
     return true;
 }
 
-bool SrsService::_remove(uint32_t fsrsId)
+// ─────────────────────────────────────────────────────────────────────────────
+// _remove
+// ─────────────────────────────────────────────────────────────────────────────
+
+bool SrsService::_remove(uint32_t entSeq, CardType type)
 {
-    if (!m_deck) return false;
+    fsrs_deck *deck = deckFor(type);
+    if (!deck) return false;
+
     uint64_t now = fsrs_now();
+    const fsrs_card *before = fsrs_get_card(deck, entSeq);
+    fsrs_card before_copy   = before ? *before : fsrs_card{};
+    const bool had_card     = (before != nullptr);
 
-    const fsrs_card *before = fsrs_get_card(m_deck, fsrsId);
-    fsrs_card before_copy = before ? *before : fsrs_card{};
-    const bool had_card   = (before != nullptr);
+    if (!fsrs_remove_card(deck, entSeq)) return false;
 
-    if (!fsrs_remove_card(m_deck, fsrsId)) return false;
+    if (auto *h = historyFor(type))
+        if (had_card) h->recordRemove(entSeq, &before_copy, now);
 
-    if (m_history && had_card)
-        m_history->recordRemove(fsrsId, &before_copy, now);
-
-    const std::string path = effectivePath();
-    if (!path.empty()) {
-        FsrsEvent *ev = fsrs_sync_record_remove(&m_sync, fsrsId, now);
-        (void)fsrs_sync_log_append(log_path_for(path).c_str(), ev);
-        (void)fsrs_save(m_deck, path.c_str());
+    if (!m_basePath.empty()) {
+        FsrsEvent *ev = fsrs_sync_record_remove(&syncFor(type), entSeq, now);
+        (void)fsrs_sync_log_append(logPath(type).c_str(), ev);
+        (void)fsrs_save(deck, srsPath(type).c_str());
     }
     return true;
 }
 
-bool SrsService::_contains(uint32_t fsrsId) const
-{
-    return fsrs_get_card(m_deck, fsrsId) != nullptr;
-}
+// ─────────────────────────────────────────────────────────────────────────────
+// _reset
+// ─────────────────────────────────────────────────────────────────────────────
 
-bool SrsService::_reset(uint32_t fsrsId)
+bool SrsService::_reset(uint32_t entSeq, CardType type)
 {
-    if (!m_deck) return false;
+    fsrs_deck *deck = deckFor(type);
+    if (!deck) return false;
+
     uint64_t now = fsrs_now();
-
-    if (!fsrs_remove_card(m_deck, fsrsId)) return false;
+    if (!fsrs_remove_card(deck, entSeq)) return false;
     {
-        FsrsEvent *ev = fsrs_sync_record_remove(&m_sync, fsrsId, now);
-        (void)fsrs_sync_log_append(log_path_for(effectivePath()).c_str(), ev);
+        FsrsEvent *ev = fsrs_sync_record_remove(&syncFor(type), entSeq, now);
+        (void)fsrs_sync_log_append(logPath(type).c_str(), ev);
     }
 
-    fsrs_card *card = fsrs_add_card(m_deck, fsrsId, now);
+    fsrs_card *card = fsrs_add_card(deck, entSeq, now);
     if (!card) return false;
     {
-        FsrsEvent *ev = fsrs_sync_record_add(&m_sync, card, now);
-        (void)fsrs_sync_log_append(log_path_for(effectivePath()).c_str(), ev);
+        FsrsEvent *ev = fsrs_sync_record_add(&syncFor(type), card, now);
+        (void)fsrs_sync_log_append(logPath(type).c_str(), ev);
     }
     return true;
 }
 
-bool SrsService::_suspend(uint32_t fsrsId)
+// ─────────────────────────────────────────────────────────────────────────────
+// _suspend / _unsuspend
+// ─────────────────────────────────────────────────────────────────────────────
+
+bool SrsService::_suspend(uint32_t entSeq, CardType type)
 {
-    if (!m_deck) return false;
+    fsrs_deck *deck = deckFor(type);
+    if (!deck) return false;
+
     uint64_t now = fsrs_now();
+    const fsrs_card *sc = fsrs_get_card(deck, entSeq);
+    fsrs_card before    = sc ? *sc : fsrs_card{};
+    const bool had      = (sc != nullptr);
 
-    const fsrs_card *sc = fsrs_get_card(m_deck, fsrsId);
-    fsrs_card before = sc ? *sc : fsrs_card{};
-    const bool had_sc = (sc != nullptr);
+    fsrs_suspend(deck, entSeq);
+    fsrs_rebuild_queues(deck, now);
 
-    fsrs_suspend(m_deck, fsrsId);
-    fsrs_rebuild_queues(m_deck, now);
+    if (auto *h = historyFor(type))
+        if (had) h->recordSuspend(&before, now);
 
-    if (m_history && had_sc) m_history->recordSuspend(&before, now);
-    return compactSync(now);
+    return compactSync(type, now);
 }
 
-bool SrsService::_unsuspend(uint32_t fsrsId)
+bool SrsService::_unsuspend(uint32_t entSeq, CardType type)
 {
-    if (!m_deck) return false;
+    fsrs_deck *deck = deckFor(type);
+    if (!deck) return false;
+
     uint64_t now = fsrs_now();
+    fsrs_unsuspend(deck, entSeq, now);
+    fsrs_rebuild_queues(deck, now);
 
-    fsrs_unsuspend(m_deck, fsrsId, now);
-    fsrs_rebuild_queues(m_deck, now);
+    const fsrs_card *after = fsrs_get_card(deck, entSeq);
+    if (auto *h = historyFor(type)) h->recordUnsuspend(after, now);
 
-    const fsrs_card *after = fsrs_get_card(m_deck, fsrsId);
-    if (m_history) m_history->recordUnsuspend(after, now);
-    return compactSync(now);
+    return compactSync(type, now);
 }
 
-/* ─── API pública ───────────────────────────────────────────────────────────── */
+// ─────────────────────────────────────────────────────────────────────────────
+// API pública — manipulación
+// ─────────────────────────────────────────────────────────────────────────────
 
-bool SrsService::add(uint32_t entryId, CardType type)
+bool SrsService::add(uint32_t entSeq, CardType type)
 {
     std::lock_guard<std::mutex> lock(m_deckMutex);
-    uint32_t fsrsId = CardTypeHelper::toFsrsId(entryId, type);
-    bool ok = _add(fsrsId);
+    bool ok = _add(entSeq, type);
 
-    // Auto-add Recall cuando se agrega Recognition (si la opción está activa)
-    if (ok && type == CardType::Recognition && m_autoAddRecall) {
-        uint32_t recallId = CardTypeHelper::toFsrsId(entryId, CardType::Recall);
-        _add(recallId);   // falla silenciosamente si ya existe
+    if (ok && type == CardType::Recognition && m_autoAddRecall)
+        _add(entSeq, CardType::Recall);   // silencioso si ya existe
+
+    if (ok) {
+        fsrs_rebuild_queues(deckFor(type), fsrs_now());
+        if (m_autoAddRecall && type == CardType::Recognition && m_recall)
+            fsrs_rebuild_queues(m_recall, fsrs_now());
     }
-
-    if (ok) fsrs_rebuild_queues(m_deck, fsrs_now());
     return ok;
 }
 
-bool SrsService::addBoth(uint32_t entryId)
+bool SrsService::addBoth(uint32_t entSeq)
 {
     std::lock_guard<std::mutex> lock(m_deckMutex);
     uint64_t now = fsrs_now();
-    bool ok1 = _add(CardTypeHelper::toFsrsId(entryId, CardType::Recognition));
-    bool ok2 = _add(CardTypeHelper::toFsrsId(entryId, CardType::Recall));
-    if (ok1 || ok2) fsrs_rebuild_queues(m_deck, now);
+    bool ok1 = _add(entSeq, CardType::Recognition);
+    bool ok2 = _add(entSeq, CardType::Recall);
+    if (ok1) fsrs_rebuild_queues(m_recognition, now);
+    if (ok2) fsrs_rebuild_queues(m_recall,      now);
     return ok1 || ok2;
 }
 
-bool SrsService::remove(uint32_t entryId, CardType type)
+bool SrsService::remove(uint32_t entSeq, CardType type)
 {
     std::lock_guard<std::mutex> lock(m_deckMutex);
-    bool ok = _remove(CardTypeHelper::toFsrsId(entryId, type));
-    if (ok) fsrs_rebuild_queues(m_deck, fsrs_now());
+    bool ok = _remove(entSeq, type);
+    if (ok) fsrs_rebuild_queues(deckFor(type), fsrs_now());
     return ok;
 }
 
-void SrsService::removeBoth(uint32_t entryId)
+void SrsService::removeBoth(uint32_t entSeq)
 {
     std::lock_guard<std::mutex> lock(m_deckMutex);
     uint64_t now = fsrs_now();
-    _remove(CardTypeHelper::toFsrsId(entryId, CardType::Recognition));
-    _remove(CardTypeHelper::toFsrsId(entryId, CardType::Recall));
-    fsrs_rebuild_queues(m_deck, now);
+    _remove(entSeq, CardType::Recognition);
+    _remove(entSeq, CardType::Recall);
+    if (m_recognition) fsrs_rebuild_queues(m_recognition, now);
+    if (m_recall)      fsrs_rebuild_queues(m_recall,      now);
 }
 
-bool SrsService::contains(uint32_t entryId, CardType type) const
+bool SrsService::contains(uint32_t entSeq, CardType type) const
 {
-    return _contains(CardTypeHelper::toFsrsId(entryId, type));
+    fsrs_deck *d = deckFor(type);
+    return d && fsrs_get_card(d, entSeq) != nullptr;
 }
 
-bool SrsService::reset(uint32_t entryId, CardType type)
+bool SrsService::reset(uint32_t entSeq, CardType type)
 {
     std::lock_guard<std::mutex> lock(m_deckMutex);
-    bool ok = _reset(CardTypeHelper::toFsrsId(entryId, type));
-    if (ok) fsrs_rebuild_queues(m_deck, fsrs_now());
+    bool ok = _reset(entSeq, type);
+    if (ok) fsrs_rebuild_queues(deckFor(type), fsrs_now());
     return ok;
 }
 
-bool SrsService::suspend(uint32_t entryId, CardType type)
+bool SrsService::suspend(uint32_t entSeq, CardType type)
 {
     std::lock_guard<std::mutex> lock(m_deckMutex);
-    return _suspend(CardTypeHelper::toFsrsId(entryId, type));
+    return _suspend(entSeq, type);
 }
 
-bool SrsService::unsuspend(uint32_t entryId, CardType type)
+bool SrsService::unsuspend(uint32_t entSeq, CardType type)
 {
     std::lock_guard<std::mutex> lock(m_deckMutex);
-    return _unsuspend(CardTypeHelper::toFsrsId(entryId, type));
+    return _unsuspend(entSeq, type);
 }
 
-bool SrsService::mark(uint32_t entryId, bool marked, CardType type)
+bool SrsService::mark(uint32_t entSeq, bool marked, CardType type)
 {
-    if (!m_deck) return false;
-    uint32_t fsrsId = CardTypeHelper::toFsrsId(entryId, type);
-    fsrs_mark(m_deck, fsrsId, marked);
+    fsrs_deck *deck = deckFor(type);
+    if (!deck) return false;
     uint64_t now = fsrs_now();
-    fsrs_rebuild_queues(m_deck, now);
-    return compactSync(now);
+    fsrs_mark(deck, entSeq, marked);
+    fsrs_rebuild_queues(deck, now);
+    return compactSync(type, now);
 }
 
-bool SrsService::snooze(uint32_t entryId, uint32_t days, CardType type)
+bool SrsService::snooze(uint32_t entSeq, uint32_t days, CardType type)
 {
-    if (!m_deck) return false;
-    uint32_t fsrsId = CardTypeHelper::toFsrsId(entryId, type);
+    fsrs_deck *deck = deckFor(type);
+    if (!deck) return false;
     uint64_t now = fsrs_now();
-    fsrs_snooze(m_deck, fsrsId, days, now);
-    fsrs_rebuild_queues(m_deck, now);
-    return compactSync(now);
+    fsrs_snooze(deck, entSeq, days, now);
+    fsrs_rebuild_queues(deck, now);
+    return compactSync(type, now);
 }
 
-/* ─── sesión / scheduling ───────────────────────────────────────────────────── */
+// ─────────────────────────────────────────────────────────────────────────────
+// sesión
+// ─────────────────────────────────────────────────────────────────────────────
 
 void SrsService::startSession(uint32_t limit)
 {
-    fsrs_session_start(&m_session, fsrs_now(), limit);
+    uint64_t now = fsrs_now();
+    fsrs_session_start(&m_recogSession,  now, limit);
+    fsrs_session_start(&m_recallSession, now, limit);
+    m_activeFilter.clear();
 }
 
-fsrs_card* SrsService::nextCard()
+void SrsService::startCustomSession(const QString &customDeckId, uint32_t limit)
 {
-    if (!m_deck) return nullptr;
+    uint64_t now = fsrs_now();
+    fsrs_session_start(&m_recogSession,  now, limit);
+    fsrs_session_start(&m_recallSession, now, limit);
+
+    m_activeFilter.clear();
+    const CustomDeck *cd = m_customDecks.find(customDeckId);
+    if (cd) {
+        m_activeFilter.reserve(cd->entSeqs.size());
+        for (uint32_t seq : cd->entSeqs)
+            m_activeFilter.append(seq);
+    }
+}
+
+NextCard SrsService::nextCard()
+{
+    if (!m_recognition && !m_recall) return {};
 
     uint64_t now = fsrs_now();
 
-    // Reset de sesión si cambió el día lógico
-    uint64_t session_day = fsrs_current_day(m_deck, m_session.session_start);
-    uint64_t current_day = fsrs_current_day(m_deck, now);
-    if (session_day != current_day) {
-        uint32_t limit = m_session.session_limit;
-        fsrs_session_start(&m_session, now, limit);
+    // Resetear sesión si cambió el día lógico (comprobamos en Recognition)
+    if (m_recognition) {
+        uint64_t session_day = fsrs_current_day(m_recognition, m_recogSession.session_start);
+        uint64_t current_day = fsrs_current_day(m_recognition, now);
+        if (session_day != current_day) {
+            uint32_t limit = m_recogSession.session_limit;
+            fsrs_session_start(&m_recogSession,  now, limit);
+            fsrs_session_start(&m_recallSession, now, limit);
+        }
     }
 
-    fsrs_card *card = fsrs_next_for_session(m_deck, &m_session, now);
-    if (!card) return nullptr;
+    const uint32_t *filter   = m_activeFilter.isEmpty() ? nullptr : m_activeFilter.constData();
+    uint32_t        filterSz = static_cast<uint32_t>(m_activeFilter.size());
 
-    if (card->state == FSRS_STATE_SUSPENDED) return nullptr;
+    NextCard nc = SrsScheduler::next(
+        m_recognition, &m_recogSession,
+        m_recall,      &m_recallSession,
+        now, filter, filterSz);
 
-    if ((uint64_t)card->due_day > current_day) return nullptr;
+    if (!nc) return {};
+    if (nc.card->state == FSRS_STATE_SUSPENDED) return {};
 
-    return card;
+    uint64_t today = fsrs_current_day(deckFor(nc.type), now);
+    if (nc.card->state == FSRS_STATE_REVIEW &&
+        (uint64_t)nc.card->due_day > today) return {};
+
+    return nc;
 }
 
-void SrsService::answer(uint32_t fsrsId, fsrs_rating rating)
-{
-    if (!m_deck) return;
+// ─────────────────────────────────────────────────────────────────────────────
+// answer
+// ─────────────────────────────────────────────────────────────────────────────
 
-    uint64_t now   = fsrs_now();
-    fsrs_card *card = getCard(fsrsId);
+void SrsService::answer(uint32_t entSeq, CardType type, fsrs_rating rating)
+{
+    fsrs_deck *deck = deckFor(type);
+    if (!deck) return;
+
+    uint64_t now = fsrs_now();
+    fsrs_card *card = getCard(entSeq, type);
     if (!card) return;
+
+    fsrs_session &session = sessionFor(type);
 
     m_undoStack = UndoEntry{
         .card        = *card,
-        .fsrsId      = fsrsId,
-        .cards_done  = m_session.cards_done,
-        .new_done    = m_session.new_done,
-        .learn_done  = m_session.learn_done,
-        .review_done = m_session.review_done
+        .entSeq      = entSeq,
+        .type        = type,
+        .cards_done  = session.cards_done,
+        .new_done    = session.new_done,
+        .learn_done  = session.learn_done,
+        .review_done = session.review_done
     };
 
     uint8_t prev_state = card->state;
-    fsrs_answer(m_deck, card, rating, now);
+    fsrs_answer(deck, card, rating, now);
 
-    m_session.cards_done++;
-    if      (prev_state == FSRS_STATE_NEW)                               m_session.new_done++;
+    session.cards_done++;
+    if      (prev_state == FSRS_STATE_NEW)                              session.new_done++;
     else if (prev_state == FSRS_STATE_LEARNING ||
-             prev_state == FSRS_STATE_RELEARNING)                        m_session.learn_done++;
-    else if (prev_state == FSRS_STATE_REVIEW)                            m_session.review_done++;
+             prev_state == FSRS_STATE_RELEARNING)                       session.learn_done++;
+    else if (prev_state == FSRS_STATE_REVIEW)                           session.review_done++;
 
-    fsrs_rebuild_queues(m_deck, now);
+    fsrs_rebuild_queues(deck, now);
 
-    if (m_history)
-        m_history->recordAnswer(fsrs_get_card(m_deck, fsrsId), rating, now);
+    if (auto *h = historyFor(type))
+        h->recordAnswer(fsrs_get_card(deck, entSeq), rating, now);
 
-    FsrsEvent *ev = fsrs_sync_record_answer(&m_sync, card, rating, now);
-    (void)fsrs_sync_log_append(log_path_for(effectivePath()).c_str(), ev);
+    FsrsEvent *ev = fsrs_sync_record_answer(&syncFor(type), card, rating, now);
+    (void)fsrs_sync_log_append(logPath(type).c_str(), ev);
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// undo
+// ─────────────────────────────────────────────────────────────────────────────
 
 bool SrsService::undoLastAnswer()
 {
-    if (!m_deck || !m_undoStack.has_value()) return false;
+    if (!m_undoStack.has_value()) return false;
 
     const UndoEntry &undo = *m_undoStack;
-    fsrs_card *card = fsrs_get_card(m_deck, undo.fsrsId);
+    fsrs_deck *deck = deckFor(undo.type);
+    if (!deck) return false;
+
+    fsrs_card *card = getCard(undo.entSeq, undo.type);
     if (!card) return false;
 
     *card = undo.card;
     card->heap_pos_due   = -1;
     card->heap_pos_learn = -1;
 
-    m_session.cards_done  = undo.cards_done;
-    m_session.new_done    = undo.new_done;
-    m_session.learn_done  = undo.learn_done;
-    m_session.review_done = undo.review_done;
+    fsrs_session &session  = sessionFor(undo.type);
+    session.cards_done  = undo.cards_done;
+    session.new_done    = undo.new_done;
+    session.learn_done  = undo.learn_done;
+    session.review_done = undo.review_done;
 
-    FsrsEvent *ev = fsrs_sync_record_undo(&m_sync, undo.fsrsId, fsrs_now());
-    if (ev) (void)fsrs_sync_log_append(log_path_for(effectivePath()).c_str(), ev);
+    uint64_t now = fsrs_now();
+    FsrsEvent *ev = fsrs_sync_record_undo(&syncFor(undo.type), undo.entSeq, now);
+    if (ev) (void)fsrs_sync_log_append(logPath(undo.type).c_str(), ev);
 
-    fsrs_rebuild_queues(m_deck, fsrs_now());
+    fsrs_rebuild_queues(deck, now);
 
-    if (m_history)
-        m_history->recordUndo(undo.fsrsId,
-                              fsrs_get_card(m_deck, undo.fsrsId),
-                              fsrs_now());
+    if (auto *h = historyFor(undo.type))
+        h->recordUndo(undo.entSeq,
+                      fsrs_get_card(deck, undo.entSeq),
+                      now);
 
     m_undoStack.reset();
     return true;
 }
 
-/* ─── estadísticas ──────────────────────────────────────────────────────────── */
+// ─────────────────────────────────────────────────────────────────────────────
+// estadísticas
+// ─────────────────────────────────────────────────────────────────────────────
 
-uint32_t SrsService::totalCount() const
+static uint32_t deckDueCount(fsrs_deck *deck, uint64_t now)
 {
-    return m_deck ? fsrs_deck_count(m_deck) : 0;
-}
-
-uint32_t SrsService::dueCount() const
-{
-    if (!m_deck) return 0;
-    uint64_t now   = fsrs_now();
-    uint64_t today = fsrs_current_day(m_deck, now);
+    if (!deck) return 0;
+    uint64_t today = fsrs_current_day(deck, now);
     uint32_t count = 0;
-    uint32_t total = fsrs_deck_count(m_deck);
+    uint32_t total = fsrs_deck_count(deck);
     for (uint32_t i = 0; i < total; ++i) {
-        const fsrs_card *c = fsrs_deck_card(m_deck, i);
+        const fsrs_card *c = fsrs_deck_card(deck, i);
         if (!c || c->state == FSRS_STATE_SUSPENDED) continue;
         if ((uint64_t)c->due_day <= today) ++count;
     }
     return count;
 }
 
+uint32_t SrsService::totalCount() const
+{
+    return (m_recognition ? fsrs_deck_count(m_recognition) : 0)
+         + (m_recall      ? fsrs_deck_count(m_recall)      : 0);
+}
+
+uint32_t SrsService::dueCount() const
+{
+    uint64_t now = fsrs_now();
+    return deckDueCount(m_recognition, now) + deckDueCount(m_recall, now);
+}
+
 uint32_t SrsService::learningCount() const
 {
-    if (!m_deck) return 0;
-    fsrs_stats st;
-    fsrs_compute_stats(m_deck, fsrs_now(), &st);
-    return st.learning_count + st.relearning_count;
+    fsrs_stats sr{}, rc{};
+    if (m_recognition) fsrs_compute_stats(m_recognition, fsrs_now(), &sr);
+    if (m_recall)      fsrs_compute_stats(m_recall,      fsrs_now(), &rc);
+    return sr.learning_count + sr.relearning_count
+         + rc.learning_count + rc.relearning_count;
 }
 
 uint32_t SrsService::newCount() const
 {
-    if (!m_deck) return 0;
-    fsrs_stats st;
-    fsrs_compute_stats(m_deck, fsrs_now(), &st);
-    return st.new_count;
+    fsrs_stats sr{}, rc{};
+    if (m_recognition) fsrs_compute_stats(m_recognition, fsrs_now(), &sr);
+    if (m_recall)      fsrs_compute_stats(m_recall,      fsrs_now(), &rc);
+    return sr.new_count + rc.new_count;
 }
 
 uint32_t SrsService::lapsedCount() const
 {
-    if (!m_deck) return 0;
-    fsrs_stats st;
-    fsrs_compute_stats(m_deck, fsrs_now(), &st);
-    return st.cards_with_lapses;
+    fsrs_stats sr{}, rc{};
+    if (m_recognition) fsrs_compute_stats(m_recognition, fsrs_now(), &sr);
+    if (m_recall)      fsrs_compute_stats(m_recall,      fsrs_now(), &rc);
+    return sr.cards_with_lapses + rc.cards_with_lapses;
 }
 
 uint32_t SrsService::reviewTodayCount() const
 {
-    return m_session.cards_done;
+    return m_recogSession.cards_done + m_recallSession.cards_done;
 }
 
 uint64_t SrsService::waitSeconds() const
 {
-    return m_deck ? fsrs_wait_seconds(m_deck, fsrs_now()) : 0;
+    uint64_t now = fsrs_now();
+    uint64_t wr  = m_recognition ? fsrs_wait_seconds(m_recognition, now) : UINT64_MAX;
+    uint64_t wrc = m_recall      ? fsrs_wait_seconds(m_recall,      now) : UINT64_MAX;
+    uint64_t w   = (wr < wrc) ? wr : wrc;
+    return (w == UINT64_MAX) ? 0 : w;
 }
 
-/* ─── preview / texto ───────────────────────────────────────────────────────── */
+// ─────────────────────────────────────────────────────────────────────────────
+// preview / texto
+// ─────────────────────────────────────────────────────────────────────────────
 
-std::string SrsService::predictInterval(uint32_t fsrsId, fsrs_rating rating)
+std::string SrsService::predictInterval(uint32_t entSeq, CardType type, fsrs_rating rating)
 {
-    fsrs_card *card = getCard(fsrsId);
-    if (!card) return {};
+    fsrs_card *card = getCard(entSeq, type);
+    fsrs_deck *deck = deckFor(type);
+    if (!card || !deck) return {};
 
     uint64_t now = fsrs_now();
-    uint64_t out[4] = {0, 0, 0, 0};
-    fsrs_preview(m_deck, card, now, out);
+    uint64_t out[4] = {};
+    fsrs_preview(deck, card, now, out);
 
     int idx = static_cast<int>(rating) - 1;
     if (idx < 0) idx = 0;
     if (idx > 3) idx = 3;
 
     uint64_t delta = (out[idx] > now) ? (out[idx] - now) : 0;
-    char buf[64] = {0};
+    char buf[64] = {};
     fsrs_format_interval(delta, buf, sizeof(buf));
     return std::string(buf);
 }
 
-std::string SrsService::dueDateText(uint32_t fsrsId) const
+std::string SrsService::dueDateText(uint32_t entSeq, CardType type) const
 {
-    fsrs_card *card = getCard(fsrsId);
+    fsrs_card *card = getCard(entSeq, type);
     if (!card) return {};
 
     uint64_t now = fsrs_now();
     if (card->state == FSRS_STATE_NEW)       return "New";
     if (card->state == FSRS_STATE_SUSPENDED) return "Suspended";
 
-    uint64_t due = card->due_ts;
-    if (due <= now) return "Now";
+    if (card->due_ts <= now) return "Now";
 
-    char buf[64] = {0};
-    fsrs_format_interval(due - now, buf, sizeof(buf));
+    char buf[64] = {};
+    fsrs_format_interval(card->due_ts - now, buf, sizeof(buf));
     return std::string(buf);
 }
 
-std::string SrsService::stateText(uint32_t fsrsId) const
+std::string SrsService::stateText(uint32_t entSeq, CardType type) const
 {
-    fsrs_card *card = getCard(fsrsId);
+    fsrs_card *card = getCard(entSeq, type);
     if (!card) return {};
 
     switch (card->state) {
@@ -465,83 +624,129 @@ std::string SrsService::stateText(uint32_t fsrsId) const
     }
 }
 
-/* ─── config ────────────────────────────────────────────────────────────────── */
+// ─────────────────────────────────────────────────────────────────────────────
+// updateConfig
+// ─────────────────────────────────────────────────────────────────────────────
 
 void SrsService::updateConfig(const Configuration *config)
 {
     if (!config) return;
     m_config = config;
-
     setAutoAddRecall(config->autoAddRecall);
-
-    update_srs_config(m_deck,
-        nullptr,
-        config->desiredRetention, config->maximumInterval, config->leechThreshold,
-        config->dayOffset, config->newCardsPerDay, config->reviewsPerDay,
-        nullptr, 0,
-        nullptr, 0,
-        0, 0, config->enableFuzz,
-        static_cast<fsrs_order_mode>(config->orderMode)
-    );
+    applyConfig(m_recognition);
+    applyConfig(m_recall);
 }
 
-/* ─── persistencia ──────────────────────────────────────────────────────────── */
+// ─────────────────────────────────────────────────────────────────────────────
+// persistencia
+// ─────────────────────────────────────────────────────────────────────────────
 
-bool SrsService::load(const char *path)
+static fsrs_deck *loadOrCreate(const std::string &srsFile,
+                                const std::string &snapFile,
+                                const std::string &logFile,
+                                FsrsSync          &sync,
+                                uint32_t           dictSize,
+                                const fsrs_params &params)
 {
-    if (!path) return false;
+    fsrs_deck *deck = fsrs_load(srsFile.c_str(), &params);
+    if (!deck) {
+        deck = fsrs_deck_create(dictSize, &params);
+        if (!deck) return nullptr;
+    }
+
+    (void)fsrs_sync_snapshot_load(deck, snapFile.c_str(), fsrs_now());
+    (void)fsrs_sync_log_load(&sync, logFile.c_str());
+    fsrs_sync_rebuild(&sync, deck, fsrs_now());
+    fsrs_rebuild_queues(deck, fsrs_now());
+    return deck;
+}
+
+bool SrsService::load(const QString &basePath)
+{
+    m_basePath = basePath.toStdString();
 
     fsrs_params params = fsrs_default_params();
-    fsrs_deck *deck = fsrs_load(path, &params);
-    if (!deck) return false;
 
-    if (m_deck) fsrs_deck_free(m_deck);
-    m_deck = deck;
-    m_profilePath = path;
+    // Liberar decks anteriores si los hubiera
+    if (m_recognition) { fsrs_deck_free(m_recognition); m_recognition = nullptr; }
+    if (m_recall)      { fsrs_deck_free(m_recall);      m_recall      = nullptr; }
+    fsrs_sync_free(&m_recogSync);
+    fsrs_sync_free(&m_recallSync);
 
-    std::string snap = snapshot_path_for(m_profilePath);
-    std::string log  = log_path_for(m_profilePath);
+    uint64_t device_id = m_config ? m_config->deviceId : 0;
+    fsrs_sync_init(&m_recogSync,  device_id);
+    fsrs_sync_init(&m_recallSync, device_id);
 
-    (void)fsrs_sync_snapshot_load(m_deck, snap.c_str(), fsrs_now());
-    (void)fsrs_sync_log_load(&m_sync, log.c_str());
-    fsrs_sync_rebuild(&m_sync, m_deck, fsrs_now());
-    fsrs_rebuild_queues(m_deck, fsrs_now());
+    m_recognition = loadOrCreate(
+        srsPath(CardType::Recognition), snapPath(CardType::Recognition), logPath(CardType::Recognition),
+        m_recogSync, m_dictSize, params);
 
-    m_history = std::make_unique<SrsHistoryLog>(m_profilePath);
+    m_recall = loadOrCreate(
+        srsPath(CardType::Recall), snapPath(CardType::Recall), logPath(CardType::Recall),
+        m_recallSync, m_dictSize, params);
 
-    uint32_t prev_limit = m_session.session_limit;
-    fsrs_session_start(&m_session, fsrs_now(), prev_limit);
+    if (!m_recognition || !m_recall) return false;
+
+    applyConfig(m_recognition);
+    applyConfig(m_recall);
+
+    // Historiales
+    m_recogHistory  = std::make_unique<SrsHistoryLog>(m_basePath + ".recog");
+    m_recallHistory = std::make_unique<SrsHistoryLog>(m_basePath + ".recall");
+
+    // Custom decks
+    m_customDecks.load(QString::fromStdString(customDecksPath()));
+
+    uint32_t prev_limit = m_recogSession.session_limit;
+    fsrs_session_start(&m_recogSession,  fsrs_now(), prev_limit);
+    fsrs_session_start(&m_recallSession, fsrs_now(), prev_limit);
 
     return true;
 }
 
-bool SrsService::save(const char *path)
+bool SrsService::save()
 {
-    if (!m_deck) return false;
+    if (m_basePath.empty()) return false;
 
-    std::string target = path ? std::string(path) : effectivePath();
-    if (target.empty()) return false;
+    bool ok = true;
+    if (m_recognition)
+        ok &= fsrs_save(m_recognition, srsPath(CardType::Recognition).c_str())
+           && fsrs_sync_compact(&m_recogSync, m_recognition,
+                                snapPath(CardType::Recognition).c_str(),
+                                logPath(CardType::Recognition).c_str(),
+                                fsrs_now());
 
-    if (!fsrs_save(m_deck, target.c_str())) return false;
+    if (m_recall)
+        ok &= fsrs_save(m_recall, srsPath(CardType::Recall).c_str())
+           && fsrs_sync_compact(&m_recallSync, m_recall,
+                                snapPath(CardType::Recall).c_str(),
+                                logPath(CardType::Recall).c_str(),
+                                fsrs_now());
 
-    return fsrs_sync_compact(&m_sync, m_deck,
-                             snapshot_path_for(target).c_str(),
-                             log_path_for(target).c_str(),
-                             fsrs_now());
+    return ok;
 }
 
-void SrsService::saveAsync(const char *path)
+void SrsService::saveAsync()
 {
-    std::string target = path ? std::string(path) : effectivePath();
-    if (target.empty()) return;
+    if (m_basePath.empty()) return;
 
-    QThreadPool::globalInstance()->start([this, target]() {
+    std::string base = m_basePath;
+
+    QThreadPool::globalInstance()->start([this, base]() {
         std::lock_guard<std::mutex> lock(m_deckMutex);
-        if (!m_deck) return;
-        (void)fsrs_save(m_deck, target.c_str());
-        (void)fsrs_sync_compact(&m_sync, m_deck,
-                                snapshot_path_for(target).c_str(),
-                                log_path_for(target).c_str(),
-                                fsrs_now());
+        uint64_t now = fsrs_now();
+
+        if (m_recognition) {
+            (void)fsrs_save(m_recognition, (base + ".recog.srs").c_str());
+            (void)fsrs_sync_compact(&m_recogSync, m_recognition,
+                                    (base + ".recog.sync.snap").c_str(),
+                                    (base + ".recog.sync.log").c_str(), now);
+        }
+        if (m_recall) {
+            (void)fsrs_save(m_recall, (base + ".recall.srs").c_str());
+            (void)fsrs_sync_compact(&m_recallSync, m_recall,
+                                    (base + ".recall.sync.snap").c_str(),
+                                    (base + ".recall.sync.log").c_str(), now);
+        }
     });
 }

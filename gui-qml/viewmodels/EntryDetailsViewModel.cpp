@@ -15,17 +15,17 @@ EntryDetailsViewModel::EntryDetailsViewModel(
 
 void EntryDetailsViewModel::initialize(kotoba_dict *dict, Configuration *config)
 {
-    m_dict = dict;
+    m_dict   = dict;
     m_config = config;
 }
 
 /* -------------------------
  * HEADWORD HELPER
  * ------------------------- */
-QString EntryDetailsViewModel::headword(uint32_t id)
+QString EntryDetailsViewModel::headword(uint32_t entSeq)
 {
-    const entry_bin *e = kotoba_entry(m_dict, id);
-    if (!e) return "";
+    const entry_bin *e = kotoba_dict_get_entry_by_entseq(m_dict, entSeq);
+    if (!e) return {};
 
     if (e->k_elements_count > 0) {
         const k_ele_bin *k = kotoba_k_ele(m_dict, e, 0);
@@ -39,21 +39,21 @@ QString EntryDetailsViewModel::headword(uint32_t id)
         return QString::fromUtf8(s.ptr, s.len);
     }
 
-    return "";
+    return {};
 }
 
 /* -------------------------
  * MAP ENTRY
  * ------------------------- */
-QVariantMap EntryDetailsViewModel::mapEntry(int docId)
+QVariantMap EntryDetailsViewModel::mapEntry(int entSeq)
 {
     QVariantMap result;
 
-    const entry_bin *entry = kotoba_entry(m_dict, docId);
+    const entry_bin *entry = kotoba_dict_get_entry_by_entseq(m_dict, static_cast<uint32_t>(entSeq));
     if (!entry)
         return result;
 
-    result["id"] = docId;
+    result["id"] = entSeq;   // ent_seq — el caller lo usa para llamar a SrsViewModel::add()
 
     /* -------------------------
      * K ELEMENTS
@@ -66,10 +66,9 @@ QVariantMap EntryDetailsViewModel::mapEntry(int docId)
         kotoba_str keb = kotoba_keb(m_dict, k);
         kMap["keb"] = QString::fromUtf8(keb.ptr, keb.len);
 
-        // tokenizados directos (NO copies innecesarias)
         QStringList priList;
         for (uint32_t p = 0; p < k->ke_pri_count; ++p) {
-            const char* pri = kotoba_ke_pri(m_dict, k, p);
+            const char *pri = kotoba_ke_pri(m_dict, k, p);
             if (pri) priList << QString::fromUtf8(pri);
         }
         kMap["ke_pri"] = priList;
@@ -91,7 +90,7 @@ QVariantMap EntryDetailsViewModel::mapEntry(int docId)
 
         QStringList priList;
         for (uint32_t p = 0; p < r->re_pri_count; ++p) {
-            const char* pri = kotoba_re_pri(m_dict, r, p);
+            const char *pri = kotoba_re_pri(m_dict, r, p);
             if (pri) priList << QString::fromUtf8(pri);
         }
         rMap["re_pri"] = priList;
@@ -108,12 +107,13 @@ QVariantMap EntryDetailsViewModel::mapEntry(int docId)
     for (uint32_t i = 0; i < entry->senses_count; ++i) {
         QVariantMap sMap;
         const sense_bin *sense = kotoba_sense(m_dict, entry, i);
-        if (!m_config->languages[sense->lang]) // filtrar por idioma
+        if (!m_config->languages[sense->lang])
             continue;
-        /* POS (tokenizado directo) */
+
+        /* POS */
         QStringList posList;
         for (uint32_t p = 0; p < sense->pos_count; ++p) {
-            const char* pos = kotoba_pos(m_dict, sense, p);
+            const char *pos = kotoba_pos(m_dict, sense, p);
             if (pos) posList << QString::fromUtf8(pos);
         }
         sMap["pos"] = posList;
@@ -128,12 +128,10 @@ QVariantMap EntryDetailsViewModel::mapEntry(int docId)
 
         /* STAGK */
         QStringList stagkList;
-
         for (uint32_t sk = 0; sk < sense->stagk_count; ++sk) {
             kotoba_str sks = kotoba_stagk(m_dict, entry, i, sk);
             stagkList << QString::fromUtf8(sks.ptr, sks.len);
         }
-
         sMap["stagk"] = stagkList;
 
         /* STAGR */
@@ -144,45 +142,36 @@ QVariantMap EntryDetailsViewModel::mapEntry(int docId)
         }
         sMap["stagr"] = stagrList;
 
-        /* XREF (índice → headword) */
+        /* XREF (ent_seq → headword) */
         QVariantList xrefList;
-
         for (uint32_t x = 0; x < sense->xref_count; ++x) {
-            uint32_t refId = kotoba_xref(m_dict, sense, x);
-
-            QString hw = headword(refId);
+            uint32_t refEntSeq = kotoba_xref(m_dict, sense, x);
+            QString hw = headword(refEntSeq);
             if (hw.isEmpty()) continue;
-
             QVariantMap item;
-            item["id"] = refId;     // para navegación
-            item["label"] = hw;     // texto a mostrar
-
+            item["id"]    = static_cast<int>(refEntSeq);   // ent_seq para navegación
+            item["label"] = hw;
             xrefList.append(item);
         }
         sMap["xref"] = xrefList;
 
         /* ANT */
         QVariantList antList;
-
         for (uint32_t a = 0; a < sense->ant_count; ++a) {
-            uint32_t refId = kotoba_ant(m_dict, sense, a);
-
-            QString hw = headword(refId);
+            uint32_t refEntSeq = kotoba_ant(m_dict, sense, a);
+            QString hw = headword(refEntSeq);
             if (hw.isEmpty()) continue;
-
             QVariantMap item;
-            item["id"] = refId;
+            item["id"]    = static_cast<int>(refEntSeq);   // ent_seq para navegación
             item["label"] = hw;
-
             antList.append(item);
         }
-
         sMap["ant"] = antList;
 
         /* FIELD */
         QStringList fieldList;
         for (uint32_t f = 0; f < sense->field_count; ++f) {
-            const char* fld = kotoba_field(m_dict, sense, f);
+            const char *fld = kotoba_field(m_dict, sense, f);
             if (fld) fieldList << QString::fromUtf8(fld);
         }
         sMap["field"] = fieldList;
@@ -190,7 +179,7 @@ QVariantMap EntryDetailsViewModel::mapEntry(int docId)
         /* MISC */
         QStringList miscList;
         for (uint32_t m = 0; m < sense->misc_count; ++m) {
-            const char* misc = kotoba_misc(m_dict, sense, m);
+            const char *misc = kotoba_misc(m_dict, sense, m);
             if (misc) miscList << QString::fromUtf8(misc);
         }
         sMap["misc"] = miscList;
@@ -214,7 +203,7 @@ QVariantMap EntryDetailsViewModel::mapEntry(int docId)
         /* DIAL */
         QStringList dialList;
         for (uint32_t d = 0; d < sense->dial_count; ++d) {
-            const char* dial = kotoba_dial(m_dict, sense, d);
+            const char *dial = kotoba_dial(m_dict, sense, d);
             if (dial) dialList << QString::fromUtf8(dial);
         }
         sMap["dial"] = dialList;

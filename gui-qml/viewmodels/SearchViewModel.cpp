@@ -119,7 +119,7 @@ void SearchViewModel::fillFromContext(bool append)
         ResultRow r;
         r.doc_id = doc;
 
-        const entry_bin *entry = kotoba_dict_get_entry(m_dict, doc);
+        const entry_bin *entry = kotoba_dict_get_entry_by_entseq(m_dict, doc);
         if (entry)
         {
             // ── headword: primer kanji, o primer kana si no hay kanji ────────

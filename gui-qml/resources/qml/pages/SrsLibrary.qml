@@ -15,7 +15,6 @@ Page {
         if (srsLibraryVM) srsLibraryVM.setFilter("All")
     }
 
-    // ── Filter pill (library-specific chip, not a generic component) ──────────
     component FilterPill: Rectangle {
         property string label:  ""
         property bool   active: false
@@ -55,12 +54,10 @@ Page {
         }
     }
 
-    // ── Layout ────────────────────────────────────────────────────────────────
     ColumnLayout {
         anchors.fill: parent
         spacing: 0
 
-        // ── Top bar ───────────────────────────────────────────────────────────
         Rectangle {
             Layout.fillWidth: true
             color:  Theme.cardBackground
@@ -78,7 +75,6 @@ Page {
 
                 RowLayout {
                     width: parent.width
-
                     BackButton {
                         onClicked: stack.pop()
                         Layout.minimumWidth: Theme.minTapTarget
@@ -86,7 +82,6 @@ Page {
                     Item { Layout.fillWidth: true }
                 }
 
-                // Search field
                 Rectangle {
                     width: parent.width; height: 36; radius: 7
                     color: Theme.surfaceInput
@@ -105,7 +100,6 @@ Page {
                             font.pixelSize: Theme.fontSizeIcon
                             color: Qt.rgba(Theme.hintColor.r, Theme.hintColor.g, Theme.hintColor.b, 0.45)
                         }
-
                         TextField {
                             id: searchField
                             Layout.fillWidth: true
@@ -117,7 +111,6 @@ Page {
                             leftPadding:      0
                             onTextChanged:    if (srsLibraryVM) srsLibraryVM.setSearch(text)
                         }
-
                         Rectangle {
                             width: 18; height: 18; radius: 9
                             color:   Theme.surfaceClear
@@ -137,7 +130,6 @@ Page {
                     }
                 }
 
-                // Filter pills
                 Row {
                     spacing: 6
                     Repeater {
@@ -155,10 +147,8 @@ Page {
             }
         }
 
-        // Filter state holder
         QtObject { id: filterState; property string current: "All" }
 
-        // Count header
         Rectangle {
             Layout.fillWidth: true
             height: 32; color: "transparent"
@@ -169,7 +159,7 @@ Page {
                     font.weight:        Font.Medium
                     font.letterSpacing: 0.5
                     color: Qt.rgba(Theme.hintColor.r, Theme.hintColor.g, Theme.hintColor.b, 0.55)
-                    text: cardList.count + (cardList.count === 1 ? " CARD" : " CARDS")
+                    text: cardList.count + (cardList.count === 1 ? " ENTRY" : " ENTRIES")
                 }
                 Item { Layout.fillWidth: true }
             }
@@ -179,7 +169,6 @@ Page {
             }
         }
 
-        // ── Card list ─────────────────────────────────────────────────────────
         Item {
             Layout.fillWidth:  true
             Layout.fillHeight: true
@@ -194,14 +183,21 @@ Page {
                 cacheBuffer:   400
 
                 delegate: SrsCardDelegate {
-                    width:      cardList.width
-                    word:       model.word
-                    meaning:    model.meaning
-                    cardState:  model.state
-                    due:        model.due
-                    entryId:    model.entryId
-                    variants:   model.variants
-                    readings:   model.readings
+                    width: cardList.width
+
+                    entryId:  model.entryId
+                    word:     model.word
+                    meaning:  model.meaning
+                    variants: model.variants
+                    readings: model.readings
+
+                    recogPresent: model.recogPresent
+                    recogState:   model.recogPresent ? model.recogState : ""
+                    recogDue:     model.recogPresent ? model.recogDue   : ""
+
+                    recallPresent: model.recallPresent
+                    recallState:   model.recallPresent ? model.recallState : ""
+                    recallDue:     model.recallPresent ? model.recallDue   : ""
 
                     highlightEnabled: appConfig.highlightMatches
                     activeQuery:      srsLibraryVM.activeSearch
@@ -212,7 +208,6 @@ Page {
                     }
                 }
 
-                // Fade-out gradient at bottom
                 Rectangle {
                     anchors { bottom: parent.bottom; left: parent.left; right: parent.right }
                     height: 40
@@ -225,7 +220,6 @@ Page {
                 }
             }
 
-            // Empty state
             Column {
                 anchors.centerIn: parent
                 spacing: 10

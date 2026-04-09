@@ -20,27 +20,39 @@ class SrsService;
 class SearchService;
 class Configuration;
 
-struct SrsCardItem {
-    uint32_t fsrsId  = 0;      // id completo en el deck (con bit de tipo)
-    uint32_t entryId = 0;      // id del entry en el diccionario (sin bit de tipo)
-    CardType cardType = CardType::Recognition;
+// ─────────────────────────────────────────────────────────────────────────────
+// SrsCardItem — una fila por ent_seq, con estado de ambas cartas.
+// ─────────────────────────────────────────────────────────────────────────────
 
-    QString  word;
-    QString  meaning;
-    QString  state;
-    QString  due;
-    uint16_t reps    = 0;
-    uint16_t lapses  = 0;
-
+struct SrsCardItemDeckState {
+    bool    present   = false;
+    QString state;          // "New" | "Learning" | "Relearning" | "Review" | "Suspended"
+    QString due;
+    uint16_t reps     = 0;
+    uint16_t lapses   = 0;
     uint32_t totalReviews = 0;
     float    stability    = 0.f;
     float    difficulty   = 0.f;
     uint64_t lastReview   = 0;
+};
+
+struct SrsCardItem {
+    uint32_t entSeq = 0;    // ent_seq del JMdict — ID estable
+
+    QString  word;
+    QString  meaning;
+
+    SrsCardItemDeckState recog;
+    SrsCardItemDeckState recall;
 
     QStringList variants;
     QStringList readingsList;
     QStringList matchVariants;
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SrsLibraryViewModel
+// ─────────────────────────────────────────────────────────────────────────────
 
 class SrsLibraryViewModel : public QAbstractListModel
 {
@@ -50,47 +62,54 @@ class SrsLibraryViewModel : public QAbstractListModel
 
 public:
     enum Roles {
-        // Los roles QML usan entryId (sin bit de tipo) para identificar la entry
-        EntryIdRole  = Qt::UserRole + 1,
+        EntryIdRole       = Qt::UserRole + 1,  // ent_seq
         WordRole,
         MeaningRole,
-        StateRole,
-        DueRole,
-        RepsRole,
-        LapsesRole,
         VariantsRole,
         ReadingsRole,
-        CardTypeRole,    // "Recognition" o "Recall" — nuevo
-        FsrsIdRole,      // id completo con bit de tipo — para operaciones internas
+
+        // Recognition
+        RecogPresentRole,
+        RecogStateRole,
+        RecogDueRole,
+        RecogRepsRole,
+        RecogLapsesRole,
+
+        // Recall
+        RecallPresentRole,
+        RecallStateRole,
+        RecallDueRole,
+        RecallRepsRole,
+        RecallLapsesRole,
     };
 
-    explicit SrsLibraryViewModel(QObject* parent = nullptr);
+    explicit SrsLibraryViewModel(QObject *parent = nullptr);
+
     void initialize(
-        SrsService*    service,
-        kotoba_dict*   dict,
-        SearchService* searchService,
-        Configuration* config
+        SrsService    *service,
+        kotoba_dict   *dict,
+        SearchService *searchService,
+        Configuration *config
     );
 
     Q_INVOKABLE void    setSearch(const QString &text);
     Q_INVOKABLE void    setFilter(const QString &filter);
 
-    // Getters por fsrsId (id completo con bit de tipo)
-    Q_INVOKABLE int     getReps        (int fsrsId) const;
-    Q_INVOKABLE int     getLapses      (int fsrsId) const;
-    Q_INVOKABLE int     getTotalReviews(int fsrsId) const;
-    Q_INVOKABLE float   getStability   (int fsrsId) const;
-    Q_INVOKABLE float   getDifficulty  (int fsrsId) const;
-    Q_INVOKABLE QString getLastReview  (int fsrsId) const;
-    Q_INVOKABLE QString getDue         (int fsrsId) const;
-    Q_INVOKABLE QString getState       (int fsrsId) const;
-    Q_INVOKABLE QString getCardType    (int fsrsId) const;
+    // Getters de detalle por ent_seq + tipo
+    Q_INVOKABLE int     getReps        (int entSeq, int cardType) const;
+    Q_INVOKABLE int     getLapses      (int entSeq, int cardType) const;
+    Q_INVOKABLE int     getTotalReviews(int entSeq, int cardType) const;
+    Q_INVOKABLE float   getStability   (int entSeq, int cardType) const;
+    Q_INVOKABLE float   getDifficulty  (int entSeq, int cardType) const;
+    Q_INVOKABLE QString getLastReview  (int entSeq, int cardType) const;
+    Q_INVOKABLE QString getDue         (int entSeq, int cardType) const;
+    Q_INVOKABLE QString getState       (int entSeq, int cardType) const;
 
-    // Acciones — toman fsrsId para operar sobre el tipo correcto
-    Q_INVOKABLE void    suspend  (int fsrsId);
-    Q_INVOKABLE void    unsuspend(int fsrsId);
-    Q_INVOKABLE void    reset    (int fsrsId);
-    Q_INVOKABLE void    remove   (int fsrsId);
+    // Acciones por ent_seq + cardType (0=Recognition, 1=Recall)
+    Q_INVOKABLE void    suspend  (int entSeq, int cardType);
+    Q_INVOKABLE void    unsuspend(int entSeq, int cardType);
+    Q_INVOKABLE void    reset    (int entSeq, int cardType);
+    Q_INVOKABLE void    remove   (int entSeq, int cardType);
 
     Q_INVOKABLE void    refresh();
 
@@ -118,10 +137,18 @@ private:
     void resetToInitialPage();
     bool variantMatch(const SrsCardItem &it, const QString &q) const;
 
-    SrsService*    m_service       = nullptr;
-    SearchService* m_searchService = nullptr;
-    kotoba_dict*   m_dict          = nullptr;
-    Configuration* m_config        = nullptr;
+    CardType cardTypeFromInt(int v) const {
+        return (v == 1) ? CardType::Recall : CardType::Recognition;
+    }
+
+    const SrsCardItemDeckState &stateFor(const SrsCardItem &it, int cardType) const {
+        return (cardType == 1) ? it.recall : it.recog;
+    }
+
+    SrsService    *m_service       = nullptr;
+    SearchService *m_searchService = nullptr;
+    kotoba_dict   *m_dict          = nullptr;
+    Configuration *m_config        = nullptr;
 
     QVector<SrsCardItem> m_allCards;
     QVector<SrsCardItem> m_filtered;

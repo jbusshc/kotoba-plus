@@ -17,7 +17,7 @@ extern "C" {
    ========================= */
 
 #define RH_STORE_HASH 1
-#define RH_MAX_CAPACITY 262'144u /* mirror de CardType.h RECALL_OFFSET (debe ser potencia de 2) */
+#define RH_MAX_CAPACITY 262144u /* mirror de CardType.h RECALL_OFFSET (debe ser potencia de 2) */
 
 typedef struct {
     uint32_t ent_seq;

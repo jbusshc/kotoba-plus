@@ -74,7 +74,9 @@ int main(int argc, char **argv)
                 "Usage:  build-invx <tsv> out.invx\n"
                 "        search <index.invx> <query>\n"
                 "        build-tsv\n"
-                "        build-dict\n");
+                "        build-dict\n"
+                "        patch\n"
+            );
         return 1;
     }
 

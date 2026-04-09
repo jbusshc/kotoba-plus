@@ -23,8 +23,7 @@
 
 #include <stdlib.h>
 
-int main(int argc, char **argv)
-{
+int main(int argc, char **argv) {
     #ifdef Q_OS_ANDROID
     qputenv("QSG_RENDER_LOOP", "threaded");
     QCoreApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
@@ -66,9 +65,10 @@ int main(int argc, char **argv)
     srand(static_cast<unsigned int>(time(nullptr)));
 
     std::string srsProfilePath;
+    bool failed = false;
 
     // ── Hilo concurrente para carga pesada ─────────────────────────────────────
-    QThreadPool::globalInstance()->start([=, &configWrapper, &srsProfilePath]() {
+    QThreadPool::globalInstance()->start([=, &configWrapper, &srsProfilePath, &failed]() {
 
         // ── 1) Paths y configuración ─────────────────────────────────────────
         AppPaths paths = AppPaths::resolve();
@@ -82,7 +82,6 @@ int main(int argc, char **argv)
 
         configWrapper.m_config.dictPath      = paths.dictPath;
         configWrapper.m_config.dictIndexPath = paths.dictIndexPath;
-        configWrapper.m_config.srsPath       = paths.srsPath;
         configWrapper.m_config.glossEnPath   = paths.glossPath("en");
         configWrapper.m_config.glossEsPath   = paths.glossPath("es");
         configWrapper.m_config.glossDePath   = paths.glossPath("de");
@@ -105,6 +104,7 @@ int main(int argc, char **argv)
         if (!repo->open(configWrapper.m_config.dictPath,
                         configWrapper.m_config.dictIndexPath)) {
             qWarning("Failed to open dictionary.");
+            failed = true;
             return;
         }
         kotoba_dict *dict = repo->dict();
@@ -118,7 +118,7 @@ int main(int argc, char **argv)
         QMetaObject::invokeMethod(controller, [=]() {
             controller->setStatus("Loading SRS profile…");
         }, Qt::QueuedConnection);
-        srsSvc->initialize(static_cast<uint32_t>(dict->entry_count),
+        srsSvc->initialize(static_cast<uint32_t>(dict->bin_header->entry_count),
                         &configWrapper.m_config);
         srsSvc->load(srsProfilePath.c_str());
 
@@ -130,10 +130,15 @@ int main(int argc, char **argv)
             libVM->initialize(srsSvc, dict, searchSvc, &configWrapper.m_config);
 
             configWrapper.setServices(searchSvc, srsSvc);
-            controller->notifyReady();  // dispara transición QML
+            controller->notifyReady();  // dispara transición QML 
         }, Qt::QueuedConnection);
 
     });
+
+    if (failed) {
+        // Error crítico durante la carga inicial — mostrar mensaje y salir.
+        return -1;
+    }
 
     // ── Ciclo de vida Android ─────────────────────────────────────────────────
     #ifdef Q_OS_ANDROID
@@ -177,7 +182,7 @@ int main(int argc, char **argv)
 
     // ── Persistir cambios al cerrar ─────────────────────────────────────────
     QObject::connect(&app, &QCoreApplication::aboutToQuit, [&]() {
-        srsSvc->save(srsProfilePath.c_str());
+        srsSvc->save();
         saveConfiguration(configWrapper.m_config, configWrapper.m_configPath);
     });
 

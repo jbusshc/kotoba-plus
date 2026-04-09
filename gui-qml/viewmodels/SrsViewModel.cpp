@@ -8,48 +8,51 @@ extern "C" {
 
 #include <QStringList>
 
-/* ─── Constructor ────────────────────────────────────────────────────────────── */
+// ─────────────────────────────────────────────────────────────────────────────
+// Constructor
+// ─────────────────────────────────────────────────────────────────────────────
 
 SrsViewModel::SrsViewModel(QObject *parent)
-    : QObject(parent), m_service(nullptr), m_dict(nullptr), m_detailsVM(nullptr)
+    : QObject(parent)
 {}
 
 void SrsViewModel::initialize(SrsService *service, kotoba_dict *dict, EntryDetailsViewModel *detailsVM)
 {
-    m_service  = service;
-    m_dict     = dict;
+    m_service   = service;
+    m_dict      = dict;
     m_detailsVM = detailsVM;
 }
 
-/* ─── Properties ─────────────────────────────────────────────────────────────── */
+// ─────────────────────────────────────────────────────────────────────────────
+// Properties
+// ─────────────────────────────────────────────────────────────────────────────
 
-int SrsViewModel::totalCount()       const { return m_service ? static_cast<int>(m_service->totalCount())       : 0; }
-int SrsViewModel::dueCount()         const { return m_service ? static_cast<int>(m_service->dueCount())         : 0; }
-int SrsViewModel::learningCount()    const { return m_service ? static_cast<int>(m_service->learningCount())    : 0; }
-int SrsViewModel::newCount()         const { return m_service ? static_cast<int>(m_service->newCount())         : 0; }
-int SrsViewModel::lapsedCount()      const { return m_service ? static_cast<int>(m_service->lapsedCount())      : 0; }
-int SrsViewModel::reviewTodayCount() const { return m_service ? static_cast<int>(m_service->reviewTodayCount()) : 0; }
+int SrsViewModel::totalCount()       const { return m_service ? (int)m_service->totalCount()       : 0; }
+int SrsViewModel::dueCount()         const { return m_service ? (int)m_service->dueCount()         : 0; }
+int SrsViewModel::learningCount()    const { return m_service ? (int)m_service->learningCount()    : 0; }
+int SrsViewModel::newCount()         const { return m_service ? (int)m_service->newCount()         : 0; }
+int SrsViewModel::lapsedCount()      const { return m_service ? (int)m_service->lapsedCount()      : 0; }
+int SrsViewModel::reviewTodayCount() const { return m_service ? (int)m_service->reviewTodayCount() : 0; }
 bool SrsViewModel::canUndo()         const { return m_service && m_service->canUndo(); }
 
-// Intervalos: usan el fsrsId completo de la carta en curso
 QString SrsViewModel::againInterval() const {
     return (m_hasCard && m_service)
-        ? QString::fromStdString(m_service->predictInterval(m_currentFsrsId, FSRS_AGAIN))
+        ? QString::fromStdString(m_service->predictInterval(m_current.entSeq, m_current.type, FSRS_AGAIN))
         : QString();
 }
 QString SrsViewModel::hardInterval() const {
     return (m_hasCard && m_service)
-        ? QString::fromStdString(m_service->predictInterval(m_currentFsrsId, FSRS_HARD))
+        ? QString::fromStdString(m_service->predictInterval(m_current.entSeq, m_current.type, FSRS_HARD))
         : QString();
 }
 QString SrsViewModel::goodInterval() const {
     return (m_hasCard && m_service)
-        ? QString::fromStdString(m_service->predictInterval(m_currentFsrsId, FSRS_GOOD))
+        ? QString::fromStdString(m_service->predictInterval(m_current.entSeq, m_current.type, FSRS_GOOD))
         : QString();
 }
 QString SrsViewModel::easyInterval() const {
     return (m_hasCard && m_service)
-        ? QString::fromStdString(m_service->predictInterval(m_currentFsrsId, FSRS_EASY))
+        ? QString::fromStdString(m_service->predictInterval(m_current.entSeq, m_current.type, FSRS_EASY))
         : QString();
 }
 
@@ -58,24 +61,32 @@ QString     SrsViewModel::currentMeaning()   const { return m_currentMeaning; }
 bool        SrsViewModel::hasCard()          const { return m_hasCard; }
 QVariantMap SrsViewModel::currentEntryData() const { return m_currentEntryData; }
 
-int SrsViewModel::currentEntryId() const {
-    return m_hasCard
-        ? static_cast<int>(CardTypeHelper::toEntryId(m_currentFsrsId))
-        : -1;
+int SrsViewModel::currentEntryId() const
+{
+    return m_hasCard ? (int)m_current.entSeq : -1;
 }
 
-QString SrsViewModel::currentCardType() const {
+QString SrsViewModel::currentCardType() const
+{
     if (!m_hasCard) return QStringLiteral("Recognition");
-    return (CardTypeHelper::toCardType(m_currentFsrsId) == CardType::Recall)
+    return (m_current.type == CardType::Recall)
         ? QStringLiteral("Recall")
         : QStringLiteral("Recognition");
 }
 
-/* ─── Sesión ─────────────────────────────────────────────────────────────────── */
+// ─────────────────────────────────────────────────────────────────────────────
+// Sesión
+// ─────────────────────────────────────────────────────────────────────────────
 
 void SrsViewModel::startSession()
 {
     if (m_service) m_service->startSession();
+    loadNext();
+}
+
+void SrsViewModel::startCustomSession(const QString &customDeckId)
+{
+    if (m_service) m_service->startCustomSession(customDeckId);
     loadNext();
 }
 
@@ -84,7 +95,9 @@ bool SrsViewModel::saveProfile()
     return m_service ? m_service->save() : false;
 }
 
-/* ─── loadNext ───────────────────────────────────────────────────────────────── */
+// ─────────────────────────────────────────────────────────────────────────────
+// loadNext
+// ─────────────────────────────────────────────────────────────────────────────
 
 void SrsViewModel::loadNext()
 {
@@ -100,23 +113,21 @@ void SrsViewModel::loadNext()
         return;
     }
 
-    fsrs_card *card = m_service->nextCard();
-    if (!card) {
-        m_hasCard = false;
+    NextCard nc = m_service->nextCard();
+    if (!nc) {
+        m_hasCard          = false;
+        m_current          = {};
         m_currentEntryData = {};
         finish();
         emit noMoreCards();
         return;
     }
 
-    // card->id es el fsrsId completo (puede tener el bit de Recall)
-    m_currentFsrsId = card->id;
-    uint32_t entryId = CardTypeHelper::toEntryId(m_currentFsrsId);
-    CardType type    = CardTypeHelper::toCardType(m_currentFsrsId);
-
-    const entry_bin *entry = kotoba_dict_get_entry(m_dict, entryId);
+    // Lookup por ent_seq — estable entre regeneraciones del dict
+    const entry_bin *entry = kotoba_entry(m_dict, nc.entSeq);
     if (!entry) {
-        m_hasCard = false;
+        m_hasCard          = false;
+        m_current          = {};
         m_currentEntryData = {};
         finish();
         emit noMoreCards();
@@ -124,10 +135,9 @@ void SrsViewModel::loadNext()
     }
 
     m_hasCard = true;
+    m_current = nc;
 
-    // Construir word / meaning según el tipo de carta.
-    // Recognition: pregunta = headword/lectura;  respuesta = gloss
-    // Recall:      pregunta = gloss (primer sense); respuesta = headword
+    // Construir word / meaning
     QString word, meaning;
 
     if (entry->k_elements_count > 0) {
@@ -151,35 +161,34 @@ void SrsViewModel::loadNext()
         meaning = parts.join(QStringLiteral("; "));
     }
 
-    // Para el modo Recall: intercambiamos el rol de "pregunta" y "respuesta".
-    // currentWord  → lo que se muestra antes de revelar
-    // currentMeaning → lo que se revela
-    // EntryView en modo "srs" ya usa entryData completo, pero currentWord y
-    // currentMeaning se usan en algunos widgets legacy; los mantenemos coherentes.
-    if (type == CardType::Recall) {
-        m_currentWord    = meaning;   // se muestra el gloss como pregunta
-        m_currentMeaning = word;      // se revela la escritura
+    // Recognition: pregunta = headword, respuesta = gloss
+    // Recall:      pregunta = gloss,    respuesta = headword
+    if (nc.type == CardType::Recall) {
+        m_currentWord    = meaning;
+        m_currentMeaning = word;
     } else {
         m_currentWord    = word;
         m_currentMeaning = meaning;
     }
 
-    // entryData completo — EntryView usará currentCardType para decidir qué ocultar
     m_currentEntryData = m_detailsVM
-        ? m_detailsVM->mapEntry(static_cast<int>(entryId))
+        ? m_detailsVM->mapEntry((int)nc.entSeq)
         : QVariantMap{};
 
     finish();
 }
 
-/* ─── Respuestas ─────────────────────────────────────────────────────────────── */
+// ─────────────────────────────────────────────────────────────────────────────
+// Respuestas
+// ─────────────────────────────────────────────────────────────────────────────
 
 void SrsViewModel::revealAnswer() {}
 
 void SrsViewModel::handleAnswer(int quality)
 {
     if (!m_hasCard || !m_service) return;
-    m_service->answer(m_currentFsrsId, static_cast<fsrs_rating>(quality));
+    m_service->answer(m_current.entSeq, m_current.type,
+                      static_cast<fsrs_rating>(quality));
     loadNext();
 }
 
@@ -188,62 +197,66 @@ void SrsViewModel::answerHard()  { handleAnswer(FSRS_HARD);  }
 void SrsViewModel::answerGood()  { handleAnswer(FSRS_GOOD);  }
 void SrsViewModel::answerEasy()  { handleAnswer(FSRS_EASY);  }
 
-/* ─── Gestión de cartas ──────────────────────────────────────────────────────── */
+// ─────────────────────────────────────────────────────────────────────────────
+// Gestión de cartas
+// ─────────────────────────────────────────────────────────────────────────────
 
-bool SrsViewModel::containsRecognition(int entryId) const {
-    return m_service && m_service->contains(static_cast<uint32_t>(entryId), CardType::Recognition);
+bool SrsViewModel::containsRecognition(int entSeq) const {
+    return m_service && m_service->contains((uint32_t)entSeq, CardType::Recognition);
 }
 
-bool SrsViewModel::containsRecall(int entryId) const {
-    return m_service && m_service->contains(static_cast<uint32_t>(entryId), CardType::Recall);
+bool SrsViewModel::containsRecall(int entSeq) const {
+    return m_service && m_service->contains((uint32_t)entSeq, CardType::Recall);
 }
 
-void SrsViewModel::add(int entryId)
+void SrsViewModel::add(int entSeq)
 {
     if (!m_service) return;
-    if (m_service->add(static_cast<uint32_t>(entryId), CardType::Recognition))
+    if (m_service->add((uint32_t)entSeq, CardType::Recognition))
         updateStats();
-    emit containsChanged(entryId, 1);   // 1 = Recognition
+    emit containsChanged(entSeq, 1);
 }
 
-void SrsViewModel::addRecall(int entryId)
+void SrsViewModel::addRecall(int entSeq)
 {
     if (!m_service) return;
-    if (m_service->add(static_cast<uint32_t>(entryId), CardType::Recall))
+    if (m_service->add((uint32_t)entSeq, CardType::Recall))
         updateStats();
-    emit containsChanged(entryId, 2);   // 2 = Recall
+    emit containsChanged(entSeq, 2);
 }
 
-void SrsViewModel::addBoth(int entryId)
+void SrsViewModel::addBoth(int entSeq)
 {
     if (!m_service) return;
-    if (m_service->addBoth(static_cast<uint32_t>(entryId)))
+    if (m_service->addBoth((uint32_t)entSeq))
         updateStats();
-    emit containsChanged(entryId, 3);   // 3 = ambos
+    emit containsChanged(entSeq, 3);
 }
 
-void SrsViewModel::remove(int entryId)
+void SrsViewModel::remove(int entSeq)
 {
     if (!m_service) return;
-    m_service->remove(static_cast<uint32_t>(entryId), CardType::Recognition);
-    emit containsChanged(entryId, 1);
+    m_service->remove((uint32_t)entSeq, CardType::Recognition);
+    emit containsChanged(entSeq, 1);
 }
 
-void SrsViewModel::removeRecall(int entryId)
+void SrsViewModel::removeRecall(int entSeq)
 {
     if (!m_service) return;
-    m_service->remove(static_cast<uint32_t>(entryId), CardType::Recall);
-    emit containsChanged(entryId, 2);
+    m_service->remove((uint32_t)entSeq, CardType::Recall);
+    emit containsChanged(entSeq, 2);
 }
 
-void SrsViewModel::removeBoth(int entryId)
+void SrsViewModel::removeBoth(int entSeq)
 {
     if (!m_service) return;
-    m_service->removeBoth(static_cast<uint32_t>(entryId));
-    emit containsChanged(entryId, 3);
+    m_service->removeBoth((uint32_t)entSeq);
+    emit containsChanged(entSeq, 3);
 }
 
-/* ─── Undo ───────────────────────────────────────────────────────────────────── */
+// ─────────────────────────────────────────────────────────────────────────────
+// Undo
+// ─────────────────────────────────────────────────────────────────────────────
 
 bool SrsViewModel::undoLastAnswer()
 {
@@ -253,7 +266,9 @@ bool SrsViewModel::undoLastAnswer()
     return true;
 }
 
-/* ─── Stats ──────────────────────────────────────────────────────────────────── */
+// ─────────────────────────────────────────────────────────────────────────────
+// Stats
+// ─────────────────────────────────────────────────────────────────────────────
 
 void SrsViewModel::updateStats() { emit statsChanged(); }
 

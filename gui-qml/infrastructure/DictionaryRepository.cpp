@@ -4,8 +4,6 @@
 DictionaryRepository::DictionaryRepository()
 {
     m_open = false;
-    m_dict.entry_count = 0;
-    m_dict.table = nullptr;
 }
 
 DictionaryRepository::~DictionaryRepository()

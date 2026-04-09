@@ -10,7 +10,6 @@ Page {
     property int docId:    -1
     property var entryData: ({})
 
-    // Estado reactivo por tipo de carta
     property bool inSrsRecognition: false
     property bool inSrsRecall:      false
 
@@ -28,7 +27,6 @@ Page {
         updateSrsState()
     }
 
-    // containsChanged(entryId, cardTypeMask) — 1=Recognition, 2=Recall, 3=ambos
     Connections {
         target: srsVM
         function onContainsChanged(changedId, mask) {
@@ -40,7 +38,6 @@ Page {
         anchors { fill: parent; margins: 20 }
         spacing: 14
 
-        // ── Top bar ───────────────────────────────────────────────────────────
         RowLayout {
             Layout.fillWidth: true
             spacing: 8
@@ -49,7 +46,6 @@ Page {
 
             Item { Layout.fillWidth: true }
 
-            // ── Recognition badge ─────────────────────────────────────────────
             Rectangle {
                 id: recognitionBadge
                 implicitWidth:  recRow.implicitWidth + Theme.fontSizeSmall * 1.5
@@ -73,14 +69,12 @@ Page {
                     Rectangle {
                         width: 7; height: 7; radius: 4
                         color: page.inSrsRecognition ? Theme.accentColor : Theme.surfaceInactive
-                        Behavior on color { ColorAnimation { duration: 180 } }
                     }
                     Text {
                         text: page.inSrsRecognition ? "Recog. ✓" : "+ Recog."
                         font.pixelSize: Theme.fontSizeSmall
                         font.weight:    Font.Medium
                         color: page.inSrsRecognition ? Theme.accentColor : Theme.hintColor
-                        Behavior on color { ColorAnimation { duration: 180 } }
                     }
                 }
 
@@ -88,15 +82,12 @@ Page {
                     anchors.fill: parent
                     cursorShape:  Qt.PointingHandCursor
                     onClicked: {
-                        if (page.inSrsRecognition)
-                            srsVM.remove(page.docId)
-                        else
-                            srsVM.add(page.docId)
+                        if (page.inSrsRecognition) srsVM.remove(page.docId)
+                        else srsVM.add(page.docId)
                     }
                 }
             }
 
-            // ── Recall badge ──────────────────────────────────────────────────
             Rectangle {
                 id: recallBadge
                 implicitWidth:  recallRow.implicitWidth + Theme.fontSizeSmall * 1.5
@@ -112,7 +103,6 @@ Page {
                 border.color: page.inSrsRecall
                     ? Qt.rgba(recallAccent.r, recallAccent.g, recallAccent.b, 0.5)
                     : Theme.surfaceBorder
-                Behavior on color { ColorAnimation { duration: 180 } }
 
                 RowLayout {
                     id: recallRow
@@ -121,17 +111,13 @@ Page {
 
                     Rectangle {
                         width: 7; height: 7; radius: 4
-                        color: page.inSrsRecall
-                            ? recallBadge.recallAccent
-                            : Theme.surfaceInactive
-                        Behavior on color { ColorAnimation { duration: 180 } }
+                        color: page.inSrsRecall ? recallBadge.recallAccent : Theme.surfaceInactive
                     }
                     Text {
                         text: page.inSrsRecall ? "Recall ✓" : "+ Recall"
                         font.pixelSize: Theme.fontSizeSmall
                         font.weight:    Font.Medium
                         color: page.inSrsRecall ? recallBadge.recallAccent : Theme.hintColor
-                        Behavior on color { ColorAnimation { duration: 180 } }
                     }
                 }
 
@@ -139,16 +125,13 @@ Page {
                     anchors.fill: parent
                     cursorShape:  Qt.PointingHandCursor
                     onClicked: {
-                        if (page.inSrsRecall)
-                            srsVM.removeRecall(page.docId)
-                        else
-                            srsVM.addRecall(page.docId)
+                        if (page.inSrsRecall) srsVM.removeRecall(page.docId)
+                        else srsVM.addRecall(page.docId)
                     }
                 }
             }
         }
 
-        // ── Entry content ─────────────────────────────────────────────────────
         Rectangle {
             Layout.fillWidth:  true
             Layout.fillHeight: true
@@ -157,13 +140,14 @@ Page {
             border.width: 1; border.color: Theme.dividerColor
 
             ScrollView {
+                id: scroll
                 anchors { fill: parent; margins: 20 }
                 clip: true
 
                 EntryView {
-                    width:     parent.width
+                    width: scroll.availableWidth   // ✅ FIX REAL
                     entryData: page.entryData
-                    mode:      "dictionary"
+                    mode: "dictionary"
                     onNavigateTo: (url, props) => stack.push(url, props)
                 }
             }
