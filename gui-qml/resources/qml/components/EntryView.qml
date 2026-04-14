@@ -96,8 +96,9 @@ Column {
             visible:             root.hasKanji
             width:               root.width
             text:                root.headword
-            font.pixelSize:      48
-            font.bold:           true
+            font.pixelSize:      40
+            font.weight:         Font.DemiBold
+
             color:               Theme.textColor
             horizontalAlignment: Text.AlignHCenter
         }
@@ -125,7 +126,7 @@ Column {
             Text {
                 text:           "Reading"
                 font.pixelSize: 12
-                font.italic:    true
+                font.weight:    Font.Medium
                 color:          Theme.hintColor
                 opacity:        0.7
             }
@@ -137,7 +138,7 @@ Column {
                     delegate: Text {
                         text:           modelData.reb
                         font.pixelSize: 16
-                        font.italic:    true
+                        font.weight:    Font.Medium
                         color:          Theme.hintColor
                     }
                 }
@@ -203,7 +204,7 @@ Column {
         Text {
             text:           "Reading"
             font.pixelSize: 12
-            font.italic:    true
+            font.weight:    Font.Medium
             color:          Theme.hintColor
             opacity:        0.7
         }
@@ -216,7 +217,7 @@ Column {
                 delegate: Text {
                     text:           modelData.reb
                     font.pixelSize: 16
-                    font.italic:    true
+                    font.weight:    Font.Medium
                     color:          Theme.hintColor
                 }
             }

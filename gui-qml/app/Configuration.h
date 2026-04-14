@@ -16,18 +16,15 @@ struct Configuration {
 
     bool languages[KOTOBA_LANG_COUNT];
 
-    // ---------------- App ----------------
     QString appVersion = "1.0";
     bool autoSave      = true;
     bool checkUpdates  = false;
     bool firstRun      = true;
 
-    // ---------------- Sync ----------------
     uint64_t deviceId       = 0;
     bool     backupEnabled  = true;
     int      backupIntervalDays = 7;
 
-    // ---------------- Data (set by AppPaths, not config.ini) ----------------
     QString dictIndexPath = "";
     QString dictPath      = "";
     QString glossEnPath   = "";
@@ -40,9 +37,11 @@ struct Configuration {
     QString glossSlvPath  = "";
     QString glossSvPath   = "";
     QString jpPath        = "";
-    QString srsPath       = "";
 
-    // ---------------- Dictionary ----------------
+    // Base del perfil SRS — sin extensión (set by AppPaths, not config.ini).
+    // SrsService construye los archivos concretos a partir de este prefijo.
+    QString srsBasePath = "";
+
     bool highlightMatches = true;
     int  maxResults       = SEARCH_MAX_RESULTS_DEFAULT;
     int  pageSize         = 20;
@@ -50,16 +49,13 @@ struct Configuration {
     bool searchOnTyping   = true;
     bool showRomaji       = false;
 
-    // ---------------- Language ----------------
     QString fallbackLanguage = "en";
     QString glossLanguages   = "en";
     QString interface        = "en";
 
-    // ---------------- Session ----------------
     int dailyNewCards    = 20;
     int dailyReviewLimit = 200;
 
-    // ---------------- FSRS ----------------
     double  desiredRetention = 0.90;
     int     maximumInterval  = 36500;
     int     newCardsPerDay   = 20;
@@ -70,54 +66,36 @@ struct Configuration {
     QString relearningSteps  = "10m";
     int     dayOffset        = 14400;
     int     orderMode        = 0;
+    bool    autoAddRecall    = false;
 
-    // ---------------- SRS Card Types ----------------
-    // Si está activo, al agregar una carta de Recognition se agrega
-    // automáticamente la carta de Recall correspondiente.
-    bool autoAddRecall = false;
-
-    // ---------------- UI ----------------
     QString accentColor  = "blue";
     QString primaryColor = "indigo";
     QString theme        = "dark";
     QString fontFamily   = "default";
     double  fontScale    = 1.0;
 
-    // ── parsed caches ────────────────────────────────────────────────────────
     QVector<uint32_t> learningStepsParsed;
     QVector<uint32_t> relearningStepsParsed;
 };
-
-
-// ─────────────────────────────────────────────────────────────────────────────
-// QML wrapper
-// ─────────────────────────────────────────────────────────────────────────────
 
 class ConfigWrapper : public QObject
 {
     Q_OBJECT
 
-    // ── UI ───────────────────────────────────────────────────────────────────
     Q_PROPERTY(QString theme             READ theme             WRITE setTheme             NOTIFY themeChanged)
     Q_PROPERTY(QString accentColor       READ accentColor       WRITE setAccentColor       NOTIFY accentColorChanged)
     Q_PROPERTY(QString primaryColor      READ primaryColor      WRITE setPrimaryColor      NOTIFY primaryColorChanged)
     Q_PROPERTY(double  fontScale         READ fontScale         WRITE setFontScale         NOTIFY fontScaleChanged)
     Q_PROPERTY(QString fontFamily        READ fontFamily        WRITE setFontFamily        NOTIFY fontFamilyChanged)
-
-    // ── Dictionary ───────────────────────────────────────────────────────────
     Q_PROPERTY(int     searchDelayMs     READ searchDelayMs     WRITE setSearchDelayMs     NOTIFY searchDelayMsChanged)
     Q_PROPERTY(bool    searchOnTyping    READ searchOnTyping    WRITE setSearchOnTyping    NOTIFY searchOnTypingChanged)
     Q_PROPERTY(bool    showRomaji        READ showRomaji        WRITE setShowRomaji        NOTIFY showRomajiChanged)
     Q_PROPERTY(int     maxResults        READ maxResults        WRITE setMaxResults        NOTIFY maxResultsChanged)
     Q_PROPERTY(int     pageSize          READ pageSize          WRITE setPageSize          NOTIFY pageSizeChanged)
     Q_PROPERTY(bool    highlightMatches  READ highlightMatches  WRITE setHighlightMatches  NOTIFY highlightMatchesChanged)
-
-    // ── Language ─────────────────────────────────────────────────────────────
     Q_PROPERTY(QString glossLanguages    READ glossLanguages    WRITE setGlossLanguages    NOTIFY glossLanguagesChanged)
     Q_PROPERTY(QString fallbackLanguage  READ fallbackLanguage  WRITE setFallbackLanguage  NOTIFY fallbackLanguageChanged)
     Q_PROPERTY(QString interfaceLanguage READ interfaceLanguage WRITE setInterfaceLanguage NOTIFY interfaceLanguageChanged)
-
-    // ── FSRS ─────────────────────────────────────────────────────────────────
     Q_PROPERTY(int     newCardsPerDay    READ newCardsPerDay    WRITE setNewCardsPerDay    NOTIFY newCardsPerDayChanged)
     Q_PROPERTY(int     reviewsPerDay     READ reviewsPerDay     WRITE setReviewsPerDay     NOTIFY reviewsPerDayChanged)
     Q_PROPERTY(double  desiredRetention  READ desiredRetention  WRITE setDesiredRetention  NOTIFY desiredRetentionChanged)
@@ -126,11 +104,7 @@ class ConfigWrapper : public QObject
     Q_PROPERTY(int     maximumInterval   READ maximumInterval   WRITE setMaximumInterval   NOTIFY maximumIntervalChanged)
     Q_PROPERTY(int     dayOffset         READ dayOffset         WRITE setDayOffset         NOTIFY dayOffsetChanged)
     Q_PROPERTY(int     orderMode         READ orderMode         WRITE setOrderMode         NOTIFY orderModeChanged)
-
-    // ── SRS Card Types ────────────────────────────────────────────────────────
     Q_PROPERTY(bool    autoAddRecall     READ autoAddRecall     WRITE setAutoAddRecall     NOTIFY autoAddRecallChanged)
-
-    // ── Read-only ─────────────────────────────────────────────────────────────
     Q_PROPERTY(QString appVersion  CONSTANT READ appVersion)
     Q_PROPERTY(quint64 deviceId    CONSTANT READ deviceId)
     Q_PROPERTY(bool    firstRun    CONSTANT READ firstRun)
@@ -149,7 +123,6 @@ public:
     Q_INVOKABLE void reloadFromDisk();
     Q_INVOKABLE void applyToServices();
 
-    // ── Getters ───────────────────────────────────────────────────────────────
     QString theme()              const { return m_config.theme; }
     QString accentColor()        const { return m_config.accentColor; }
     QString primaryColor()       const { return m_config.primaryColor; }
@@ -177,7 +150,6 @@ public:
     bool    highlightMatches()   const { return m_config.highlightMatches; }
     bool    autoAddRecall()      const { return m_config.autoAddRecall; }
 
-    // ── Setters ───────────────────────────────────────────────────────────────
     void setTheme(const QString &v)             { if (v != m_config.theme)             { m_config.theme             = v; emit themeChanged(); } }
     void setAccentColor(const QString &v)       { if (v != m_config.accentColor)       { m_config.accentColor       = v; emit accentColorChanged(); } }
     void setPrimaryColor(const QString &v)      { if (v != m_config.primaryColor)      { m_config.primaryColor      = v; emit primaryColorChanged(); } }

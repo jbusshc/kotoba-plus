@@ -5,6 +5,10 @@
 #include <cstring>
 #include <QThreadPool>
 #include <QString>
+#include <QFile>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QDateTime>
 
 // ─────────────────────────────────────────────────────────────────────────────
 // rutas
@@ -19,20 +23,74 @@ std::string SrsService::srsPath(CardType type) const
 {
     return m_basePath + typeSuffix(type) + ".srs";
 }
-
 std::string SrsService::snapPath(CardType type) const
 {
     return m_basePath + typeSuffix(type) + ".sync.snap";
 }
-
 std::string SrsService::logPath(CardType type) const
 {
     return m_basePath + typeSuffix(type) + ".sync.log";
 }
-
+std::string SrsService::sessionPath() const
+{
+    return m_basePath + ".session.json";
+}
 std::string SrsService::customDecksPath() const
 {
     return m_basePath + ".custom_decks.json";
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// session persistence — guarda/restaura cards_done del día
+// ─────────────────────────────────────────────────────────────────────────────
+
+void SrsService::saveSession() const
+{
+    if (m_basePath.empty()) return;
+
+    // Guardamos el día lógico (día FSRS, no calendario) y los contadores.
+    // Al cargar, si el día cambió, reseteamos a 0.
+    uint64_t now = fsrs_now();
+    uint64_t today = m_recognition
+        ? fsrs_current_day(m_recognition, now)
+        : (now / 86400ULL);
+
+    QJsonObject obj;
+    obj["day"]              = static_cast<qint64>(today);
+    obj["recog_cards_done"] = static_cast<int>(m_recogSession.cards_done);
+    obj["recall_cards_done"]= static_cast<int>(m_recallSession.cards_done);
+
+    QFile f(QString::fromStdString(sessionPath()));
+    if (f.open(QIODevice::WriteOnly | QIODevice::Truncate))
+        f.write(QJsonDocument(obj).toJson(QJsonDocument::Compact));
+}
+
+void SrsService::loadSession()
+{
+    if (m_basePath.empty()) return;
+
+    QFile f(QString::fromStdString(sessionPath()));
+    if (!f.exists() || !f.open(QIODevice::ReadOnly)) return;
+
+    QJsonParseError err;
+    QJsonDocument doc = QJsonDocument::fromJson(f.readAll(), &err);
+    if (err.error != QJsonParseError::NoError) return;
+
+    QJsonObject obj = doc.object();
+
+    uint64_t now   = fsrs_now();
+    uint64_t today = m_recognition
+        ? fsrs_current_day(m_recognition, now)
+        : (now / 86400ULL);
+
+    uint64_t savedDay = static_cast<uint64_t>(obj["day"].toInteger(0));
+
+    // Solo restauramos si es el mismo día lógico
+    if (savedDay == today) {
+        m_recogSession.cards_done  = static_cast<uint32_t>(obj["recog_cards_done"].toInt(0));
+        m_recallSession.cards_done = static_cast<uint32_t>(obj["recall_cards_done"].toInt(0));
+    }
+    // Si el día cambió, los contadores quedan en 0 (ya inicializados por fsrs_session_start)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -43,24 +101,18 @@ fsrs_deck *SrsService::deckFor(CardType type) const
 {
     return (type == CardType::Recall) ? m_recall : m_recognition;
 }
-
 FsrsSync &SrsService::syncFor(CardType type)
 {
     return (type == CardType::Recall) ? m_recallSync : m_recogSync;
 }
-
 SrsHistoryLog *SrsService::historyFor(CardType type) const
 {
-    return (type == CardType::Recall)
-        ? m_recallHistory.get()
-        : m_recogHistory.get();
+    return (type == CardType::Recall) ? m_recallHistory.get() : m_recogHistory.get();
 }
-
 fsrs_session &SrsService::sessionFor(CardType type)
 {
     return (type == CardType::Recall) ? m_recallSession : m_recogSession;
 }
-
 fsrs_card *SrsService::getCard(uint32_t entSeq, CardType type) const
 {
     fsrs_deck *d = deckFor(type);
@@ -92,9 +144,6 @@ void SrsService::initialize(uint32_t dictSize, Configuration *config)
     m_dictSize = dictSize;
 
     fsrs_params params = fsrs_default_params();
-
-    // Cada deck solo necesita cubrir el rango [0, dictSize) porque
-    // ahora el ID == ent_seq y no hay offset de tipo.
     m_recognition = fsrs_deck_create(dictSize, &params);
     m_recall      = fsrs_deck_create(dictSize, &params);
 
@@ -109,7 +158,7 @@ void SrsService::initialize(uint32_t dictSize, Configuration *config)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// applyConfig — aplica los parámetros de Configuration a un deck
+// applyConfig
 // ─────────────────────────────────────────────────────────────────────────────
 
 void SrsService::applyConfig(fsrs_deck *deck) const
@@ -135,10 +184,6 @@ void SrsService::applyConfig(fsrs_deck *deck) const
     );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// compactSync
-// ─────────────────────────────────────────────────────────────────────────────
-
 bool SrsService::compactSync(CardType type, uint64_t now)
 {
     if (m_basePath.empty()) return false;
@@ -148,7 +193,7 @@ bool SrsService::compactSync(CardType type, uint64_t now)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// _add
+// _add / _remove / _reset / _suspend / _unsuspend
 // ─────────────────────────────────────────────────────────────────────────────
 
 bool SrsService::_add(uint32_t entSeq, CardType type)
@@ -165,14 +210,11 @@ bool SrsService::_add(uint32_t entSeq, CardType type)
     if (!m_basePath.empty()) {
         FsrsEvent *ev = fsrs_sync_record_add(&syncFor(type), card, now);
         (void)fsrs_sync_log_append(logPath(type).c_str(), ev);
+        // Flush inmediato al añadir — garantiza que la carta surviva un crash
         (void)fsrs_save(deck, srsPath(type).c_str());
     }
     return true;
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// _remove
-// ─────────────────────────────────────────────────────────────────────────────
 
 bool SrsService::_remove(uint32_t entSeq, CardType type)
 {
@@ -197,10 +239,6 @@ bool SrsService::_remove(uint32_t entSeq, CardType type)
     return true;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// _reset
-// ─────────────────────────────────────────────────────────────────────────────
-
 bool SrsService::_reset(uint32_t entSeq, CardType type)
 {
     fsrs_deck *deck = deckFor(type);
@@ -212,7 +250,6 @@ bool SrsService::_reset(uint32_t entSeq, CardType type)
         FsrsEvent *ev = fsrs_sync_record_remove(&syncFor(type), entSeq, now);
         (void)fsrs_sync_log_append(logPath(type).c_str(), ev);
     }
-
     fsrs_card *card = fsrs_add_card(deck, entSeq, now);
     if (!card) return false;
     {
@@ -221,10 +258,6 @@ bool SrsService::_reset(uint32_t entSeq, CardType type)
     }
     return true;
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// _suspend / _unsuspend
-// ─────────────────────────────────────────────────────────────────────────────
 
 bool SrsService::_suspend(uint32_t entSeq, CardType type)
 {
@@ -270,7 +303,7 @@ bool SrsService::add(uint32_t entSeq, CardType type)
     bool ok = _add(entSeq, type);
 
     if (ok && type == CardType::Recognition && m_autoAddRecall)
-        _add(entSeq, CardType::Recall);   // silencioso si ya existe
+        _add(entSeq, CardType::Recall);
 
     if (ok) {
         fsrs_rebuild_queues(deckFor(type), fsrs_now());
@@ -365,6 +398,8 @@ void SrsService::startSession(uint32_t limit)
     fsrs_session_start(&m_recogSession,  now, limit);
     fsrs_session_start(&m_recallSession, now, limit);
     m_activeFilter.clear();
+    // Restaurar cards_done del día actual si existe
+    loadSession();
 }
 
 void SrsService::startCustomSession(const QString &customDeckId, uint32_t limit)
@@ -372,6 +407,7 @@ void SrsService::startCustomSession(const QString &customDeckId, uint32_t limit)
     uint64_t now = fsrs_now();
     fsrs_session_start(&m_recogSession,  now, limit);
     fsrs_session_start(&m_recallSession, now, limit);
+    loadSession();
 
     m_activeFilter.clear();
     const CustomDeck *cd = m_customDecks.find(customDeckId);
@@ -388,7 +424,6 @@ NextCard SrsService::nextCard()
 
     uint64_t now = fsrs_now();
 
-    // Resetear sesión si cambió el día lógico (comprobamos en Recognition)
     if (m_recognition) {
         uint64_t session_day = fsrs_current_day(m_recognition, m_recogSession.session_start);
         uint64_t current_day = fsrs_current_day(m_recognition, now);
@@ -396,6 +431,8 @@ NextCard SrsService::nextCard()
             uint32_t limit = m_recogSession.session_limit;
             fsrs_session_start(&m_recogSession,  now, limit);
             fsrs_session_start(&m_recallSession, now, limit);
+            // Nuevo día — contadores a 0, borramos el session file
+            saveSession();
         }
     }
 
@@ -426,7 +463,7 @@ void SrsService::answer(uint32_t entSeq, CardType type, fsrs_rating rating)
     fsrs_deck *deck = deckFor(type);
     if (!deck) return;
 
-    uint64_t now = fsrs_now();
+    uint64_t now   = fsrs_now();
     fsrs_card *card = getCard(entSeq, type);
     if (!card) return;
 
@@ -458,6 +495,9 @@ void SrsService::answer(uint32_t entSeq, CardType type, fsrs_rating rating)
 
     FsrsEvent *ev = fsrs_sync_record_answer(&syncFor(type), card, rating, now);
     (void)fsrs_sync_log_append(logPath(type).c_str(), ev);
+
+    // Persistir contadores tras cada respuesta
+    saveSession();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -479,7 +519,7 @@ bool SrsService::undoLastAnswer()
     card->heap_pos_due   = -1;
     card->heap_pos_learn = -1;
 
-    fsrs_session &session  = sessionFor(undo.type);
+    fsrs_session &session = sessionFor(undo.type);
     session.cards_done  = undo.cards_done;
     session.new_done    = undo.new_done;
     session.learn_done  = undo.learn_done;
@@ -492,11 +532,10 @@ bool SrsService::undoLastAnswer()
     fsrs_rebuild_queues(deck, now);
 
     if (auto *h = historyFor(undo.type))
-        h->recordUndo(undo.entSeq,
-                      fsrs_get_card(deck, undo.entSeq),
-                      now);
+        h->recordUndo(undo.entSeq, fsrs_get_card(deck, undo.entSeq), now);
 
     m_undoStack.reset();
+    saveSession();
     return true;
 }
 
@@ -509,8 +548,7 @@ static uint32_t deckDueCount(fsrs_deck *deck, uint64_t now)
     if (!deck) return 0;
     uint64_t today = fsrs_current_day(deck, now);
     uint32_t count = 0;
-    uint32_t total = fsrs_deck_count(deck);
-    for (uint32_t i = 0; i < total; ++i) {
+    for (uint32_t i = 0, total = fsrs_deck_count(deck); i < total; ++i) {
         const fsrs_card *c = fsrs_deck_card(deck, i);
         if (!c || c->state == FSRS_STATE_SUSPENDED) continue;
         if ((uint64_t)c->due_day <= today) ++count;
@@ -601,8 +639,7 @@ std::string SrsService::dueDateText(uint32_t entSeq, CardType type) const
     uint64_t now = fsrs_now();
     if (card->state == FSRS_STATE_NEW)       return "New";
     if (card->state == FSRS_STATE_SUSPENDED) return "Suspended";
-
-    if (card->due_ts <= now) return "Now";
+    if (card->due_ts <= now)                 return "Now";
 
     char buf[64] = {};
     fsrs_format_interval(card->due_ts - now, buf, sizeof(buf));
@@ -613,7 +650,6 @@ std::string SrsService::stateText(uint32_t entSeq, CardType type) const
 {
     fsrs_card *card = getCard(entSeq, type);
     if (!card) return {};
-
     switch (card->state) {
         case FSRS_STATE_NEW:        return "New";
         case FSRS_STATE_LEARNING:   return "Learning";
@@ -649,10 +685,9 @@ static fsrs_deck *loadOrCreate(const std::string &srsFile,
                                 const fsrs_params &params)
 {
     fsrs_deck *deck = fsrs_load(srsFile.c_str(), &params);
-    if (!deck) {
+    if (!deck)
         deck = fsrs_deck_create(dictSize, &params);
-        if (!deck) return nullptr;
-    }
+    if (!deck) return nullptr;
 
     (void)fsrs_sync_snapshot_load(deck, snapFile.c_str(), fsrs_now());
     (void)fsrs_sync_log_load(&sync, logFile.c_str());
@@ -663,11 +698,11 @@ static fsrs_deck *loadOrCreate(const std::string &srsFile,
 
 bool SrsService::load(const QString &basePath)
 {
+    // basePath es el prefijo sin extensión, p.ej. ".../profile"
     m_basePath = basePath.toStdString();
 
     fsrs_params params = fsrs_default_params();
 
-    // Liberar decks anteriores si los hubiera
     if (m_recognition) { fsrs_deck_free(m_recognition); m_recognition = nullptr; }
     if (m_recall)      { fsrs_deck_free(m_recall);      m_recall      = nullptr; }
     fsrs_sync_free(&m_recogSync);
@@ -678,11 +713,15 @@ bool SrsService::load(const QString &basePath)
     fsrs_sync_init(&m_recallSync, device_id);
 
     m_recognition = loadOrCreate(
-        srsPath(CardType::Recognition), snapPath(CardType::Recognition), logPath(CardType::Recognition),
+        srsPath(CardType::Recognition),
+        snapPath(CardType::Recognition),
+        logPath(CardType::Recognition),
         m_recogSync, m_dictSize, params);
 
     m_recall = loadOrCreate(
-        srsPath(CardType::Recall), snapPath(CardType::Recall), logPath(CardType::Recall),
+        srsPath(CardType::Recall),
+        snapPath(CardType::Recall),
+        logPath(CardType::Recall),
         m_recallSync, m_dictSize, params);
 
     if (!m_recognition || !m_recall) return false;
@@ -690,16 +729,17 @@ bool SrsService::load(const QString &basePath)
     applyConfig(m_recognition);
     applyConfig(m_recall);
 
-    // Historiales
     m_recogHistory  = std::make_unique<SrsHistoryLog>(m_basePath + ".recog");
     m_recallHistory = std::make_unique<SrsHistoryLog>(m_basePath + ".recall");
 
-    // Custom decks
     m_customDecks.load(QString::fromStdString(customDecksPath()));
 
     uint32_t prev_limit = m_recogSession.session_limit;
     fsrs_session_start(&m_recogSession,  fsrs_now(), prev_limit);
     fsrs_session_start(&m_recallSession, fsrs_now(), prev_limit);
+
+    // Restaurar contadores del día
+    loadSession();
 
     return true;
 }
@@ -723,6 +763,7 @@ bool SrsService::save()
                                 logPath(CardType::Recall).c_str(),
                                 fsrs_now());
 
+    saveSession();
     return ok;
 }
 
@@ -748,5 +789,6 @@ void SrsService::saveAsync()
                                     (base + ".recall.sync.snap").c_str(),
                                     (base + ".recall.sync.log").c_str(), now);
         }
+        saveSession();
     });
 }

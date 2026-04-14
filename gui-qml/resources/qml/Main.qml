@@ -1,19 +1,24 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQuick.Controls.Material
 import "theme"
 import "pages"
 
 ApplicationWindow {
+    id: root
+
     readonly property bool isDesktop: Qt.platform.os === "windows"
                                 || Qt.platform.os === "linux"
                                 || Qt.platform.os === "osx"
 
-    id: root
     visible: true
     width:   isDesktop ? 900 : Screen.width
     height:  isDesktop ? 600 : Screen.height
     title:   "Kotoba+"
+
+    Material.theme: Theme.darkTheme ? Material.Dark : Material.Light
+    Material.accent: Theme.accentColor
 
     property int currentTab:  0
     property int pendingTab:  -1
@@ -50,11 +55,11 @@ ApplicationWindow {
         color:  Theme.headerBarColor
 
         Rectangle {
-            anchors.left:   parent.left
-            anchors.right:  parent.right
+            anchors.left: parent.left
+            anchors.right: parent.right
             anchors.bottom: parent.bottom
             height: 1
-            color:  Theme.dividerColor
+            color: Theme.dividerColor
         }
 
         TabBar {
@@ -66,6 +71,7 @@ ApplicationWindow {
             TabButton {
                 text: "Dictionary"
                 onClicked: root.requestTabSwitch(0)
+
                 contentItem: Text {
                     text: parent.text
                     color: parent.checked ? Theme.textColor : Theme.hintColor
@@ -78,6 +84,7 @@ ApplicationWindow {
             TabButton {
                 text: "SRS"
                 onClicked: root.requestTabSwitch(1)
+
                 contentItem: Text {
                     text: parent.text
                     color: parent.checked ? Theme.textColor : Theme.hintColor
@@ -107,10 +114,12 @@ ApplicationWindow {
             }
 
             Rectangle {
-                anchors { bottom: parent.bottom; horizontalCenter: parent.horizontalCenter }
-                width:  root.currentTab === 2 ? 24 : 0
-                height: 2; radius: 1
-                color:  Theme.accentColor
+                anchors.bottom: parent.bottom
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: root.currentTab === 2 ? 24 : 0
+                height: 2
+                radius: 1
+                color: Theme.accentColor
                 Behavior on width { NumberAnimation { duration: 150 } }
             }
 
@@ -124,7 +133,6 @@ ApplicationWindow {
         }
     }
 
-    // ── Stack SIN animaciones ────────────────────────────────────────────────
     StackView {
         id: stack
         anchors.fill: parent
@@ -133,7 +141,6 @@ ApplicationWindow {
                      ? splashPageComponent
                      : dictionaryPageComponent
 
-        // Desactivar TODAS las animaciones
         pushEnter: null
         pushExit: null
         popEnter: null
@@ -142,25 +149,26 @@ ApplicationWindow {
         replaceExit: null
     }
 
-    // ── Overlay anti-lag para Android ─────────────────────────────────────────
-    // Tapa el primer frame de recomposición al volver del background,
-    // evitando el parpadeo/lag visual al maximizar la app.
+    // ✅ OVERLAY CORREGIDO (CLAVE)
     Rectangle {
+        id: resumeOverlay
         anchors.fill: parent
-        color:   Theme.background
-        z:       9999
-        opacity: _resumeOverlayTimer.running ? 1.0 : 0.0
-        visible: opacity > 0
+        color: Theme.background
+        z: 9999
+
+        // visible inmediatamente cuando app no está activa
+        visible: !appController.appActive || fadeOut.running
+
+        opacity: (!appController.appActive) ? 1.0 : (fadeOut.running ? 1.0 : 0.0)
 
         Behavior on opacity {
             NumberAnimation { duration: 150; easing.type: Easing.OutQuad }
         }
 
-        // Pequeño timer: da tiempo al renderer para recomponer antes de
-        // desvanecer el overlay. 100 ms es suficiente en dispositivos lentos.
         Timer {
-            id: _resumeOverlayTimer
-            interval: 100
+            id: fadeOut
+            interval: 120
+            onTriggered: resumeOverlay.opacity = 0.0
         }
     }
 
@@ -177,10 +185,10 @@ ApplicationWindow {
             root.currentTab = 0
         }
 
-        // Al volver del background: activar overlay brevemente para tapar
-        // el frame "frío" que Qt renderiza al reanudar la ventana.
         function onAppActiveChanged(active) {
-            if (active) _resumeOverlayTimer.restart()
+            if (active) {
+                fadeOut.restart()
+            }
         }
     }
 

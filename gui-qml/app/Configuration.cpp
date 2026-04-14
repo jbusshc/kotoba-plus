@@ -297,7 +297,6 @@ void ConfigWrapper::reloadFromDisk()
 
     QString savedDict      = m_config.dictPath;
     QString savedDictIdx   = m_config.dictIndexPath;
-    QString savedSrs       = m_config.srsPath;
     QString savedGlossEn   = m_config.glossEnPath;
     QString savedGlossEs   = m_config.glossEsPath;
     QString savedGlossDe   = m_config.glossDePath;
@@ -313,7 +312,6 @@ void ConfigWrapper::reloadFromDisk()
 
     m_config.dictPath      = savedDict;
     m_config.dictIndexPath = savedDictIdx;
-    m_config.srsPath       = savedSrs;
     m_config.glossEnPath   = savedGlossEn;
     m_config.glossEsPath   = savedGlossEs;
     m_config.glossDePath   = savedGlossDe;

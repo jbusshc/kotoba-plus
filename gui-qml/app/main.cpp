@@ -1,11 +1,16 @@
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
-#include <QStandardPaths>
-#include <QDir>
-#include <QFile>
-#include <QDebug>
 #include <QQuickStyle>
+#include <QQuickWindow>
+#include <QThreadPool>
+#include <QMetaObject>
+#include <QDebug>
+
+#ifdef Q_OS_ANDROID
+#include <QJniObject>
+#include <QtCore/qnativeinterface.h>
+#endif
 
 #include "../infrastructure/DictionaryRepository.h"
 #include "../infrastructure/SearchService.h"
@@ -21,30 +26,29 @@
 #include "AppPaths.h"
 #include "AppController.h"
 
-#include <stdlib.h>
-
-int main(int argc, char **argv) {
+int main(int argc, char **argv)
+{
     #ifdef Q_OS_ANDROID
-    qputenv("QSG_RENDER_LOOP", "threaded");
-    QCoreApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
+    qputenv("QSG_RENDER_LOOP", "basic");
+    QSurfaceFormat fmt;
+    fmt.setSwapInterval(0);  // 0 = no vsync
+    QSurfaceFormat::setDefaultFormat(fmt);
     #endif
+
     QGuiApplication app(argc, argv);
     app.setApplicationName("KotobaPlus");
     app.setOrganizationName("KotobaPlus");
 
     QQuickStyle::setStyle("Material");
 
-    // ── ViewModels ────────────────────────────────────────────────────────────
-    SearchResultModel     *searchModel = new SearchResultModel();
-    SearchViewModel       *searchVM    = new SearchViewModel();
-    EntryDetailsViewModel *detailsVM   = new EntryDetailsViewModel();
-    SrsViewModel          *srsVM       = new SrsViewModel();
-    SrsLibraryViewModel   *libVM       = new SrsLibraryViewModel();
+    // ── ViewModels ─────────────────────────────────────────────
+    auto *searchModel = new SearchResultModel();
+    auto *searchVM    = new SearchViewModel();
+    auto *detailsVM   = new EntryDetailsViewModel();
+    auto *srsVM       = new SrsViewModel();
+    auto *libVM       = new SrsLibraryViewModel();
+    auto *controller  = new AppController();
 
-    // ── AppController ─────────────────────────────────────────────────────────
-    AppController *controller = new AppController();
-
-    // ── QML engine ────────────────────────────────────────────────────────────
     QQmlApplicationEngine engine;
     ConfigWrapper configWrapper;
 
@@ -57,139 +61,149 @@ int main(int argc, char **argv) {
     engine.rootContext()->setContextProperty("appController", controller);
 
     engine.load(QUrl(QStringLiteral("qrc:/qml/Main.qml")));
-    if (engine.rootObjects().isEmpty()) return -1;
-
-    // ── Servicios pesados (Search/SRS) ────────────────────────────────────────
-    SearchService *searchSvc = new SearchService();
-    SrsService    *srsSvc    = new SrsService();
-    srand(static_cast<unsigned int>(time(nullptr)));
-
-    std::string srsProfilePath;
-    bool failed = false;
-
-    // ── Hilo concurrente para carga pesada ─────────────────────────────────────
-    QThreadPool::globalInstance()->start([=, &configWrapper, &srsProfilePath, &failed]() {
-
-        // ── 1) Paths y configuración ─────────────────────────────────────────
-        AppPaths paths = AppPaths::resolve();
-
-    #ifdef Q_OS_ANDROID
-        AppPaths::extractAssetsIfNeeded(paths.dataDir);
-    #endif
-
-        loadConfiguration(configWrapper.m_config, paths.configPath);
-        configWrapper.m_configPath = paths.configPath;
-
-        configWrapper.m_config.dictPath      = paths.dictPath;
-        configWrapper.m_config.dictIndexPath = paths.dictIndexPath;
-        configWrapper.m_config.glossEnPath   = paths.glossPath("en");
-        configWrapper.m_config.glossEsPath   = paths.glossPath("es");
-        configWrapper.m_config.glossDePath   = paths.glossPath("de");
-        configWrapper.m_config.glossFrPath   = paths.glossPath("fr");
-        configWrapper.m_config.glossHuPath   = paths.glossPath("hu");
-        configWrapper.m_config.glossNlPath   = paths.glossPath("nl");
-        configWrapper.m_config.glossRuPath   = paths.glossPath("ru");
-        configWrapper.m_config.glossSlvPath  = paths.glossPath("slv");
-        configWrapper.m_config.glossSvPath   = paths.glossPath("sv");
-        configWrapper.m_config.jpPath        = paths.glossPath("jp");
-
-        srsProfilePath = configWrapper.m_config.srsPath.toStdString();
-
-        // ── 2) Abrir diccionario ─────────────────────────────────────────────
-        QMetaObject::invokeMethod(controller, [=]() {
-            controller->setStatus("Opening dictionary…");
-        }, Qt::QueuedConnection);
-
-        DictionaryRepository *repo = new DictionaryRepository();
-        if (!repo->open(configWrapper.m_config.dictPath,
-                        configWrapper.m_config.dictIndexPath)) {
-            qWarning("Failed to open dictionary.");
-            failed = true;
-            return;
-        }
-        kotoba_dict *dict = repo->dict();
-
-        // ── 3) Inicializar servicios ───────────────────────────────────────
-        QMetaObject::invokeMethod(controller, [=]() {
-            controller->setStatus("Initializing search…");
-        }, Qt::QueuedConnection);
-        searchSvc->initialize(dict, &configWrapper.m_config);
-
-        QMetaObject::invokeMethod(controller, [=]() {
-            controller->setStatus("Loading SRS profile…");
-        }, Qt::QueuedConnection);
-        srsSvc->initialize(static_cast<uint32_t>(dict->bin_header->entry_count),
-                        &configWrapper.m_config);
-        srsSvc->load(srsProfilePath.c_str());
-
-        // ── 4) Inicializar ViewModels en hilo principal ────────────────
-        QMetaObject::invokeMethod(qApp, [=, &configWrapper]() {
-            searchVM->initialize(searchSvc, searchModel, dict, &configWrapper.m_config);
-            detailsVM->initialize(dict, &configWrapper.m_config);
-            srsVM->initialize(srsSvc, dict, detailsVM);
-            libVM->initialize(srsSvc, dict, searchSvc, &configWrapper.m_config);
-
-            configWrapper.setServices(searchSvc, srsSvc);
-            controller->notifyReady();  // dispara transición QML 
-        }, Qt::QueuedConnection);
-
-    });
-
-    if (failed) {
-        // Error crítico durante la carga inicial — mostrar mensaje y salir.
+    if (engine.rootObjects().isEmpty())
         return -1;
+
+    // ── Obtener la QQuickWindow ─────────────────────────────────
+    QQuickWindow *window = nullptr;
+    for (QObject *obj : engine.rootObjects()) {
+        window = qobject_cast<QQuickWindow *>(obj);
+        if (window) break;
     }
 
-    // ── Ciclo de vida Android ─────────────────────────────────────────────────
-    #ifdef Q_OS_ANDROID
-    QObject::connect(&app, &QGuiApplication::applicationStateChanged,
-        [&](Qt::ApplicationState state) {
+#ifdef Q_OS_ANDROID
+    // ── Gestión del ciclo de vida desde C++ ─────────────────────
+    //
+    // Qt traduce onPause/onResume/onStop a applicationStateChanged.
+    // Cuando el estado pasa a Suspended (onStop en Android), Qt destruye
+    // QtSurface y el contexto EGL, causando el lag al volver.
+    //
+    // Con setPersistentGraphics/SceneGraph le decimos a Qt que NO libere
+    // esos recursos. Hay que hacerlo ANTES de que la app entre en Suspended,
+    // es decir, conectarse a applicationStateChanged y actuar en el momento.
+    //
+    // Estados Android → Qt:
+    //   onResume  → Qt::ApplicationActive
+    //   onPause   → Qt::ApplicationInactive
+    //   onStop    → Qt::ApplicationSuspended  ← aquí Qt destruiría la surface
+    //   onDestroy → señal aboutToQuit
 
-        switch (state) {
+    if (window) {
+        // Activar persistencia inicial
+        window->setPersistentGraphics(true);
+        window->setPersistentSceneGraph(true);
+        qDebug() << "KotobaPlus: persistent graphics activado";
 
-        case Qt::ApplicationSuspended:
-            // App en background profundo — Android puede matarla en cualquier momento.
-            // Guardamos inmediatamente sin esperar al aboutToQuit.
-            srsSvc->save(srsProfilePath.c_str());
-            saveConfiguration(configWrapper.m_config, configWrapper.m_configPath);
-            break;
+        QObject::connect(&app, &QGuiApplication::applicationStateChanged,
+                         window, [window](Qt::ApplicationState state) {
 
-        case Qt::ApplicationHidden:
-            // Minimizando — notificar a QML para que congele la UI.
-            QMetaObject::invokeMethod(controller, [=]() {
-                controller->setAppActive(false);
-            }, Qt::QueuedConnection);
-            break;
+            switch (state) {
+            case Qt::ApplicationSuspended:
+                // App va a background (onStop). Reforzar persistencia
+                // justo antes de que Qt procese el evento de suspensión.
+                window->setPersistentGraphics(true);
+                window->setPersistentSceneGraph(true);
+                qDebug() << "KotobaPlus: Suspended — graphics persistentes reforzados";
+                break;
 
-        case Qt::ApplicationInactive:
-            // Foco perdido pero aún visible (notificación encima, etc.).
-            // No hacemos nada agresivo.
-            break;
+            case Qt::ApplicationInactive:
+                // onPause — la app pierde el foco pero sigue visible (ej: notificación)
+                // No hacemos nada especial aquí.
+                qDebug() << "KotobaPlus: Inactive (onPause)";
+                break;
 
-        case Qt::ApplicationActive:
-            // Volviendo al frente — reactivar UI y refrescar contadores SRS
-            // (puede haber cambiado la fecha mientras estaba en background).
-            QMetaObject::invokeMethod(controller, [=]() {
-                controller->setAppActive(true);
-            }, Qt::QueuedConnection);
-            QMetaObject::invokeMethod(qApp, [=]() {
-                srsVM->refresh();
-            }, Qt::QueuedConnection);
-            break;
+            case Qt::ApplicationActive:
+                // onResume — volvemos al frente
+                // Forzar un redraw por si Qt necesita sincronizar
+                window->requestUpdate();
+                qDebug() << "KotobaPlus: Active (onResume)";
+                break;
+
+            default:
+                break;
+            }
+        });
+    }
+#endif
+
+    // ── Servicios ──────────────────────────────────────────────
+    auto *searchSvc = new SearchService();
+    auto *srsSvc    = new SrsService();
+
+    ConfigWrapper *cfg = &configWrapper;
+
+    // ── Background thread ──────────────────────────────────────
+    QThreadPool::globalInstance()->start([=]() {
+
+        AppPaths paths = AppPaths::resolve();
+
+#ifdef Q_OS_ANDROID
+        AppPaths::extractAssetsIfNeeded(paths.dataDir);
+#endif
+
+        loadConfiguration(cfg->m_config, paths.configPath);
+        cfg->m_configPath = paths.configPath;
+
+        cfg->m_config.dictPath      = paths.dictPath;
+        cfg->m_config.dictIndexPath = paths.dictIndexPath;
+        cfg->m_config.glossEnPath   = paths.glossPath("en");
+        cfg->m_config.glossEsPath   = paths.glossPath("es");
+        cfg->m_config.jpPath        = paths.glossPath("jp");
+        cfg->m_config.srsBasePath   = paths.srsBasePath;
+
+        QMetaObject::invokeMethod(controller, [=]() {
+            controller->setStatus("Opening dictionary...");
+        }, Qt::QueuedConnection);
+
+        auto *repo = new DictionaryRepository();
+
+        if (!repo->open(cfg->m_config.dictPath,
+                        cfg->m_config.dictIndexPath)) {
+            qWarning("Failed to open dictionary.");
+            return;
         }
-    });
-    #endif
 
-    // ── Persistir cambios al cerrar ─────────────────────────────────────────
+        kotoba_dict *dict = repo->dict();
+
+        QMetaObject::invokeMethod(controller, [=]() {
+            controller->setStatus("Initializing search...");
+        }, Qt::QueuedConnection);
+
+        searchSvc->initialize(dict, &cfg->m_config);
+
+        QMetaObject::invokeMethod(controller, [=]() {
+            controller->setStatus("Loading SRS...");
+        }, Qt::QueuedConnection);
+
+        srsSvc->initialize(
+            static_cast<uint32_t>(dict->bin_header->entry_count),
+            &cfg->m_config
+        );
+
+        srsSvc->load(cfg->m_config.srsBasePath);
+
+        QMetaObject::invokeMethod(qApp, [=]() {
+
+            searchVM->initialize(searchSvc, searchModel, dict, &cfg->m_config);
+            detailsVM->initialize(dict, &cfg->m_config);
+            srsVM->initialize(srsSvc, dict, detailsVM);
+            libVM->initialize(srsSvc, dict, searchSvc, &cfg->m_config);
+
+            cfg->setServices(searchSvc, srsSvc);
+
+            controller->notifyReady();
+
+        }, Qt::QueuedConnection);
+    });
+
+    // ── Guardado al cerrar ─────────────────────────────────────
     QObject::connect(&app, &QCoreApplication::aboutToQuit, [&]() {
         srsSvc->save();
         saveConfiguration(configWrapper.m_config, configWrapper.m_configPath);
     });
 
-    // ── Ejecutar app ───────────────────────────────────────────────────────
     int result = app.exec();
 
-    // ── Limpiar memoria ───────────────────────────────────────────────────
     delete libVM;
     delete srsVM;
     delete detailsVM;

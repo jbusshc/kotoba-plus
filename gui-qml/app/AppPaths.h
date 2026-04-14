@@ -7,7 +7,6 @@
 #include <QCoreApplication>
 #include <QDebug>
 
-// Bump this string whenever you ship new/changed asset files.
 #define APP_ASSET_VERSION "1.0.0"
 
 struct AppPaths
@@ -16,19 +15,7 @@ struct AppPaths
     QString configPath;
     QString dictPath;
     QString dictIndexPath;
-
-    // Base del perfil SRS — sin extensión.
-    // Los archivos concretos se derivan así:
-    //   <srsBasePath>.recog.srs
-    //   <srsBasePath>.recog.sync.snap
-    //   <srsBasePath>.recog.sync.log
-    //   <srsBasePath>.recall.srs
-    //   <srsBasePath>.recall.sync.snap
-    //   <srsBasePath>.recall.sync.log
-    //   <srsBasePath>.recog.history.NNNN.log
-    //   <srsBasePath>.recall.history.NNNN.log
-    //   <srsBasePath>.custom_decks.json
-    QString srsBasePath;
+    QString srsBasePath;   // sin extensión — SrsService construye los archivos concretos
 
     QString glossPath(const QString &lang) const
     {
@@ -42,8 +29,7 @@ struct AppPaths
         AppPaths p;
 
 #ifdef Q_OS_ANDROID
-        p.dataDir = QStandardPaths::writableLocation(
-            QStandardPaths::AppDataLocation);
+        p.dataDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
 #else
         QString exeDir = QCoreApplication::applicationDirPath();
         p.dataDir = exeDir;
@@ -56,7 +42,7 @@ struct AppPaths
         p.configPath    = QDir(p.dataDir).filePath("config.ini");
         p.dictPath      = QDir(p.dataDir).filePath("dict.kotoba");
         p.dictIndexPath = QDir(p.dataDir).filePath("dict.kotoba.idx");
-        p.srsBasePath   = QDir(p.dataDir).filePath("profile");
+        p.srsBasePath   = QDir(p.dataDir).filePath("profile");  // sin extensión
 
         return p;
     }
@@ -65,23 +51,16 @@ struct AppPaths
     static void extractAssetsIfNeeded(const QString &targetDir)
     {
         static const QStringList kDataFiles = {
-            "dict.kotoba",
-            "dict.kotoba.idx",
-            "gloss_en.invx",
-            "gloss_es.invx",
-            "gloss_de.invx",
-            "gloss_fr.invx",
-            "gloss_hu.invx",
-            "gloss_nl.invx",
-            "gloss_ru.invx",
-            "gloss_slv.invx",
-            "gloss_sv.invx",
+            "dict.kotoba", "dict.kotoba.idx",
+            "gloss_en.invx", "gloss_es.invx", "gloss_de.invx",
+            "gloss_fr.invx", "gloss_hu.invx", "gloss_nl.invx",
+            "gloss_ru.invx", "gloss_slv.invx", "gloss_sv.invx",
             "jp.invx",
         };
 
         QDir().mkpath(targetDir);
 
-        const QString versionFile  = QDir(targetDir).filePath(".asset_version");
+        const QString versionFile    = QDir(targetDir).filePath(".asset_version");
         const QString currentVersion = QString(APP_ASSET_VERSION);
 
         QString cachedVersion;
@@ -96,9 +75,8 @@ struct AppPaths
             return;
         }
 
-        qDebug() << "Asset version mismatch:"
-                 << cachedVersion << "→" << currentVersion
-                 << "— re-extracting all assets";
+        qDebug() << "Asset version mismatch:" << cachedVersion
+                 << "→" << currentVersion << "— re-extracting";
 
         for (const QString &name : kDataFiles) {
             const QString dest = QDir(targetDir).filePath(name);
@@ -109,31 +87,17 @@ struct AppPaths
         for (const QString &name : kDataFiles) {
             const QString dest = QDir(targetDir).filePath(name);
             const QString src  = QString("assets:/%1").arg(name);
-
-            if (!QFile::exists(src)) {
-                qWarning() << "Bundled asset not found:" << src;
-                continue;
-            }
-
-            if (!QFile::copy(src, dest)) {
-                qWarning() << "Failed to extract asset:" << src << "→" << dest;
-                return;
-            }
-
+            if (!QFile::exists(src)) { qWarning() << "Missing:" << src; continue; }
+            if (!QFile::copy(src, dest)) { qWarning() << "Failed:" << src; return; }
             QFile::setPermissions(dest,
                 QFile::ReadOwner | QFile::WriteOwner |
                 QFile::ReadGroup | QFile::ReadOther);
-
             qDebug() << "Extracted:" << name;
         }
 
         QFile f(versionFile);
-        if (f.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate)) {
+        if (f.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate))
             f.write(currentVersion.toUtf8());
-            qDebug() << "Asset version stamp written:" << currentVersion;
-        } else {
-            qWarning() << "Could not write version stamp:" << versionFile;
-        }
     }
 #endif
 };

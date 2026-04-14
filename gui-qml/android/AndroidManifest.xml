@@ -6,19 +6,21 @@
         android:icon="@mipmap/ic_launcher">
 
         <activity
-            android:name="org.qtproject.qt.android.bindings.QtActivity"
+            android:name="com.kotobaplus.app.MainActivity"
             android:exported="true"
-            android:configChanges="orientation|screenSize|keyboardHidden">
+            android:configChanges="orientation|screenSize|keyboardHidden|keyboard|smallestScreenSize|screenLayout|uiMode|locale|fontScale|density|navigation"
+            android:launchMode="singleTask"
+            android:resizeableActivity="false">
 
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
 
-            <!-- ✔ FIX: sin guiones -->
             <meta-data
                 android:name="android.app.lib_name"
                 android:value="kotoba_qml"/>
+
         </activity>
 
     </application>
